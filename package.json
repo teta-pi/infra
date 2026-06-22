@@ -1,0 +1,14 @@
+{
+  "name": "teta-pi",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["web", "mcp"],
+  "scripts": {
+    "dev": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=web && npm run build --workspace=mcp",
+    "web": "npm run dev --workspace=web",
+    "mcp": "npm run dev --workspace=mcp",
+    "mcp:build": "npm run build --workspace=mcp",
+    "mcp:start": "npm run start --workspace=mcp"
+  }
+}
