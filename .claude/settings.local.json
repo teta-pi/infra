@@ -4,7 +4,9 @@
       "Bash(pip3 install *)",
       "Bash(python3 -c ' *)",
       "Read(//Users/bobbob/BOB/SERVER/**)",
-      "Bash(npm create *)"
+      "Bash(npm create *)",
+      "Bash(sshpass * ssh -o StrictHostKeyChecking=no root@164.90.235.66 *)",
+      "Bash(sshpass * rsync -az * root@164.90.235.66:*)"
     ]
   }
 }
