@@ -38,3 +38,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# C2PA certificates — private keys must never be committed
+api/certs/*.key.pem
