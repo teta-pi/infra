@@ -28,7 +28,7 @@ echo "=== TETA+PI Deploy → $SERVER ==="
 echo "→ Syncing API..."
 _rsync --delete \
   --exclude='__pycache__' --exclude='*.pyc' --exclude='.venv' \
-  --exclude='certs/*.key.pem' \
+  --exclude='certs/*.key.pem' --exclude='.env' \
   "$REPO_ROOT/api/" "$SERVER:$REMOTE_DIR/api/"
 
 # Public certs only — private keys never leave local machine
