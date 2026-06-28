@@ -84,9 +84,9 @@ REMOTE
 # ── 5. Sync landing ──────────────────────────────────────────────────────────
 if [ -d "$REPO_ROOT/landing" ]; then
   echo "→ Syncing landing..."
-  _ssh "mkdir -p /var/www/tetapi/landing"
+  _ssh "mkdir -p /var/www/teta-pi"
   _rsync --delete --exclude='.git' \
-    "$REPO_ROOT/landing/" "$SERVER:/var/www/tetapi/landing/"
+    "$REPO_ROOT/landing/" "$SERVER:/var/www/teta-pi/"
 fi
 
 # ── 6. DB migrations + restart services ──────────────────────────────────────
