@@ -1,0 +1,131 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy → tetapi.dev
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Build Next.js ────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build Next.js (standalone)
+        run: npx next build --no-lint
+        working-directory: web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.tetapi.dev
+
+      # ── SSH setup ────────────────────────────────────────────────────────────
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/tetapi_ed25519
+          chmod 600 ~/.ssh/tetapi_ed25519
+          ssh-keyscan -H 164.90.235.66 >> ~/.ssh/known_hosts
+
+      # ── Sync API ─────────────────────────────────────────────────────────────
+      - name: Sync API code
+        run: |
+          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+            --delete \
+            --exclude='__pycache__' --exclude='*.pyc' \
+            --exclude='.venv' --exclude='.env' \
+            --exclude='certs/*.key.pem' \
+            api/ root@164.90.235.66:/opt/tetapi/api/
+
+      - name: Sync public certs
+        run: |
+          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+            api/certs/root_ca.cert.pem \
+            api/certs/signing.cert.pem \
+            api/certs/chain.cert.pem \
+            root@164.90.235.66:/opt/tetapi/api/certs/
+
+      # ── Sync Next.js output ──────────────────────────────────────────────────
+      - name: Sync Next.js standalone
+        run: |
+          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+            --delete --exclude='cache' \
+            web/.next/standalone/ root@164.90.235.66:/opt/tetapi/web/
+
+          ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 \
+            "mkdir -p /opt/tetapi/web/web/.next/static"
+
+          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+            --delete \
+            web/.next/static/ root@164.90.235.66:/opt/tetapi/web/web/.next/static/
+
+          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+            web/.next/server/ root@164.90.235.66:/opt/tetapi/web/web/.next/server/
+
+      # ── Sync landing ─────────────────────────────────────────────────────────
+      - name: Sync landing page
+        run: |
+          ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 \
+            "mkdir -p /var/www/teta-pi"
+          rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
+            --delete --exclude='.git' \
+            landing/ root@164.90.235.66:/var/www/teta-pi/
+
+      # ── Patches + Migrations + Restart ───────────────────────────────────────
+      - name: Apply patches, migrate DB, restart services
+        run: |
+          ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 bash << 'REMOTE'
+          set -e
+          NEXT="/opt/tetapi/web/web/.next"
+
+          # Next.js 15 standalone: copy numeric chunks to server root
+          for chunk in "$NEXT/server/chunks/"[0-9]*.js; do
+            [ -f "$chunk" ] && cp -n "$chunk" "$NEXT/server/$(basename $chunk)" 2>/dev/null || true
+          done
+
+          # Fix doubled BUILD_ID
+          BUILD_ID=$(head -c 40 "$NEXT/BUILD_ID" | tr -d '\n')
+          printf '%s' "$BUILD_ID" > "$NEXT/BUILD_ID"
+
+          # Patch app-paths-manifest.json
+          cat > "$NEXT/server/app-paths-manifest.json" << 'JSON'
+          {
+            "/page": "app/page.js",
+            "/profile/page": "app/profile/page.js",
+            "/claim/page": "app/claim/page.js",
+            "/.well-known/agent.json/route": "app/.well-known/agent.json/route.js",
+            "/_not-found/page": "app/_not-found/page.js"
+          }
+          JSON
+
+          # DB migrations
+          cd /opt/tetapi/api
+          source /opt/tetapi/venv/bin/activate
+          alembic upgrade head
+
+          # Restart API
+          systemctl restart tetapi-api
+          sleep 4
+          systemctl is-active --quiet tetapi-api \
+            && echo "✓ API up" \
+            || { journalctl -u tetapi-api -n 30 --no-pager; exit 1; }
+
+          # Restart Web
+          systemctl restart tetapi-web
+          sleep 4
+          systemctl is-active --quiet tetapi-web \
+            && echo "✓ Web up" \
+            || { journalctl -u tetapi-web -n 30 --no-pager; exit 1; }
+          REMOTE
