@@ -1,26 +1,17 @@
 #!/usr/bin/env bash
 # Deploy TETA+PI to production server (164.90.235.66)
 # Run from repo root: ./deploy/deploy.sh
-# Requires: sshpass (brew install sshpass) + TETAPI_SSH_PASS env var
-#   export TETAPI_SSH_PASS='<server-root-password>'
-#   ./deploy/deploy.sh
+# Requires: SSH key at ~/.ssh/tetapi_ed25519
 set -euo pipefail
 
 SERVER="root@164.90.235.66"
 REMOTE_DIR="/opt/tetapi"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PASS="${TETAPI_SSH_PASS:-}"
+KEY="${TETAPI_SSH_KEY:-$HOME/.ssh/tetapi_ed25519}"
 
-SSH_OPTS="-o StrictHostKeyChecking=no"
-if [ -n "$PASS" ]; then
-  RSYNC_SHELL="sshpass -p '$PASS' ssh $SSH_OPTS"
-  alias _ssh="sshpass -p '$PASS' ssh $SSH_OPTS $SERVER"
-  _ssh() { sshpass -p "$PASS" ssh $SSH_OPTS "$SERVER" "$@"; }
-  _rsync() { sshpass -p "$PASS" rsync -az -e "ssh $SSH_OPTS" "$@"; }
-else
-  _ssh() { ssh $SSH_OPTS "$SERVER" "$@"; }
-  _rsync() { rsync -az -e "ssh $SSH_OPTS" "$@"; }
-fi
+SSH_OPTS="-i $KEY -o StrictHostKeyChecking=no"
+_ssh()   { ssh   $SSH_OPTS "$SERVER" "$@"; }
+_rsync() { rsync -az -e "ssh $SSH_OPTS" "$@"; }
 
 echo "=== TETA+PI Deploy → $SERVER ==="
 
