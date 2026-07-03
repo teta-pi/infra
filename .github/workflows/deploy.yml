@@ -86,7 +86,7 @@ jobs:
             --delete \
             mcp/dist/ root@164.90.235.66:/opt/tetapi/mcp/dist/
           rsync -az -e "ssh -i ~/.ssh/tetapi_ed25519" \
-            mcp/package.json mcp/package-lock.json \
+            mcp/package.json \
             root@164.90.235.66:/opt/tetapi/mcp/
 
       # ── Sync landing ─────────────────────────────────────────────────────────
