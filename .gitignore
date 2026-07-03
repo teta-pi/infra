@@ -41,3 +41,6 @@ Thumbs.db
 
 # C2PA certificates — private keys must never be committed
 api/certs/*.key.pem
+
+# Local backups (not for git)
+backups/
