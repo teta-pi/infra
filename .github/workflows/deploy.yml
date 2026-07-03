@@ -112,7 +112,7 @@ jobs:
           # Python deps (sync with pyproject) + DB migrations
           cd /opt/tetapi/api
           source /opt/tetapi/venv/bin/activate
-          pip install -q email-validator
+          pip install -q email-validator pgvector
           alembic upgrade head
 
           # Restart API
