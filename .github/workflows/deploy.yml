@@ -120,6 +120,7 @@ jobs:
             "/page": "app/page.js",
             "/profile/page": "app/profile/page.js",
             "/claim/page": "app/claim/page.js",
+            "/admin/page": "app/admin/page.js",
             "/.well-known/agent.json/route": "app/.well-known/agent.json/route.js",
             "/_not-found/page": "app/_not-found/page.js"
           }
