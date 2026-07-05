@@ -8,11 +8,6 @@ models, MCP servers and agents, discoverable by AI agents. Operated by **TetaPi
 GmbH**, Frankfurt. Live: `tetapi.dev` (landing), `app.tetapi.dev` (Next.js),
 `api.tetapi.dev` (FastAPI), `mcp.tetapi.dev` (MCP).
 
-## Language
-**Reason in English, reply to the user in Ukrainian.** Internal thinking, plans, and
-reasoning happen in English; every message shown to the user is written in Ukrainian.
-Code, identifiers, commit messages, and `docs/*` stay in English.
-
 ## Documentation is the source of truth
 Before touching code, read the docs relevant to your task — not the whole repo.
 
