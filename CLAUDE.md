@@ -30,7 +30,9 @@ Before touching code, read the docs relevant to your task — not the whole repo
 - **Read only what the task needs.** Name the files. Do not scan the repo.
 - **End every task by updating docs**: if behaviour or structure changed, update
   the relevant `docs/*.md`; if a rule changed, update this file; append a line to
-  `docs/known-issues.md` if you found or fixed a bug.
+  `docs/known-issues.md` if you found or fixed a bug; **append a dated entry to
+  `docs/changelog.md`** (`Done / Changed / Risk / Next`) so the manager session
+  always sees current state.
 - Then `/clear` and start the next task fresh.
 
 ## Coding rules

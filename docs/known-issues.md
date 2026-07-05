@@ -4,17 +4,24 @@ From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 import
 🟡 minor. Update the status line when you fix one.
 
 ## 🔴 Profile "My Page" does not persist blocks to the backend
-`web/src/app/profile/page.tsx` uses `useProfileStore` (zustand) which has **no
-persist middleware and makes no API calls to save blocks**. Consequences:
+`web/src/app/profile/page.tsx` uses `useProfileStore` (zustand) which had **no
+persist middleware and made no API calls to save blocks**. Consequences (past):
 - Blocks a user creates are lost on refresh and never reach the DB.
-- The public page `/e/[slug]` reads blocks from the DB, so it will **always show
-  "No public blocks yet"** even for entities that added blocks in the UI.
-- Media upload (`mediaApi.upload`) does hit the backend, but the block it attaches
-  to only exists client-side.
-**Fix direction:** on the profile page, load the entity + blocks from the API on
-open (`businessApi` + a blocks GET), and persist add/edit/reorder/remove via
-`blockApi`. This is the top priority before any new profile features.
-Status: OPEN.
+- The public page `/e/[slug]` reads blocks from the DB, so it always showed
+  "No public blocks yet" even for entities that added blocks in the UI.
+- Media upload (`mediaApi.upload`) hit the backend, but the block it attaches to
+  only existed client-side (fake `block-N` id).
+Status: FIXED (2026-07-05). The profile page now loads the entity + blocks from
+the API on open (`businessApi.get` + `blockApi.list`, mapped into the store) and
+persists changes via `blockApi`: **Add** creates the block up front so it has a
+real UUID (needed for media upload); **edit** PATCHes title/desc debounced 600ms
+(flushing the latest store state so title/desc edits don't clobber each other);
+**remove** DELETEs; the top **Save** button now PATCHes name/description via
+`businessApi.update`. All calls are auth-gated and fall back to local-only when
+unauthenticated (offline UX preserved). Also fixed: `PATCH /blocks/reorder` was
+shadowed by `/blocks/{block_id}` (matched `block_id="reorder"` → 422); reorder is
+now declared first. Drag-to-reorder UI is still not wired, so `blockApi.reorder`
+has no caller yet.
 
 ## 🟠 `/auth/register` is public, unauthenticated, and unused
 `routes/auth.py::register` creates a user with no email verification. The frontend
@@ -36,6 +43,16 @@ Status: OPEN (documented constraint).
 no embeddings, so pgvector search is empty. **Fix:** set `OPENAI_API_KEY`, backfill
 embeddings for existing public blocks, then TWIRA I turns on automatically.
 Status: OPEN (waiting on key).
+
+## 🟡 `GET /businesses/{id}/blocks` leaks private blocks
+`routes/blocks.py::list_blocks` is unauthenticated and returns **all** blocks for
+a business, including `is_public=false`. Anyone with a business UUID can enumerate
+private blocks. The profile edit page (owner) relies on getting every block, so a
+fix must add ownership/auth there (and route non-owner reads through the public
+`by-slug/{slug}/public` path, which already filters). Left as-is during the block
+persistence work to avoid breaking agent readers. **Fix:** require `get_current_user`
++ owner check on `list_blocks`, or split owner vs public listing.
+Status: OPEN.
 
 ## 🟡 Email delivery limited to one address
 Resend domain `tetapi.dev` not verified; sender `onboarding@resend.dev` only

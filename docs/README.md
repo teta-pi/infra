@@ -16,9 +16,14 @@ recover full context from these files alone.
 
 ## Direction & memory
 - **[roadmap.md](roadmap.md)** — what to build next, sized per session.
+- **[changelog.md](changelog.md)** — running log of what shipped (manager reads this).
 - **[decisions.md](decisions.md)** — why things are the way they are.
 - **[known-issues.md](known-issues.md)** — bugs & constraints found in audit.
 - **[glossary.md](glossary.md)** — project vocabulary.
+
+## Running the project
+- **[manager.md](manager.md)** — the orchestrator session that knows state + plan
+  and generates tasks for worker sessions.
 
 ## Rules & workflow
 Working rules live in the repo-root **[CLAUDE.md](../CLAUDE.md)** (auto-loaded each
