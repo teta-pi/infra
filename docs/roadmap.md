@@ -30,11 +30,14 @@ Suggested sequence (see `docs/mcp.md`):
 10. **Sessions list with devices** — needs server-side session storage (JWT is
     stateless today); "log out everywhere" already works via token_version.
 11. Resend domain verification so emails reach everyone.
-11b. **Camera-based verification** (NEW, 2026-07-06) — connect the camera for
-     liveness/selfie or document capture in the verification flow. Scope TBD:
-     define the exact purpose (liveness vs ID/document scan) before building.
-     Scaffold as new files under `web/src/app/verify/`; don't touch existing
-     pages first. *(Frontend + Backend.)*
+11b. **Camera capture → C2PA + OTS notarization** (NEW, 2026-07-06) — capture
+     photo/video through the camera and run it through the EXISTING C2PA signing +
+     OpenTimestamps pipeline (blocks already carry `c2pa_manifest` / `ots_proof`).
+     Three use-cases: proof-of-creation (content made by a verified entity),
+     proof-of-process (video verification of production / standards compliance),
+     and copyright deposit (timestamp as priority evidence). Reuse the proof
+     services — do not build a parallel pipeline. Scaffold capture UI as new files
+     under `web/src/app/capture/`; plan first, then wire. *(Frontend + Backend.)*
 
 ## Platform — scale readiness
 12. Move rate limiters + Handelsregister lock to Redis (unblocks multi-worker).
