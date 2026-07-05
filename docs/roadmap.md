@@ -25,10 +25,16 @@ Suggested sequence (see `docs/mcp.md`):
    weights from real `(query, clicked_entity)` pairs (the data moat closing).
 
 ## Product — account & sharing
-9. **"Share page" button** on `/profile` linking to `/e/[slug]` (+ copy link).
+9. ✅ **"Share page" button** on `/profile` linking to `/e/[slug]` (+ copy link).
+   Shown only when the entity is published. *(Done 2026-07-06.)*
 10. **Sessions list with devices** — needs server-side session storage (JWT is
     stateless today); "log out everywhere" already works via token_version.
 11. Resend domain verification so emails reach everyone.
+11b. **Camera-based verification** (NEW, 2026-07-06) — connect the camera for
+     liveness/selfie or document capture in the verification flow. Scope TBD:
+     define the exact purpose (liveness vs ID/document scan) before building.
+     Scaffold as new files under `web/src/app/verify/`; don't touch existing
+     pages first. *(Frontend + Backend.)*
 
 ## Platform — scale readiness
 12. Move rate limiters + Handelsregister lock to Redis (unblocks multi-worker).
