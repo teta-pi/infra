@@ -20,10 +20,10 @@ recover full context from these files alone.
 - **[known-issues.md](known-issues.md)** — bugs & constraints found in audit.
 - **[glossary.md](glossary.md)** — project vocabulary.
 
-## Rules
+## Rules & workflow
 Working rules live in the repo-root **[CLAUDE.md](../CLAUDE.md)** (auto-loaded each
-session). One focused task per session; update the relevant doc when you finish;
-then `/clear`.
+session). The day-to-day operating procedure — chat naming, boot/close messages,
+one-task-per-session — is in **[workflow.md](workflow.md)**.
 
 ## Keeping docs honest
 When code changes, update the matching doc in the same session. If overview or
