@@ -13,6 +13,7 @@ recover full context from these files alone.
 - **[mcp.md](mcp.md)** — the MCP server and its tools.
 - **[registries.md](registries.md)** — registry verifiers and routing.
 - **[deployment.md](deployment.md)** — server, CI/CD, secrets, ops.
+- **[analytics.md](analytics.md)** — GoatCounter setup, traffic data, plans for the back-office Analytics tab.
 
 ## Direction & memory
 - **[roadmap.md](roadmap.md)** — what to build next, sized per session.
