@@ -28,7 +28,12 @@ has no caller yet.
 no longer calls it (onboarding uses email-code). It's dead code + attack surface
 (lets anyone create accounts / squat emails). **Fix:** remove it, or gate it behind
 an admin/API-key and require verification. Confirm no server-side caller first.
-Status: OPEN.
+Status: FIXED (2026-07-06). Removed the endpoint entirely — confirmed no caller
+(frontend only had an unused `authApi.register` helper; no server-side or test
+caller). Deleted the route, the now-dead `UserCreate`/`UserOut` schemas, the
+`authApi.register` helper, and the orphaned `User` type import in `web/src/lib/api.ts`.
+Account creation now happens only via verified paths (`/auth/verify-code`,
+`/auth/magic-link`).
 
 ## 🟠 In-memory state assumes a single uvicorn worker
 Rate limiters (claims, email-code) and the Handelsregister lock/cache live in
