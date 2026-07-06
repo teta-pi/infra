@@ -121,6 +121,30 @@ For a back-office tab, the simplest path is either:
 
 Option 2 is the one to build when `admin/` gets its Analytics tab.
 
+## Product metrics (`GET /admin/product-metrics`)
+
+Separate from the GoatCounter traffic bridge above — this is read-only
+aggregation over our own tables (`businesses`, `claims`, `verification_events`),
+served next to `/admin/stats` and rendered in the same Analytics tab. No new
+tables; `?days=` (default 30, max 180) windows the two daily series.
+
+- **`entity_growth`** — entities created per day (`businesses.created_at`).
+- **`verification_events_daily`** — Temporal Moat events per day
+  (`verification_events.created_at`).
+- **`entities_by_type`** — count grouped by `businesses.entity_type` (the
+  12-value enum; `/admin/stats` only breaks down by `verification_level`).
+- **`funnel`** — claim → verified, joined by email since claims predate
+  accounts: `claims` (waitlist total) → `signed_up` (claim email matches a
+  `users` row) → `created_entity` (that user owns a `businesses` row) →
+  `verified` (that entity's `verification_level != 'none'`).
+- **`registry_search_health`** — **not available**. `routes/registry_search.py`
+  and `services/registry/*` don't log requests anywhere (no latency, no
+  success/fail counter, no `endpoint_probes`-style table for it). The endpoint
+  returns `{"available": false, "note": "..."}` instead of guessing. To build
+  this: add a lightweight append-only log (table or structured log line) in
+  `verify_business_in_registry` capturing registry name, elapsed ms, and
+  found/not-found, then aggregate here.
+
 ## Open items
 
 - No GoatCounter API token created yet (needed for option 2 above).

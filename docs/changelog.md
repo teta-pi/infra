@@ -6,6 +6,26 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-06 · api+web · product metrics on top of /admin/stats + /admin/analytics
+Done: added `GET /admin/product-metrics` (require_admin + audit-logged,
+read-only) covering what the existing snapshot/traffic endpoints don't: daily
+entity growth, daily verification_events, entities by `entity_type`, and a
+claim→verified funnel (claims → signed_up → created_entity → verified, joined
+by email). Registry search health was requested but skipped — no request
+logging exists anywhere in `registry_search.py` / `services/registry/*` to
+aggregate from; the endpoint returns `available: false` with a note instead of
+faking numbers. Rendered as new sections at the bottom of the existing
+Analytics tab in the back office (no new tab).
+Changed: `api/app/api/routes/admin.py` (new endpoint), `web/src/lib/api.ts`
+(`adminApi.productMetrics`, `AdminProductMetrics` type), `web/src/app/admin/page.tsx`
+(`ProductMetricsSection` inside `AnalyticsTab`). Docs: `docs/api.md`,
+`docs/analytics.md`.
+Risk: none to existing behaviour — additive endpoint, no schema/table changes.
+`entities_by_type` and the funnel do full-table scans with no new indexes;
+fine at current volume, revisit if `businesses`/`claims` grow large.
+Next: build registry search request logging (append-only, entity_id-less since
+these are pre-entity lookups) so `registry_search_health` can be filled in.
+
 ## 2026-07-06 · mcp · enrich teta_resolve_intent (MCP 1.2.0)
 Done: `teta_resolve_intent` now returns a full T/I/P breakdown, `first_verified_at`
 and `proof_url` in an agent-parseable format, and takes `entity_types` (multi-type)
