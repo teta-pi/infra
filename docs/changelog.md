@@ -6,6 +6,42 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-06 · mcp · enrich teta_resolve_intent (MCP 1.2.0)
+Done: `teta_resolve_intent` now returns a full T/I/P breakdown, `first_verified_at`
+and `proof_url` in an agent-parseable format, and takes `entity_types` (multi-type)
++ `min_trust` filters. `min_trust` filters on `Business.t_score` in the TWIRA SQL;
+`entity_types` supersedes the old single `entity_type` (kept for back-compat).
+Changed: `api/app/api/routes/intent.py`, `api/app/twira/resolver.py` (add `min_trust`
+param + t_score filter), `mcp/src/index.ts` (new tool schema + richer text),
+`mcp/src/client.ts` (fixed stale `IntentResolution` type, `TwiraBreakdown`), both
+`agent.json` (+ `teta_verify_claim` sync), MCP manifest/health/package → 1.2.0.
+Risk: `min_trust` only applies on the TWIRA path (no-op on keyword fallback, which
+has no t_score); TWIRA I-component still needs OPENAI_API_KEY to be set.
+Next: expose `min_trust` in the keyword fallback via LEVEL_WEIGHTS, or surface a
+`ranking_mode` flag so agents know whether TWIRA or keyword ranking was used.
+
+## 2026-07-06 · web · "Share page" button on /profile
+Done: `/profile` now shows a "Share page" button (roadmap #9) that copies and links
+to the public page `app.tetapi.dev/e/<slug>`; visible only once the entity is
+published (`is_published`).
+Changed: `web/src/app/profile/page.tsx` — new `SharePageButton`; `ProfilePage` now
+captures `slug` + `is_published` from the loaded entity; added `APP_ORIGIN` const.
+Risk: share link host is hardcoded to production (`https://app.tetapi.dev`), so in
+local dev the link points at prod, not localhost.
+Next: roadmap #10 (sessions list) or wire a publish toggle into the UI.
+
+## 2026-07-06 · security · remove public `/auth/register` (🟠 FIXED)
+Done: deleted the unauthenticated `POST /auth/register` endpoint (created users
+with no email verification). Confirmed no caller first — frontend only had an
+unused `authApi.register` helper; no server-side or test caller. Removed the route,
+the now-dead `UserCreate`/`UserOut` schemas, the `authApi.register` helper, and the
+orphaned `User` type import.
+Changed: `api/app/api/routes/auth.py`, `api/app/schemas/user.py`,
+`web/src/lib/api.ts`; docs (`api.md`, `known-issues.md`). Risk: none — account
+creation still flows through verified paths (`/auth/verify-code`, `/auth/magic-link`).
+Next: 🟠 gate `GET /businesses/{id}/blocks` (leaks private blocks) or in-memory
+rate-limit → Redis before scaling.
+
 ## 2026-07-05 · docs · project brain + manager model
 Done: added `docs/` (overview, architecture, api, database, mcp, registries,
 deployment, decisions, roadmap, known-issues, glossary, workflow, changelog) +
