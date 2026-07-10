@@ -20,6 +20,7 @@ is disjoint so sessions never collide in git.
 | 4 | `mcp · enrich resolve_intent + proof` | #4 enrich `teta_resolve_intent`, #5 `teta_get_proof` depth | 🔄 | MCP server + `api/app/twira/` |
 | 5 | `frontend · camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏳ | new files `web/src/app/capture/` |
 | 6 | `backoffice · system metrics` | trends / entity_type / funnel / registry health (delta on existing) | ⏳ | `routes/admin.py`, `services/analytics.py`, admin UI |
+| 7 | `devops · enable TWIRA embeddings` | set `OPENAI_API_KEY`, backfill block embeddings, verify `/resolve-intent` | ⏳ ready (key in hand) | server `.env` + one-off backfill |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another
@@ -36,7 +37,7 @@ is disjoint so sessions never collide in git.
 ## Blocked — waiting on keys / DNS (don't start until provided)
 | Item | Needs | Effect when unblocked |
 |---|---|---|
-| Turn on TWIRA semantics (#3) | `OPENAI_API_KEY` (platform.openai.com → Billing → API keys) | semantic search + `/resolve-intent` + block embeddings turn on |
+| ~~Turn on TWIRA semantics (#3)~~ → **UNBLOCKED, key obtained 2026-07-06** (session 7) | `OPENAI_API_KEY` ✅ in hand | semantic search + `/resolve-intent` + block embeddings turn on |
 | Resend domain verification (#11) | DNS on `tetapi.dev` (DKIM/SPF) | emails reach everyone, not just the owner inbox |
 | Ukraine registry | `OPENDATABOT_API_KEY` | UA registry search works (verifier already written) |
 
@@ -48,8 +49,8 @@ is disjoint so sessions never collide in git.
 1. ✅ **Persist profile blocks to the backend** — load entity+blocks on open, save
    add/edit/remove via the API. *(Done 2026-07-06, `6a022bb`. Reorder UI = session 3.)*
 2. ✅ **Remove/gate `/auth/register`** — dead, unauthenticated. *(Done 2026-07-06.)*
-3. ⏳ **Turn on TWIRA semantics** — set `OPENAI_API_KEY`, backfill block embeddings.
-   *(Blocked on key — see table above.)*
+3. 🔄 **Turn on TWIRA semantics** — set `OPENAI_API_KEY` (obtained 2026-07-06), backfill
+   block embeddings. *(Key in hand — devops session 7 ready to run.)*
    - 🟡 also open: `GET /businesses/{id}/blocks` leaks private blocks (session 2);
      in-memory rate-limit/lock assumes single worker → move to Redis before scaling (#12).
 
