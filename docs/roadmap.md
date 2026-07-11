@@ -17,10 +17,10 @@ is disjoint so sessions never collide in git.
 | 1 | `backend · remove /auth/register` | remove dead 🟠 unauthenticated route | ✅ done, deployed | `routes/auth.py`, `schemas/user.py` |
 | 2 | `backend · fix private-block leak` | close 🟡 leak in `GET /businesses/{id}/blocks` | 🔄 | `routes/blocks.py` |
 | 3 | `frontend · drag-to-reorder` | wire block reorder to `blockApi.reorder` (loose end of the 🔴 fix) | 🔄 | `web/…/profile/page.tsx` |
-| 4 | `mcp · enrich resolve_intent + proof` | #4 enrich `teta_resolve_intent`, #5 `teta_get_proof` depth | 🔄 | MCP server + `api/app/twira/` |
-| 5 | `frontend · camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏳ | new files `web/src/app/capture/` |
-| 6 | `backoffice · system metrics` | trends / entity_type / funnel / registry health (delta on existing) | ⏳ | `routes/admin.py`, `services/analytics.py`, admin UI |
-| 7 | `devops · enable TWIRA embeddings` | set `OPENAI_API_KEY`, backfill block embeddings, verify `/resolve-intent` | ⏳ ready (key in hand) | server `.env` + one-off backfill |
+| 4 | `mcp · enrich resolve_intent + proof` | #4 enrich `teta_resolve_intent` ✅ (MCP 1.2.0, merged); #5 `teta_get_proof` depth still open | ✅ resolve_intent done · ⏳ get_proof | MCP server + `api/app/twira/` |
+| 5 | `frontend · camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏳ next after S8 | new files `web/src/app/capture/` |
+| 6 | `backoffice · system metrics` | trends / entity_type / funnel / registry health (delta on existing) | ✅ done, deployed (`3c03457`) | `routes/admin.py`, `services/analytics.py`, admin UI |
+| 7 | `devops · enable TWIRA embeddings` | embedding CODE merged (PR #3: block embed on create/update + backfill task); REMAINING = set `OPENAI_API_KEY` on server + run `twira_backfill_block_embeddings` + verify `/resolve-intent` | 🔄 code done, server pending | server `.env` + one-off backfill |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another
@@ -49,19 +49,22 @@ is disjoint so sessions never collide in git.
 1. ✅ **Persist profile blocks to the backend** — load entity+blocks on open, save
    add/edit/remove via the API. *(Done 2026-07-06, `6a022bb`. Reorder UI = session 3.)*
 2. ✅ **Remove/gate `/auth/register`** — dead, unauthenticated. *(Done 2026-07-06.)*
-3. 🔄 **Turn on TWIRA semantics** — set `OPENAI_API_KEY` (obtained 2026-07-06), backfill
-   block embeddings. *(Key in hand — devops session 7 ready to run.)*
+3. 🔄 **Turn on TWIRA semantics** — embedding CODE merged 2026-07-11 (PR #3: embed on
+   block create/update + `twira_backfill_block_embeddings` task). REMAINING: set
+   `OPENAI_API_KEY` on the server `.env` (obtained 2026-07-06) + run the backfill.
+   *(Devops session 7 — server-side only now.)*
    - 🟡 also open: `GET /businesses/{id}/blocks` leaks private blocks (session 2);
      in-memory rate-limit/lock assumes single worker → move to Redis before scaling (#12).
 
 ### Next — the MCP investment (owner's priority)
 The differentiator: make TETA+PI the registry agents actually route through
 (see `docs/mcp.md`).
-4. 🔄 **Enrich `teta_resolve_intent`** — return `first_verified_at`, proof URLs, and the
-   full T/I/P breakdown in a shape agents can rank on; add `entity_types` +
-   `min_trust` filters.
-5. 🔄 **`teta_get_proof` depth** — include OTS status, btc_timestamp_depth, C2PA chain
-   length so agents can set their own trust threshold.
+4. ✅ **Enrich `teta_resolve_intent`** — returns `first_verified_at`, proof URLs, and the
+   full T/I/P breakdown in a shape agents can rank on; adds `entity_types` +
+   `min_trust` filters. *(Done, MCP 1.2.0, merged.)*
+5. ⏳ **`teta_get_proof` depth** — include OTS status, btc_timestamp_depth, C2PA chain
+   length so agents can set their own trust threshold. *(Not started — was bundled with
+   the MCP session but only resolve_intent shipped.)*
 6. **Agent-facing auth for MCP writes** — design how a verified agent authenticates
    to the MCP server (scoped `pk_live_` keys) before adding any write tools.
 7. **Streaming / batched search** for large result sets over SSE.

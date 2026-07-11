@@ -6,6 +6,24 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-11 · manager · land orphaned tree work as 3 PRs + status reconcile
+Done: the shared `main` working tree held 124 lines of uncommitted work from three
+file-disjoint concerns, un-landed. Split into three clean PRs into `main` (all
+squash-merged, auto-deployed): **PR #1** landing pricing (see entry below);
+**PR #2** `web/src/app/profile/page.tsx` — the Share-page button (roadmap #9);
+**PR #3** TWIRA block embeddings (`ai.py` + `routes/blocks.py` +
+`workers/tasks/twira.py`) — embed on create/update (no-op without key) +
+idempotent `twira_backfill_block_embeddings` task, code half of #3/#7.
+⚠️ Drift caught: the 2026-07-06 "Share page button" entry below claimed #9
+shipped, but `SharePageButton` was never in git until PR #2 — the changelog ran
+ahead of reality. Treat the older entry as "designed", this one as "landed".
+Changed: three merges to `main`; roadmap statuses reconciled with git (S4
+resolve_intent ✅, `teta_get_proof` depth #5 still open; S6 ✅ deployed; S7
+embedding code merged, server `.env`+backfill pending); removed merged s7 worktree.
+Risk: three prod deploys, all low-risk. Embeddings dormant until `OPENAI_API_KEY`
+is set on the server.
+Next: run **S8 (split monorepo)** on the now-clean `main` — unblocked since S4 merged.
+
 ## 2026-07-11 · landing · pricing update to Strategic Foundation v2
 Done: updated `landing/index.html` pricing to the current model — founding price
 $21→$25 (hero CTA, claim checkbox, Module #1 card, final CTA strip); Module #2
