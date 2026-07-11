@@ -34,10 +34,17 @@ is disjoint so sessions never collide in git.
 - Each session ends with the `Done / Changed / Risk / Next` block and updates the
   matching `docs/*.md`.
 
-## Blocked — waiting on keys / DNS (don't start until provided)
+## Blocked — waiting on keys / DNS / server (don't start until provided)
+**Server capacity (2026-07-11):** the prod droplet is at its limit until the owner
+upgrades it. Until then: no tasks that add SUSTAINED load (embeddings backfill,
+Redis #12, SSE streaming #7, extra workers) and no deploy rework (S8 split
+execution). One-off merges are fine (build runs on the GitHub runner; server side
+is rsync + brief restarts) — but batch them.
+
 | Item | Needs | Effect when unblocked |
 |---|---|---|
-| ~~Turn on TWIRA semantics (#3)~~ → **UNBLOCKED, key obtained 2026-07-06** (session 7) | `OPENAI_API_KEY` ✅ in hand | semantic search + `/resolve-intent` + block embeddings turn on |
+| Turn on TWIRA semantics (#3, session 7) | `OPENAI_API_KEY` **billing unpaid (429)** + server upgrade | semantic search + `/resolve-intent` + block embeddings turn on |
+| S8 monorepo split (execution) | server upgrade (deploy rework + restarts) | hybrid polyrepo; then S5 camera |
 | Resend domain verification (#11) | DNS on `tetapi.dev` (DKIM/SPF) | emails reach everyone, not just the owner inbox |
 | Ukraine registry | `OPENDATABOT_API_KEY` | UA registry search works (verifier already written) |
 
