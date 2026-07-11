@@ -9,19 +9,31 @@ When the task is done, close the chat (`/clear` or new). A long-lived chat re-gr
 history — the exact problem this avoids. A "direction" is a **tag in the title**, not
 a chat.
 
-## Chat naming
+## Chat naming — numbered directions, sub-numbered tasks
+Directions have FIXED numbers; every task gets a sub-number within its direction.
+The owner always knows how many session groups exist and where a task lives.
+
+| № | Direction | Covers |
+|---|---|---|
+| 1 | backend | API, services, auth, TWIRA, registries |
+| 2 | mcp | MCP server, tools |
+| 3 | frontend | Next.js web app + landing |
+| 4 | db | migrations, schema |
+| 5 | devops | deploy, server, keys, repo structure |
+| 6 | manager | orchestration (this numbering lives in roadmap) |
+
 ```
-TTPI · <direction> · <what we do>
+TTPI · <n> <direction> · <n.m> <what we do>
 ```
 Examples:
-- `TTPI · backend · profile blocks persistence`
-- `TTPI · backend · remove /auth/register`
-- `TTPI · mcp · enrich resolve_intent`
-- `TTPI · devops · enable TWIRA embeddings`
-- `TTPI · frontend · share page button`
+- `TTPI · 1 backend · 1.1 fix private-block leak`
+- `TTPI · 2 mcp · 2.1 get_proof depth`
+- `TTPI · 3 frontend · 3.1 web copy sync`
+- `TTPI · 5 devops · 5.1 enable TWIRA embeddings`
 
-The direction (`backend / frontend / mcp / db / devops / docs`) tells Claude which
-`docs/*.md` to read.
+The direction tells Claude which `docs/*.md` to read; the task number maps to
+`docs/roadmap.md`. Branches: `session/<n.m>-<slug>` (e.g. `session/2.1-get-proof-depth`);
+worktrees: `ttpi-wt/<n.m>-<slug>`.
 
 ## Isolation: one worktree + one branch per session (PR into main)
 `teta-pi/platform` is a **monorepo** (api + web + mcp + landing as folders — there is
@@ -32,27 +44,27 @@ via a **PR into `main`** (deploy runs on merge to `main`, not on branch pushes).
 
 Manager creates the worktree before launching a session:
 ```
-git worktree add /Users/bobbob/BOB/SERVER/ttpi-wt/<slug> -b session/<n>-<slug>
+git worktree add /Users/bobbob/BOB/SERVER/ttpi-wt/<n.m>-<slug> -b session/<n.m>-<slug>
 ```
 The worker session is then launched **with that worktree dir as its project root** and
-works only there. Branch naming: `session/<n>-<short-slug>` (e.g. `session/5-camera-capture`).
+works only there. Branch naming: `session/<n.m>-<slug>` (e.g. `session/2.1-get-proof-depth`).
 
 Session close (worker):
 ```
 git add <only my scoped files by name>   # never git add -A (shared changelog etc.)
 git commit -m "<msg>\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
-git push -u origin session/<n>-<slug>
+git push -u origin session/<n.m>-<slug>
 gh pr create --fill --base main
 ```
 Manager reviews the PR, merges to `main` (→ auto-deploy), then removes the worktree:
 ```
 git worktree remove /Users/bobbob/BOB/SERVER/ttpi-wt/<slug>
-git branch -d session/<n>-<slug>    # after merge
+git branch -d session/<n.m>-<slug>    # after merge
 ```
 
 ## Session boot message (copy-paste)
 ```
-Work in this worktree only: /Users/bobbob/BOB/SERVER/ttpi-wt/<slug> (branch session/<n>-<slug>).
+Work in this worktree only: /Users/bobbob/BOB/SERVER/ttpi-wt/<n.m>-<slug> (branch session/<n.m>-<slug>).
 Read CLAUDE.md + docs/<the files this task needs>.
 Task: <one sentence>.
 Scope: only <files/dirs>. Don't touch anything else.
@@ -60,11 +72,11 @@ End: commit ONLY your scoped files by name, push the branch, open a PR into main
 ```
 Example:
 ```
-Work in this worktree only: /Users/bobbob/BOB/SERVER/ttpi-wt/s5-camera (branch session/5-camera-capture).
+Work in this worktree only: /Users/bobbob/BOB/SERVER/ttpi-wt/3.3-camera (branch session/3.3-camera-capture).
 Read CLAUDE.md + docs/roadmap.md + docs/architecture.md.
 Task: scaffold camera capture → C2PA + OTS (plan first, then wire).
 Scope: only new files under web/src/app/capture/. Don't touch anything else.
-End: commit your files by name, push session/5-camera-capture, open a PR into main.
+End: commit your files by name, push session/3.3-camera-capture, open a PR into main.
 ```
 This keeps each session's context small (token saving), isolates its files, and lands
 work through review instead of racing on `main`.

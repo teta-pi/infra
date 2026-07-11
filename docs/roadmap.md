@@ -8,19 +8,26 @@ Status legend: ✅ done · 🔄 in progress · ⏳ queued/blocked · 🔴 blocke
 
 ---
 
-## Current sprint — parallel sessions
-Priority: **bugs first** (merge 1–3 first), then MCP + new features. File ownership
-is disjoint so sessions never collide in git.
+## Current sprint — numbered directions, sub-numbered tasks
+Naming: `TTPI · <n> <direction> · <n.m> <task>` (see `docs/workflow.md`). Directions:
+**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager**. Historical ✅ work
+(pre-numbering: /auth/register removal, resolve_intent enrich, product metrics,
+share button, landing pricing, TWIRA embedding code) lives in `docs/changelog.md`.
+File ownership is disjoint so sessions never collide in git.
 
-| # | Session (chat title) | Task | Status | Owns files |
+| n.m | Session (chat title) | Task | Status | Worktree / owns files |
 |---|---|---|---|---|
-| 1 | `backend · remove /auth/register` | remove dead 🟠 unauthenticated route | ✅ done, deployed | `routes/auth.py`, `schemas/user.py` |
-| 2 | `backend · fix private-block leak` | close 🟡 leak in `GET /businesses/{id}/blocks` | 🔄 | `routes/blocks.py` |
-| 3 | `frontend · drag-to-reorder` | wire block reorder to `blockApi.reorder` (loose end of the 🔴 fix) | 🔄 | `web/…/profile/page.tsx` |
-| 4 | `mcp · enrich resolve_intent + proof` | #4 enrich `teta_resolve_intent` ✅ (MCP 1.2.0, merged); #5 `teta_get_proof` depth still open | ✅ resolve_intent done · ⏳ get_proof | MCP server + `api/app/twira/` |
-| 5 | `frontend · camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏳ next after S8 | new files `web/src/app/capture/` |
-| 6 | `backoffice · system metrics` | trends / entity_type / funnel / registry health (delta on existing) | ✅ done, deployed (`3c03457`) | `routes/admin.py`, `services/analytics.py`, admin UI |
-| 7 | `devops · enable TWIRA embeddings` | embedding CODE merged (PR #3: block embed on create/update + backfill task); REMAINING = set `OPENAI_API_KEY` on server + run `twira_backfill_block_embeddings` + verify `/resolve-intent` | 🔄 code done, server pending | server `.env` + one-off backfill |
+| 1.1 | `1 backend · 1.1 fix private-block leak` | close 🟡 leak in `GET /businesses/{id}/blocks` | 🟢 ready to start | `routes/blocks.py` |
+| 1.2 | `1 backend · 1.2 registry search logging` | append-only request log in `services/registry/*` → unlocks `registry_search_health` | ⚪ queued | `services/registry/*`, new migration |
+| 2.1 | `2 mcp · 2.1 get_proof depth` | roadmap #5: ots_status, btc_timestamp_depth, C2PA chain → MCP 1.3.0 | 🟢 ready (worktree stands) | `ttpi-wt/2.1-get-proof` · proof route + `mcp/src/*` |
+| 2.2 | `2 mcp · 2.2 agent auth design` | roadmap #6: design doc for scoped `pk_live_` agent auth (no code) | ⚪ after 2.1 · zero deploy | `docs/decisions.md` only |
+| 2.3 | `2 mcp · 2.3 SSE streaming` | roadmap #7 | 🔴 deferred: server load | — |
+| 2.4 | `2 mcp · 2.4 usage analytics` | roadmap #8 | 🔴 deferred: server load | — |
+| 3.1 | `3 frontend · 3.1 web copy sync` | claim checkbox $21→$25, About link, title/meta | 🟢 ready (worktree stands) | `ttpi-wt/3.1-web-copy` · `web/src/` copy only |
+| 3.2 | `3 frontend · 3.2 drag-to-reorder` | wire block reorder to `blockApi.reorder` | 🟢 ready to start | `web/…/profile/page.tsx` |
+| 3.3 | `3 frontend · 3.3 camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏸ after 5.2 | `ttpi-wt/3.3-camera` · new files `web/src/app/capture/` |
+| 5.1 | `5 devops · 5.1 enable TWIRA embeddings` | key → server `.env`, backfill, verify (code already merged) | 🔴 deferred: OpenAI billing unpaid + server capacity | server `.env` + one-off backfill |
+| 5.2 | `5 devops · 5.2 split monorepo` | monorepo → hybrid polyrepo | 🔴 deferred: server upgrade first | `ttpi-wt/5.2-split` |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another
