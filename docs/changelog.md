@@ -6,6 +6,22 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 2.1 mcp · teta_get_proof depth (roadmap #5, MCP 1.3.0)
+Done: enriched `teta_get_proof` / `GET /businesses/{id}/proof` with a `proof_depth`
+block so agents set their own trust threshold — `ots_status`
+(pending/anchored/confirmed, strongest across events), `btc_timestamp_depth`
+(deepest Bitcoin confirmation in blocks), `c2pa_chain_length`, `event_count`. All
+read straight from `verification_events`; reuses `twira/provenance.current_btc_height()`
+(cached mempool.space height). No new tables or workers.
+Changed: `api/app/api/routes/businesses.py` (get_proof + 2 imports); `mcp/src/client.ts`
+(`VerificationProof.proof_depth`); `mcp/src/index.ts` (Proof Depth section, tool
+description, version); version bump 1.2.0→1.3.0 across `mcp/package.json`, MCP
+`/health` + `/.well-known/mcp`, and both `.well-known/agent.json`; docs/mcp.md.
+Risk: low — additive, read-only. `get_proof` now awaits `current_btc_height()`, so a
+cold height cache adds one mempool.space call (≤10s, cached 10 min, shared with TWIRA);
+`btc_timestamp_depth` is `null` if that fetch fails. No schema/worker changes.
+Next: #6 agent-facing auth for MCP writes (scoped `pk_live_` keys).
+
 ## 2026-07-12 · frontend · 3.1 web copy sync (Strategic Foundation v2)
 Done: synced `app.tetapi.dev` copy with the landing pricing update (session 2026-07-11
 `landing`) — claim checkbox founding price $21→$25 (both form states in
