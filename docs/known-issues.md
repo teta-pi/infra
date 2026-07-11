@@ -57,7 +57,13 @@ fix must add ownership/auth there (and route non-owner reads through the public
 `by-slug/{slug}/public` path, which already filters). Left as-is during the block
 persistence work to avoid breaking agent readers. **Fix:** require `get_current_user`
 + owner check on `list_blocks`, or split owner vs public listing.
-Status: OPEN.
+Status: FIXED (2026-07-12). `list_blocks` now takes an optional bearer
+(`_get_optional_user` in `routes/blocks.py`, `HTTPBearer(auto_error=False)` wrapping
+`get_current_user` so anonymous/invalid-token callers fall through to the public
+view instead of 401). The owner sees every block; non-owners and anonymous callers
+get `is_public=true` blocks only. `/profile` still gets all its own blocks (owner
+match), and `/e/[slug]` is untouched (it uses `by-slug/{slug}/public`). Agent
+readers keep working — they just no longer see private blocks.
 
 ## 🟡 Email delivery limited to one address
 Resend domain `tetapi.dev` not verified; sender `onboarding@resend.dev` only

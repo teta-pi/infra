@@ -17,9 +17,9 @@ File ownership is disjoint so sessions never collide in git.
 
 | n.m | Session (chat title) | Task | Status | Worktree / owns files |
 |---|---|---|---|---|
-| 1.1 | `1 backend · 1.1 fix private-block leak` | close 🟡 leak in `GET /businesses/{id}/blocks` | 🟢 ready to start | `routes/blocks.py` |
+| 1.1 | `1 backend · 1.1 fix private-block leak` | close 🟡 leak in `GET /businesses/{id}/blocks` — owner sees all, others only `is_public` | ✅ done 2026-07-12, PR #10 | `routes/blocks.py` |
 | 1.2 | `1 backend · 1.2 registry search logging` | append-only request log in `services/registry/*` → unlocks `registry_search_health` | ⚪ queued | `services/registry/*`, new migration |
-| 2.1 | `2 mcp · 2.1 get_proof depth` | roadmap #5: ots_status, btc_timestamp_depth, C2PA chain → MCP 1.3.0 | 🟢 ready (worktree stands) | `ttpi-wt/2.1-get-proof` · proof route + `mcp/src/*` |
+| 2.1 | `2 mcp · 2.1 get_proof depth` | roadmap #5: ots_status, btc_timestamp_depth, C2PA chain → MCP 1.3.0 | ✅ done 2026-07-12, PR #9, live on prod | proof route + `mcp/src/*` |
 | 2.2 | `2 mcp · 2.2 agent auth design` | roadmap #6: design doc for scoped `pk_live_` agent auth (no code) | ⚪ after 2.1 · zero deploy | `docs/decisions.md` only |
 | 2.3 | `2 mcp · 2.3 SSE streaming` | roadmap #7 | 🔴 deferred: server load | — |
 | 2.4 | `2 mcp · 2.4 usage analytics` | roadmap #8 | 🔴 deferred: server load | — |

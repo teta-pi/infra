@@ -6,6 +6,20 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 1.1 backend · close private-block leak on GET blocks
+Done: `GET /businesses/{id}/blocks` no longer leaks private blocks. Added an
+optional-auth helper `_get_optional_user` (`HTTPBearer(auto_error=False)` wrapping
+`get_current_user`, reusing its API-key + token-version logic) so anonymous and
+invalid-token callers fall through instead of 401. `list_blocks` now returns every
+block to the owner and only `is_public=true` blocks to everyone else.
+Changed: `api/app/api/routes/blocks.py` (new helper + owner-aware filter in
+`list_blocks`, +1 import); docs/known-issues.md 🟡 → FIXED.
+Risk: low — additive/read-only. `/profile` still loads all its own blocks (owner
+match); public page `/e/[slug]` untouched (uses `by-slug/{slug}/public`). Agent
+readers keep working but no longer see private blocks. Not runnable locally (deps
+absent); verify on prod after deploy: owner token → all blocks, anon → public only.
+Next: 🟠 move in-memory rate limiters/HR lock to Redis before multi-worker scaling.
+
 ## 2026-07-12 · 2.1 mcp · teta_get_proof depth (roadmap #5, MCP 1.3.0)
 Done: enriched `teta_get_proof` / `GET /businesses/{id}/proof` with a `proof_depth`
 block so agents set their own trust threshold — `ots_status`
