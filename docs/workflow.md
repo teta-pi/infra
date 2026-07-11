@@ -23,19 +23,51 @@ Examples:
 The direction (`backend / frontend / mcp / db / devops / docs`) tells Claude which
 `docs/*.md` to read.
 
+## Isolation: one worktree + one branch per session (PR into main)
+`teta-pi/platform` is a **monorepo** (api + web + mcp + landing as folders — there is
+only ONE git repo). When several sessions run at once they must NOT share the `main`
+working tree, or `git status` mixes everyone's uncommitted files and pushes turn into
+rebase soup. So each session gets its **own git worktree on its own branch**, and lands
+via a **PR into `main`** (deploy runs on merge to `main`, not on branch pushes).
+
+Manager creates the worktree before launching a session:
+```
+git worktree add /Users/bobbob/BOB/SERVER/ttpi-wt/<slug> -b session/<n>-<slug>
+```
+The worker session is then launched **with that worktree dir as its project root** and
+works only there. Branch naming: `session/<n>-<short-slug>` (e.g. `session/5-camera-capture`).
+
+Session close (worker):
+```
+git add <only my scoped files by name>   # never git add -A (shared changelog etc.)
+git commit -m "<msg>\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+git push -u origin session/<n>-<slug>
+gh pr create --fill --base main
+```
+Manager reviews the PR, merges to `main` (→ auto-deploy), then removes the worktree:
+```
+git worktree remove /Users/bobbob/BOB/SERVER/ttpi-wt/<slug>
+git branch -d session/<n>-<slug>    # after merge
+```
+
 ## Session boot message (copy-paste)
 ```
+Work in this worktree only: /Users/bobbob/BOB/SERVER/ttpi-wt/<slug> (branch session/<n>-<slug>).
 Read CLAUDE.md + docs/<the files this task needs>.
 Task: <one sentence>.
 Scope: only <files/dirs>. Don't touch anything else.
+End: commit ONLY your scoped files by name, push the branch, open a PR into main.
 ```
 Example:
 ```
-Read CLAUDE.md + docs/known-issues.md + docs/api.md + docs/database.md.
-Task: profile page must persist blocks to the DB and load them on open.
-Scope: web/src/app/profile/page.tsx, web/src/lib/api.ts, api/app/api/routes/blocks.py.
+Work in this worktree only: /Users/bobbob/BOB/SERVER/ttpi-wt/s5-camera (branch session/5-camera-capture).
+Read CLAUDE.md + docs/roadmap.md + docs/architecture.md.
+Task: scaffold camera capture → C2PA + OTS (plan first, then wire).
+Scope: only new files under web/src/app/capture/. Don't touch anything else.
+End: commit your files by name, push session/5-camera-capture, open a PR into main.
 ```
-This makes Claude read only what's needed (token saving) and not sprawl across the repo.
+This keeps each session's context small (token saving), isolates its files, and lands
+work through review instead of racing on `main`.
 
 ## Session close
 Claude ends with the `CLAUDE.md` changelog (`Done / Changed / Risk / Next`) and
