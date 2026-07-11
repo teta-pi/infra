@@ -10,7 +10,7 @@ Status legend: ✅ done · 🔄 in progress · ⏳ queued/blocked · 🔴 blocke
 
 ## Current sprint — numbered directions, sub-numbered tasks
 Naming: `TTPI · <n> <direction> · <n.m> <task>` (see `docs/workflow.md`). Directions:
-**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager**. Historical ✅ work
+**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager · 7 github**. Historical ✅ work
 (pre-numbering: /auth/register removal, resolve_intent enrich, product metrics,
 share button, landing pricing, TWIRA embedding code) lives in `docs/changelog.md`.
 File ownership is disjoint so sessions never collide in git.

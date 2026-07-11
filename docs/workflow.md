@@ -21,6 +21,7 @@ The owner always knows how many session groups exist and where a task lives.
 | 4 | db | migrations, schema |
 | 5 | devops | deploy, server, keys, repo structure |
 | 6 | manager | orchestration (this numbering lives in roadmap) |
+| 7 | github | GitHub org/repos: Actions, branch protection, PR hygiene, org profile, releases |
 
 ```
 TTPI · <n> <direction> · <n.m> <what we do>
@@ -94,6 +95,7 @@ task is big → split it across two sessions; don't drag one out.
 | mcp | MCP server, tools | mcp.md |
 | db | migrations, schema | database.md |
 | devops | deploy, server, keys | deployment.md |
+| github | org, Actions, protection, releases | deployment.md (CI section) |
 | docs | doc updates | README.md |
 Registries and workers are backend sub-topics — no separate direction.
 
