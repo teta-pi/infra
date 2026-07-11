@@ -28,6 +28,9 @@ File ownership is disjoint so sessions never collide in git.
 | 3.3 | `3 frontend · 3.3 camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏸ after 5.2 | `ttpi-wt/3.3-camera` · new files `web/src/app/capture/` |
 | 5.1 | `5 devops · 5.1 enable TWIRA embeddings` | key → server `.env`, backfill, verify (code already merged) | 🔴 deferred: OpenAI billing unpaid + server capacity | server `.env` + one-off backfill |
 | 5.2 | `5 devops · 5.2 split monorepo` | monorepo → hybrid polyrepo | 🔴 deferred: server upgrade first | `ttpi-wt/5.2-split` |
+| 7.1 | `7 github · 7.1 branch protection` | protect `main`: PRs only, no direct pushes, no force-push/delete; manager then lands docs via batched PRs | 🟢 ready to start · no deploy | GitHub settings only, no code |
+| 7.2 | `7 github · 7.2 repo descriptions vs landing` | audit org/repo descriptions + READMEs against current landing copy (Modules, $25, "Digital Entities"); propose diffs, land as one batched PR | ⚪ queued · no deploy until merge | GitHub metadata + `README.md`s |
+| 7.3 | `7 github · 7.3 commit attribution audit` | verify commits across branches/repos show on the owner's GitHub account (noreply email policy), incl. worktree branches | ⚪ queued · read-only | none (gh/git read-only) |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another
