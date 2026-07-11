@@ -6,6 +6,19 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · frontend · 3.1 web copy sync (Strategic Foundation v2)
+Done: synced `app.tetapi.dev` copy with the landing pricing update (session 2026-07-11
+`landing`) — claim checkbox founding price $21→$25 (both form states in
+`web/src/app/claim/page.tsx`); `layout.tsx` meta description aligned with
+tetapi.dev's positioning copy. The other two audit items were already fixed by a
+prior session: `<title>` already read "Digital Entities" and the About link
+already pointed to `https://tetapi.dev/about.html` (checked, no change needed).
+Changed: `web/src/app/claim/page.tsx`, `web/src/app/layout.tsx`.
+Risk: none — static copy only, no logic touched.
+Next: admin back office (`web/src/app/admin/page.tsx:612`) still hardcodes a
+"$21 LOCKED" badge on the claims table — out of scope here (not "claim flow"),
+flagged separately.
+
 ## 2026-07-12 · github · 7.1 branch protection on main
 Done: enabled branch protection on `main` in `teta-pi/platform` via `gh api`
 (`PUT /repos/teta-pi/platform/branches/main/protection`): PRs required (direct
