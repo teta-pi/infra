@@ -10,7 +10,7 @@ Status legend: ✅ done · 🔄 in progress · ⏳ queued/blocked · 🔴 blocke
 
 ## Current sprint — numbered directions, sub-numbered tasks
 Naming: `TTPI · <n> <direction> · <n.m> <task>` (see `docs/workflow.md`). Directions:
-**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager · 7 github · 8 analytics**. Historical ✅ work
+**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager · 7 github · 8 analytics · 9 server**. Historical ✅ work
 (pre-numbering: /auth/register removal, resolve_intent enrich, product metrics,
 share button, landing pricing, TWIRA embedding code) lives in `docs/changelog.md`.
 File ownership is disjoint so sessions never collide in git.
@@ -23,17 +23,18 @@ File ownership is disjoint so sessions never collide in git.
 | 2.2 | `2 mcp · 2.2 agent auth design` | roadmap #6: design doc for scoped `pk_live_` agent auth (no code) | ⚪ after 2.1 · zero deploy | `docs/decisions.md` only |
 | 2.3 | `2 mcp · 2.3 SSE streaming` | roadmap #7 | 🔴 deferred: server load | — |
 | 2.4 | `2 mcp · 2.4 usage analytics` | roadmap #8 | 🔴 deferred: server load | — |
-| 3.1 | `3 frontend · 3.1 web copy sync` | claim checkbox $21→$25, About link, title/meta | 🟢 ready (worktree stands) | `ttpi-wt/3.1-web-copy` · `web/src/` copy only |
-| 3.2 | `3 frontend · 3.2 drag-to-reorder` | wire block reorder to `blockApi.reorder` | 🟢 ready to start | `web/…/profile/page.tsx` |
+| 3.1 | `3 frontend · 3.1 web copy sync` | claim checkbox $21→$25, meta description (About link + title were already correct) | ✅ done 2026-07-12, PR #8 | `web/src/app/claim/page.tsx`, `layout.tsx` |
+| 3.2 | `3 frontend · 3.2 drag-to-reorder` | wire block reorder to `blockApi.reorder`; ALSO: change hardcoded "$21 LOCKED" badge in `admin/page.tsx:612` to "FOUNDING LOCKED" (no amount — claims don't store the locked price, so any fixed number is wrong for some cohort) | 🟢 ready to start | `web/…/profile/page.tsx`, `admin/page.tsx` (badge only) |
 | 3.3 | `3 frontend · 3.3 camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏸ after 5.2 | `ttpi-wt/3.3-camera` · new files `web/src/app/capture/` |
 | 5.1 | `5 devops · 5.1 enable TWIRA embeddings` | key → server `.env`, backfill, verify (code already merged) | 🔴 deferred: OpenAI billing unpaid + server capacity | server `.env` + one-off backfill |
-| 5.2 | `5 devops · 5.2 split monorepo` | monorepo → hybrid polyrepo | 🔴 deferred: server upgrade first | `ttpi-wt/5.2-split` |
-| 7.1 | `7 github · 7.1 branch protection` | protect `main`: PRs only, no direct pushes, no force-push/delete; manager then lands docs via batched PRs | 🟢 ready to start · no deploy | GitHub settings only, no code |
+| 5.2 | `5 devops · 5.2 split monorepo` | monorepo → hybrid polyrepo. Session findings (2026-07-12, plan phase only, no code): (1) `decisions.md` has NO split plan — it must be designed and written first; (2) scope undecided, owner must pick: (a) split npm workspace + per-component deploy workflows (prod-affecting), (b) JS/structural decoupling keeping one deploy.yml, or (c) full extraction to separate repos. Restart as: pick scope → write plan to `decisions.md` → execute | 🔴 deferred: server upgrade first + owner scope decision (a/b/c) | `ttpi-wt/5.2-split` (clean, rebased) |
+| 7.1 | `7 github · 7.1 branch protection` | protect `main`: PRs only, no force-push/delete, enforce_admins | ✅ done 2026-07-12, verified live | GitHub settings only, no code |
 | 7.2 | `7 github · 7.2 repo descriptions vs landing` | audit org/repo descriptions + READMEs against current landing copy (Modules, $25, "Digital Entities"); propose diffs, land as one batched PR | ⚪ queued · no deploy until merge | GitHub metadata + `README.md`s |
 | 7.3 | `7 github · 7.3 commit attribution audit` | verify commits across branches/repos show on the owner's GitHub account (noreply email policy), incl. worktree branches | ⚪ queued · read-only | none (gh/git read-only) |
 | 8.1 | `8 analytics · 8.1 dashboard design` | design the super-dashboard: inventory existing metrics (`/admin/stats`, `/admin/analytics`, `/admin/product-metrics`, GoatCounter), define layout + which metrics matter + alert thresholds; DESIGN DOC first, no code | 🟢 ready · zero deploy | `docs/analytics.md` |
 | 8.2 | `8 analytics · 8.2 build dashboard` | implement the approved 8.1 design in the admin UI (read-only queries on existing endpoints, no new tables/workers) | ⚪ after 8.1 | admin UI + `routes/admin.py` (append-only) |
 | 8.3 | `8 analytics · 8.3 metrics notify agent` | agent that polls key metrics and notifies on thresholds (runs OFF-server — scheduled Claude session / local cron hitting read-only admin API); no server-side workers until upgrade | ⚪ after 8.1 · off-server | new scripts/ or scheduled task, read-only API key |
+| 9.1 | `9 server · 9.1 capacity audit + upgrade plan` | measure what's eating the droplet (RAM/CPU/disk per service), pick target droplet size + cost, write the upgrade runbook; unblocks 5.1/5.2/2.3 | ⚪ owner to schedule | server (read-only audit), `docs/deployment.md` |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another

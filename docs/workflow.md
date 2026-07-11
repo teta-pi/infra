@@ -19,10 +19,11 @@ The owner always knows how many session groups exist and where a task lives.
 | 2 | mcp | MCP server, tools |
 | 3 | frontend | Next.js web app + landing |
 | 4 | db | migrations, schema |
-| 5 | devops | deploy, server, keys, repo structure |
+| 5 | devops | CI/deploy pipeline, keys, repo structure |
 | 6 | manager | orchestration (this numbering lives in roadmap) |
 | 7 | github | GitHub org/repos: Actions, branch protection, PR hygiene, org profile, releases |
 | 8 | analytics | metrics dashboard + notifying agent on key metrics (builds on /admin analytics + GoatCounter) |
+| 9 | server | the droplet ONLY: capacity/upgrade, nginx, systemd, .env, monitoring — never code |
 
 ```
 TTPI · <n> <direction> · <n.m> <what we do>
