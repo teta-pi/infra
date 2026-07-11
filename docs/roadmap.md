@@ -10,7 +10,7 @@ Status legend: ✅ done · 🔄 in progress · ⏳ queued/blocked · 🔴 blocke
 
 ## Current sprint — numbered directions, sub-numbered tasks
 Naming: `TTPI · <n> <direction> · <n.m> <task>` (see `docs/workflow.md`). Directions:
-**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager · 7 github**. Historical ✅ work
+**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager · 7 github · 8 analytics**. Historical ✅ work
 (pre-numbering: /auth/register removal, resolve_intent enrich, product metrics,
 share button, landing pricing, TWIRA embedding code) lives in `docs/changelog.md`.
 File ownership is disjoint so sessions never collide in git.
@@ -31,6 +31,9 @@ File ownership is disjoint so sessions never collide in git.
 | 7.1 | `7 github · 7.1 branch protection` | protect `main`: PRs only, no direct pushes, no force-push/delete; manager then lands docs via batched PRs | 🟢 ready to start · no deploy | GitHub settings only, no code |
 | 7.2 | `7 github · 7.2 repo descriptions vs landing` | audit org/repo descriptions + READMEs against current landing copy (Modules, $25, "Digital Entities"); propose diffs, land as one batched PR | ⚪ queued · no deploy until merge | GitHub metadata + `README.md`s |
 | 7.3 | `7 github · 7.3 commit attribution audit` | verify commits across branches/repos show on the owner's GitHub account (noreply email policy), incl. worktree branches | ⚪ queued · read-only | none (gh/git read-only) |
+| 8.1 | `8 analytics · 8.1 dashboard design` | design the super-dashboard: inventory existing metrics (`/admin/stats`, `/admin/analytics`, `/admin/product-metrics`, GoatCounter), define layout + which metrics matter + alert thresholds; DESIGN DOC first, no code | 🟢 ready · zero deploy | `docs/analytics.md` |
+| 8.2 | `8 analytics · 8.2 build dashboard` | implement the approved 8.1 design in the admin UI (read-only queries on existing endpoints, no new tables/workers) | ⚪ after 8.1 | admin UI + `routes/admin.py` (append-only) |
+| 8.3 | `8 analytics · 8.3 metrics notify agent` | agent that polls key metrics and notifies on thresholds (runs OFF-server — scheduled Claude session / local cron hitting read-only admin API); no server-side workers until upgrade | ⚪ after 8.1 · off-server | new scripts/ or scheduled task, read-only API key |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another
