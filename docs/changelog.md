@@ -6,6 +6,19 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-11 · landing · pricing update to Strategic Foundation v2
+Done: updated `landing/index.html` pricing to the current model — founding price
+$21→$25 (hero CTA, claim checkbox, Module #1 card, final CTA strip); Module #2
+$50→$52; "Package #1/#2" renamed "Module #1/#2" (+ intro copy "packages"→"modules");
+deleted the discontinued $100 "Package #3" card; pricing grid `repeat(5,1fr)`→
+`repeat(4,1fr)` (Free / Module #1 / Module #2 / Enterprise).
+Changed: `landing/index.html` only.
+Risk: low — static copy/layout; verified in preview (4-card grid, no $21/$100).
+Next: app.tetapi.dev (web/) still needs the matching fixes from the audit —
+$21→$25 claim checkbox, `localhost:3000` About link → `tetapi.dev/about.html`,
+and `<title>`/meta "Agent Economy"→"Digital Entities". Out of scope for this
+landing-only session.
+
 ## 2026-07-06 · api+web · product metrics on top of /admin/stats + /admin/analytics
 Done: added `GET /admin/product-metrics` (require_admin + audit-logged,
 read-only) covering what the existing snapshot/traffic endpoints don't: daily
