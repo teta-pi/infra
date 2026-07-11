@@ -6,6 +6,22 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · github · 7.1 branch protection on main
+Done: enabled branch protection on `main` in `teta-pi/platform` via `gh api`
+(`PUT /repos/teta-pi/platform/branches/main/protection`): PRs required (direct
+push blocked), `required_approving_review_count: 0` (solo — PR needed, approval
+not), `allow_force_pushes: false`, `allow_deletions: false`, `enforce_admins: true`
+(agreed with owner — manager session now also goes through PRs, batches doc
+changes). No required status checks yet (would block quick doc PRs on the deploy
+workflow; can add later as a separate decision).
+Changed: repo settings only, no code. Verified: direct push to `main` rejected
+(`GH006: Protected branch update failed`); this changelog entry itself lands via
+the new PR flow as the first real test.
+Risk: none — settings-only change. Note: `enforce_admins: true` means even
+manager/admin sessions must use PRs from now on; update `docs/workflow.md` boot
+habits if any session still assumes direct-push-to-main is possible.
+Next: 7.2 repo descriptions vs landing audit; 7.3 commit attribution audit.
+
 ## 2026-07-11 · manager · land orphaned tree work as 3 PRs + status reconcile
 Done: the shared `main` working tree held 124 lines of uncommitted work from three
 file-disjoint concerns, un-landed. Split into three clean PRs into `main` (all
