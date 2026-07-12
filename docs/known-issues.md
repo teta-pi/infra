@@ -270,7 +270,18 @@ files); only the public-by-slug payload discloses `legal_entity` today.
 **Fix (3.4):** add the new enum values + a "coming soon" style for them, wire
 up the `/verify/*` + `/legal-entity` endpoints, and add `legal_entity_id` to
 `BusinessOut`/`AgentBusinessProfile` if the owner dashboard needs it.
-Status: OPEN (expected — 3.4 is the frontend follow-up task).
+Status: FIXED (2026-07-13). `web/src/lib/types.ts`: `VerificationLevel` now has
+`"email"`/`"domain"` (with `LEVEL_ACCENT`/`LEVEL_LABEL`/`LEVEL_HASH` entries, so
+the search cards in `page.tsx`/`seedData.ts` still compile); `registry_status`
+now includes `"unverified"` and `"not_found"`. `web/src/lib/api.ts` (append-only)
+gained `verifyApi` (registry/email/domain + link/unlink legal-entity) and
+`publicProfileApi.bySlug`. The `/profile` owner dashboard has a Verification
+methods chooser (registry/email/domain active, Document Upload disabled "Coming
+soon" with zero network calls) + brand↔legal link UI; `/e/[slug]` publicly
+discloses `legal_entity`. `BusinessOut` was **not** extended with
+`legal_entity_id` (still out of scope / a backend change) — the dashboard reads
+the current link from the public by-slug payload instead, and `Business.legal_entity_id`
+is typed optional to reflect that it isn't returned by `GET /businesses/{id}`.
 
 ## 🟠 Renaming a registry-verified entity keeps `registry_status="verified"`
 Found in manager review of PR #15 (1.3). Before the rework, renaming a business

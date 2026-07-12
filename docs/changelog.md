@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 3.4 frontend · verification methods chooser + brand↔legal UI
+Done: new **Verification** section in the owner dashboard (`/profile` EditView).
+Registry / Email / Domain are ACTIVE, each wired to its `/verify/*` endpoint:
+Registry (`POST /{id}/verify/registry` then polls `businessApi.get` for
+`registry_status`), Business Email Control (email → `emailStart`, code →
+`emailConfirm`), Domain Ownership (domain → `domainStart` shows DNS TXT +
+well-known token with copy buttons → `domainCheck`). **Document Upload** is
+visible but DISABLED, labeled "Coming soon" — zero network calls. Below the
+methods: brand→verified-legal-entity link UI (`POST`/`DELETE /{id}/legal-entity`),
+candidates = the user's own `registry_status="verified"` entities; current link
+read from the public by-slug payload since `BusinessOut` omits `legal_entity_id`.
+Public disclosure of `legal_entity` added to `/e/[slug]` (name + link, "registry-
+verified"), plus email/domain trust chips + accent colors. Fixed the stale
+frontend types: `registry_status` now includes `"unverified"`/`"not_found"`,
+`VerificationLevel` gains `"email"`/`"domain"` with `LEVEL_ACCENT`/`LABEL`/`HASH`
+entries so the search cards keep compiling.
+Changed: `web/src/lib/types.ts`, `web/src/lib/api.ts` (append-only: `verifyApi`,
+`publicProfileApi`, `DomainVerifyInstructions`, `PublicLegalEntity`),
+`web/src/app/profile/page.tsx` (`VerificationSection` + helpers),
+`web/src/app/e/[slug]/page.tsx`. `next build` + `tsc --noEmit` clean; verified
+render in-browser (methods, disabled Document Upload, email expand).
+Risk: link state on the owner dashboard is read from the public payload, so a
+just-unpublished/private entity would show no link on load (link/unlink itself
+is optimistic and correct). Email-control still accepts any non-free-mailbox
+address (backend note, 1.4/1.5). Domain `/check` is a blind GET to the user's
+host (mild SSRF, tracked in known-issues).
+Next: 1.4 TWIRA `source_weight` per method; 1.5 reset `registry_status` on
+rename; landing copy pass (10.x) once methods are public.
+
 ## 2026-07-12 · 6.1 manager · system-wide bug audit (read-only)
 Done: read-only sweep of `api/`, `web/`, `mcp/`, `landing/` for real defects —
 auth/ownership gaps, race conditions, in-memory-state assumptions, stale
