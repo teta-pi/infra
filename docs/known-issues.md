@@ -20,8 +20,12 @@ real UUID (needed for media upload); **edit** PATCHes title/desc debounced 600ms
 `businessApi.update`. All calls are auth-gated and fall back to local-only when
 unauthenticated (offline UX preserved). Also fixed: `PATCH /blocks/reorder` was
 shadowed by `/blocks/{block_id}` (matched `block_id="reorder"` → 422); reorder is
-now declared first. Drag-to-reorder UI is still not wired, so `blockApi.reorder`
-has no caller yet.
+now declared first. Drag-to-reorder is now wired (2026-07-12): the block
+grip handle in `/profile` (EditView) uses native HTML5 drag, live-reordering via
+the store's existing `reorderBlocks`; on drop it PATCHes `/blocks/reorder` with
+the server-side block ids in their new order. Only real UUIDs are sent (unsaved
+`block-N` blocks have no row yet); a failed save rolls the order back to the
+pre-drag snapshot. `blockApi.reorder` now has a caller.
 
 ## 🟠 `/auth/register` is public, unauthenticated, and unused
 `routes/auth.py::register` creates a user with no email verification. The frontend

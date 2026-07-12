@@ -6,6 +6,24 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 3.2 frontend · wire drag-to-reorder + admin badge copy
+Done: `/profile` block drag-to-reorder is now live. The grip handle (⠿) in
+EditView uses native HTML5 drag (no new deps), live-reordering through the store's
+existing `reorderBlocks`; on drop it PATCHes `/blocks/reorder` with the server-side
+block ids in their new order, giving `blockApi.reorder` its first caller. Only real
+UUIDs are sent (unsaved `block-N` blocks have no row yet); a failed save rolls the
+order back to the pre-drag snapshot. Also fixed the admin claims table badge
+`$21 LOCKED` → `FOUNDING LOCKED` (claims don't store a locked price, so any amount
+misrepresents part of the cohort).
+Changed: `web/src/app/profile/page.tsx` (drag handlers on grip + card, module-level
+`persistBlockOrder`/snapshot); `web/src/app/admin/page.tsx` (one badge line);
+docs/known-issues.md (reorder loose end → wired).
+Risk: low — reorder only fires for authed owners with ≥2 server blocks; local-only
+and unauthenticated flows unchanged. Not runnable locally (worktree deps absent);
+typecheck clean via main-checkout tsc. Verify on prod: drag two saved blocks, reload
+`/profile` and `/e/[slug]` to confirm the new order persisted.
+Next: consider keyboard-accessible reordering + touch drag for mobile.
+
 ## 2026-07-12 · 1.1 backend · close private-block leak on GET blocks
 Done: `GET /businesses/{id}/blocks` no longer leaks private blocks. Added an
 optional-auth helper `_get_optional_user` (`HTTPBearer(auto_error=False)` wrapping
