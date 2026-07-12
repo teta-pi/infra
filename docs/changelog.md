@@ -6,6 +6,19 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 8.1 analytics · dashboard v2 design
+Done: design doc for the owner's super-dashboard + alerting agent — data source
+inventory (what `/admin/stats`, `/admin/analytics`, `/admin/product-metrics` give
+vs. the two real gaps: MCP usage and registry search health), ASCII layout mockup,
+alert threshold table (severity → channel), and off-server notifier agent
+architecture (no new server workers/tables — reuses existing read-only admin
+endpoints + `pk_live_` auth).
+Changed: `docs/analytics.md` (new "Dashboard v2 design" section, appended).
+Risk: none — docs only, zero deploy.
+Next: 8.2 implements the approved layout in the admin UI; 8.3 builds the notifier
+agent once 2.2 (scoped agent auth) lands, since the agent should reuse that scope
+mechanism rather than a bespoke one.
+
 ## 2026-07-12 · 3.2 frontend · wire drag-to-reorder + admin badge copy
 Done: `/profile` block drag-to-reorder is now live. The grip handle (⠿) in
 EditView uses native HTML5 drag (no new deps), live-reordering through the store's
@@ -23,7 +36,6 @@ and unauthenticated flows unchanged. Not runnable locally (worktree deps absent)
 typecheck clean via main-checkout tsc. Verify on prod: drag two saved blocks, reload
 `/profile` and `/e/[slug]` to confirm the new order persisted.
 Next: consider keyboard-accessible reordering + touch drag for mobile.
-
 ## 2026-07-12 · 1.1 backend · close private-block leak on GET blocks
 Done: `GET /businesses/{id}/blocks` no longer leaks private blocks. Added an
 optional-auth helper `_get_optional_user` (`HTTPBearer(auto_error=False)` wrapping

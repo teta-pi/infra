@@ -154,3 +154,140 @@ tables; `?days=` (default 30, max 180) windows the two daily series.
 - Public launch (Show HN / r/selfhosted / Product Hunt) is paused pending a
   decision on platform + copy — see [roadmap.md](roadmap.md) for current
   priorities.
+
+## Dashboard v2 design (roadmap 8.1)
+
+Design only — no code in this session. Scope: the owner's single "super
+dashboard" screen (admin back-office) plus the alerting agent that watches it.
+Implementation is 8.2 (UI) and 8.3 (notifier agent).
+
+### 1. Data source inventory
+
+| Source | Endpoint | What it gives | Gaps |
+|---|---|---|---|
+| Snapshot counters | `GET /admin/stats` | users (total/today/week), claims (total, pay_ready %), entities (total, by `verification_level`), verification_events total | Point-in-time only — no trend, no deltas beyond today/week |
+| Site traffic | `GET /admin/analytics` | GoatCounter bridge: pageviews, referrers, browser/OS, country, viewport, UTM campaigns | Real-visitor filtering already solved (see above); no alerting today |
+| Product metrics | `GET /admin/product-metrics?days=` | `entity_growth` (daily), `verification_events_daily`, `entities_by_type`, `funnel` (claim → signed_up → created_entity → verified) | `registry_search_health` returns `{"available": false}` — not logged yet (roadmap 1.2 unblocks it) |
+| Service liveness | `GET /health` (api.tetapi.dev), `GET /health` (mcp.tetapi.dev) | `{"status": "ok"}` process-alive check | No uptime history, no latency, no DB/Redis sub-checks — just "process answered" |
+| MCP usage | — | **Does not exist.** No request logging in `mcp/src/*` or MCP-facing routes | Blocked on roadmap #8 / session 2.4 ("MCP usage analytics", currently 🔴 deferred: server load) |
+| Registry search health | — | **Does not exist.** `registry_search.py` / `services/registry/*` log nothing (latency, success/fail) | Blocked on roadmap 1.2 (queued) — needs an append-only log table + migration |
+| Server resource usage (RAM/CPU/disk) | — | **Not exposed via API.** Only visible via direct server access | Covered by session 9.1 capacity audit, not this dashboard's job — link out, don't duplicate |
+
+Everything already available is read-only, admin-audited, and needs zero new
+tables or endpoints. The three gaps (MCP usage, registry search health,
+server resources) are explicitly out of scope for 8.2 and tracked as their
+own roadmap items — the dashboard should show them as "not yet available"
+placeholders rather than block on them.
+
+### 2. Owner's critical metrics + layout
+
+Metrics that matter for a one-person-checks-this-in-30-seconds dashboard,
+picked for signal over completeness:
+
+- **Growth** — new entities/day, new users/day (from `product_metrics.entity_growth`)
+- **Claim → verified funnel** — conversion rate at each stage, and where it's
+  leaking (`product_metrics.funnel`)
+- **MCP usage** — placeholder until 2.4 ships; the metric that matters is
+  "agents are actually calling `resolve_intent`/`get_proof`", the whole point
+  of the product
+- **Uptime/health** — API + MCP `/health`, last-checked timestamp, consecutive
+  failures (this is what the notifier agent watches, see §4)
+- **Traffic sanity** — real vs. bot-filtered pageviews (GoatCounter), so a
+  traffic spike/drop is legible without opening `stats.tetapi.dev` separately
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  TETA+PI · Owner Dashboard                     [last refresh: now]  │
+├─────────────────────────────────────────────────────────────────────┤
+│  HEALTH                                                              │
+│  ● api.tetapi.dev  ok   (checked 2m ago)                             │
+│  ● mcp.tetapi.dev  ok   (checked 2m ago)                             │
+│  ● stats.tetapi.dev (GoatCounter)  ok                                │
+├─────────────────────────────────────────────────────────────────────┤
+│  GROWTH (last 30d)                    │  CLAIM → VERIFIED FUNNEL     │
+│  entities/day   ▁▂▂▃▅▄▆▇  (sparkline) │  claims        1,204         │
+│  users/day      ▁▁▂▂▃▃▄▄  (sparkline) │  → signed_up     412 (34%)   │
+│  verification_events/day  (sparkline) │  → created_entity 190 (16%)  │
+│                                        │  → verified       88 ( 7%)  │
+├─────────────────────────────────────────────────────────────────────┤
+│  ENTITY MIX (by entity_type)          │  VERIFICATION LEVEL          │
+│  [bar chart, 12-value enum]           │  [bar chart, from /admin/stats]│
+├─────────────────────────────────────────────────────────────────────┤
+│  MCP USAGE                             │  TRAFFIC (GoatCounter, 14d)  │
+│  ⚪ not available — roadmap 2.4         │  real pageviews  ▁▃▄▂▅      │
+│                                         │  top referrers   [...]      │
+├─────────────────────────────────────────────────────────────────────┤
+│  REGISTRY SEARCH HEALTH                                              │
+│  ⚪ not available — roadmap 1.2                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+Sections map 1:1 to existing endpoints except the two "not available" panels,
+which render as a labeled placeholder (not hidden) so the owner knows the
+gap exists and which roadmap item closes it.
+
+### 3. Alert thresholds
+
+What wakes the owner up at night vs. waits for the morning check. Severity
+`critical` = push/telegram immediately; `warning` = email, batched, checked
+each morning; `info` = shown on dashboard only, no notification.
+
+| Metric | Condition | Severity | Channel |
+|---|---|---|---|
+| `GET /health` (api) | non-200 or unreachable, 2 consecutive checks (~10 min apart) | critical | telegram + push |
+| `GET /health` (mcp) | non-200 or unreachable, 2 consecutive checks | critical | telegram + push |
+| `stats.tetapi.dev` reachability | unreachable 3 consecutive checks | warning | email |
+| Claims → signed_up conversion | drops below 50% of 7-day rolling average | warning | email |
+| `entity_growth` (daily) | zero new entities for 3 consecutive days | warning | email |
+| `verification_events_daily` | zero for 3 consecutive days (verification pipeline stalled) | critical | telegram + push |
+| GoatCounter real pageviews (daily) | drops >80% day-over-day (vs. 7-day avg) | warning | email |
+| Bot/404 request ratio (nginx, existing fail2ban data) | new spike pattern not matching known jails | info | dashboard only |
+| `registry_search_health` (once it exists, 1.2) | success rate <90% over 1h | warning | email |
+| MCP usage (once it exists, 2.4) | zero tool calls for 24h | info | dashboard only (early-stage signal, not urgent) |
+
+Two real endpoints drive `critical`: both `/health` checks and
+`verification_events_daily` (the core product working at all). Everything
+else is `warning`/`info` — this keeps the "wakes the owner up" list short and
+trustworthy; over-alerting trains the owner to ignore it.
+
+### 4. Notifier agent architecture (8.3 scope)
+
+Constraint from `docs/roadmap.md`: **prod droplet is at capacity** — no new
+services, workers, or tables on the server. The agent must run entirely
+off-server.
+
+**Shape:** a scheduled process (local cron, or a scheduled Claude Code
+session via the `schedule` skill) that:
+1. Calls the existing read-only admin endpoints over HTTPS with an admin API
+   key (`Authorization: Bearer pk_live_…` scoped to an admin/support user —
+   reuses the existing `require_admin` + `pk_live_` mechanism, no new auth
+   system).
+2. Calls `GET /health` on `api.tetapi.dev` and `mcp.tetapi.dev` directly (no
+   auth needed, both are public).
+3. Diffs current values against the thresholds in §3 and its own last-run
+   state (rolling averages, consecutive-failure counts — kept in a small
+   local file/SQLite next to the script, **not** on the server).
+4. Sends notifications via email (Resend, already integrated) or
+   telegram/push (new integration, TBD in 8.3) when a threshold trips.
+
+**What it needs that already exists:** `/admin/stats`, `/admin/analytics`,
+`/admin/product-metrics`, `GET /health` (both services), an admin user with a
+`pk_live_` key.
+
+**What it needs that does NOT exist yet (scope for later sessions):**
+- A way to issue an admin-scoped `pk_live_` key restricted to *read-only*
+  admin routes — today `pk_live_` keys and JWTs hit the same `require_admin`
+  dependency with no scope distinction. Session 2.2 ("agent auth design") is
+  designing scoped keys for MCP; the notifier agent should reuse whatever
+  scope mechanism that session lands on rather than inventing a second one.
+- `registry_search_health` data (roadmap 1.2) and MCP usage data (roadmap
+  2.4) — the two "not available" panels in §2. The agent can't alert on
+  metrics that don't exist; those two threshold rows in §3 stay dormant until
+  their source sessions ship.
+- Telegram/push delivery — email via Resend works today (`services/email.py`),
+  but telegram bot + push are net-new integrations, to be picked in 8.3.
+- Every admin endpoint call the agent makes writes to `admin_audit_log`
+  (existing trigger behavior) — worth confirming in 8.3 that a polling
+  cadence (e.g. every 10 min) doesn't spam the audit log in a way that makes
+  it harder to read for actual admin actions. Possibly needs a dedicated
+  `action` tag like `stats.poll` so it's filterable.
