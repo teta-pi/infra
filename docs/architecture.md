@@ -26,7 +26,10 @@
 - **API (`api/`)** — FastAPI, async SQLAlchemy (asyncpg), Alembic migrations,
   pgvector. Routers under `api/app/api/routes/`, business logic in
   `api/app/services/`, TWIRA in `api/app/twira/`, background jobs in
-  `api/app/workers/`.
+  `api/app/workers/`. TWIRA's T-component weighs each `verification_events`
+  row by `source` (`api/app/twira/trust.py:SOURCE_W`) — one weight per
+  verification method (registry / domain / email / document), see
+  `docs/verification-rework.md` §4.
 - **MCP (`mcp/`)** — TypeScript server exposing `teta_*` tools to agents; it calls
   the API over HTTP (`TETA_PI_API_URL`). Stateless.
 - **Workers** — Celery + Redis. Beat schedule: OTS lifecycle (30 min), endpoint

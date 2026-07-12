@@ -6,6 +6,25 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 1.4 backend · TWIRA source_weight per verification method
+Done: `app/twira/trust.py:SOURCE_W` extended from the registry/self-declared
+placeholder to per-method weights read from `verification_events.source` as
+actually written by the 1.3 routes: `official_registry` 1.0 (unchanged),
+`dns_txt`/`file` 0.75 (Domain Ownership), `business_email` 0.5 (Business
+Email Control — weighted down per known-issues.md: the verified mailbox
+domain isn't bound to the entity, only a hash is recorded), `document_verified`
+0.85 (dormant — no upload endpoint yet, weight decided ahead of the backend
+per verification-rework.md §4). Old placeholder keys (`c2pa_camera`,
+`linked_account`, `self_declared`) kept for back-compat; none are currently
+written by any route.
+Changed: `api/app/twira/trust.py`; `docs/architecture.md` (TWIRA T-component
+note); `docs/changelog.md`.
+Risk: weights are a first-pass ordering call (registry > document > domain >
+email), not data-driven — v1 log-based reweighting (see `twira/score.py`
+comment) will supersede this.
+Next: 3.4 frontend (verification methods chooser UI); 1.5 (reset
+`registry_status` on rename — queued, see known-issues.md).
+
 ## 2026-07-12 · manager · 14.1 corrected from PI CAM session state
 Done: queried the PI CAM session + app dir for the camera's real final state.
 Pi CAM is an existing React Native/Expo app (`~/Downloads/PI CAM`, own session):
