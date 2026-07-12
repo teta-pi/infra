@@ -1,8 +1,29 @@
 # Deployment
 
 ## Server
-DigitalOcean droplet, Frankfurt, `164.90.235.66`. SSH:
-`ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66`.
+DigitalOcean droplet, Frankfurt, `164.90.235.66` (`ubuntu-s-1vcpu-512mb-10gb-fra1`
+— 1 vCPU / 512 MB / 10 GB; this is why sustained-load tasks are deferred, see
+roadmap 9.1). SSH:
+`ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66` (owner's Mac has a `Host tetapi`
+alias in `~/.ssh/config` → just `ssh tetapi`).
+
+### SSH access — key-only (hardened 2026-07-13)
+- **Password auth is OFF.** `/etc/ssh/sshd_config.d/00-tetapi-hardening.conf`
+  (`PasswordAuthentication no`) — named `00-` so it sorts before cloud-init's
+  `50-cloud-init.conf` (which set `yes`); OpenSSH takes the *first* value per
+  Include, read alphabetically, so an earlier `60-…` override silently never
+  applied. **Do not add a password back; do not "fix" sshd by restarting into a
+  drifted config.**
+- **You MUST connect with the key** `~/.ssh/tetapi_ed25519` (same key as CI's
+  `DEPLOY_SSH_KEY`). Plain `ssh root@164.90.235.66` (no `-i`) will fall through
+  to `Permission denied (publickey)`, NOT a password prompt.
+- **fail2ban** guards sshd (default `REJECT` → clients see "Connection refused",
+  not a timeout). Repeated failed *password* attempts (e.g. `ssh` falling back to
+  password without the key) get the IP banned. Recover via the manual
+  `.github/workflows/unban-ip.yml` (runs `fail2ban-client unbanip` + `addignoreip`
+  over the CI key) or DigitalOcean Console. A "Connection refused" from one
+  machine while CI deploys still succeed = that machine's IP is banned, **not**
+  sshd down.
 
 - **Docker**: `tetapi-postgres` (pgvector/pgvector:pg16), `tetapi-redis`.
 - **systemd**: `tetapi-api` (uvicorn `--workers 1`, port 8000),

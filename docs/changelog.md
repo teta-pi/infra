@@ -6,6 +6,28 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 9 server + manager · SSH hardened key-only; owner access + docs
+Done: resolved the recurring "SSH port 22 refused" incident. Root cause was two
+layers: (1) the owner's Mac connected as `ssh root@…` with no `-i`, fell back to
+password, and repeated failed passwords got the IP fail2ban-banned (CI kept
+deploying fine over its key the whole time — sshd was never down); (2) the
+server session then found password auth had *never actually been disabled*
+(cloud-init `50-…conf yes` sorted before the old `60-…conf no`; OpenSSH takes
+the first value) and fixed it properly with `00-tetapi-hardening.conf`
+(`PasswordAuthentication no`), sshd restarted. Manager side: unbanned the
+owner's IPs via a new `.github/workflows/unban-ip.yml` (runs over CI key);
+confirmed the owner is NOT locked out — `~/.ssh/tetapi_ed25519` works — and
+added a `Host tetapi` alias to the owner's `~/.ssh/config` so `ssh tetapi`
+always uses the key (prevents the password-fallback that started this).
+Documented the whole access model in `docs/deployment.md`.
+Changed: `docs/deployment.md` (new SSH access section), `.github/workflows/unban-ip.yml`
+(landed earlier as PR #30), owner's local `~/.ssh/config` (not in repo).
+Risk: none new — hardening reduces attack surface. Note for future sessions:
+password SSH is OFF; use the key; "refused from one machine" = fail2ban, not
+sshd down.
+Next: none required. Droplet confirmed 1 vCPU/512 MB — reinforces roadmap 9.1
+capacity audit before any sustained-load task.
+
 ## 2026-07-13 · 13.1 gtm · GTM machine design
 
 Done: transcribed + operationalized the owner's Autonomous GTM Plan PDF
