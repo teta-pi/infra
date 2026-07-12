@@ -29,6 +29,7 @@ The owner always knows how many session groups exist and where a task lives.
 | 12 | wordpress | the TETA+PI WordPress plugin (`wordpress-plugin/`): free verification plugin + $25 premium pack; wordpress.org listing. First public distribution channel |
 | 13 | gtm | autonomous go-to-market machine per the owner's Autonomous GTM Plan (July 2026 PDF → `docs/gtm.md`): agent-side loops (registry listings, self-verification, pre-verification, badges) + site-side arm (platform plugins). Runs OFF-server; all public posting/outreach owner-gated |
 | 14 | camera | PI Camera as a standalone product: capture → C2PA + OTS → verified block + public proof; the C2PA loop in the GTM plan (every signed asset links back to the creator's profile) |
+| 15 | security | **standing** red-team / continuous security testing of the whole system (api, web, mcp, landing, server, WP plugin) — threat model, recurring authorized audits, CI security scanning, tracking findings in `docs/security.md` + `docs/known-issues.md`. Finds & reports; the fixes are handed to the owning direction (backend/frontend/server). Scope: OUR OWN infra only, authorized. Never runs destructive/DoS tests against prod |
 
 ```
 TTPI · <n> <direction> · <n.m> <what we do>
