@@ -6,6 +6,22 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · manager · 14.1 corrected from PI CAM session state
+Done: queried the PI CAM session + app dir for the camera's real final state.
+Pi CAM is an existing React Native/Expo app (`~/Downloads/PI CAM`, own session):
+offline C2PA signing (Secure Enclave/Keystore), watermark/GPS/save-to-Photos
+fixes landed 2026-06-28, TS clean; already integrated with the platform via
+`modules/account` (QR link, `pk_live_`, entity) → `POST /media/device-upload`;
+web `/profile` has a deployed "Connect Pi CAM" + SignInModal. Rewrote roadmap
+14.1: not a new web capture UI — finish+verify the app↔platform integration
+end-to-end (upload → C2PA/OTS verify → verified block → proof → MCP), fix the
+QA finding (Connect no-ops with null token). Flags: PI CAM dir is NOT a git
+repo (init + private repo = step 1); a server password was pasted into that
+chat on 2026-06-28 — rotate it.
+Changed: `docs/roadmap.md` (14.1 rewritten).
+Risk: none — docs only.
+Next: boot 14.1 in the PI CAM session (app side) + small platform-side task here.
+
 ## 2026-07-12 · manager · GTM plan reconciled (PDF) + camera → direction 14
 Done: owner delivered the **Autonomous GTM Plan** PDF (zero-budget, 90-day,
 agent-network-effect: Phase 0 self-registration on 6 MCP surfaces → Phase 1
