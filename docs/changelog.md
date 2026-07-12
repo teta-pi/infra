@@ -6,6 +6,41 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 6.1 manager · system-wide bug audit (read-only)
+Done: read-only sweep of `api/`, `web/`, `mcp/`, `landing/` for real defects —
+auth/ownership gaps, race conditions, in-memory-state assumptions, stale
+types/enums, dead endpoints, error-handling holes. 17 new findings verified
+in code (file:line) and appended to `docs/known-issues.md` under "System-wide
+bug audit — 2026-07-12 (session 6.1)": 4× 🔴 (unauthenticated path traversal
+in `/media/local/{file_id}/{filename}`; MCP `teta_resolve_intent` returns a
+slug where every other tool requires a UUID, breaking the flagship
+resolve→verify flow; `developers.html`'s REST API docs describe endpoints
+that don't exist; `onboarding.html`'s signup form posts to a placeholder
+Formspree ID), 8× 🟠 (MCP `verified_only` search filter is a no-op;
+`agent_endpoint_verified` not reset on endpoint change — same class as the
+already-tracked `registry_status` bug; unauthenticated SSRF-prone
+`/verify-endpoint`; GETs on `/businesses` write to the DB via
+`onupdate=func.now()`, causing stale level-filtered search until someone
+happens to GET; Bitcoin timestamping wired to a no-op stub so proofs are
+never submitted (plus a wrong-digest bug in the confirmation check);
+`/profile` never reads the session written by `/login`/`/settings`, leaving
+that auth path's editor silently unauthenticated with a false "Saved"
+indicator; `/claim`'s domain-email proof step is entirely client-side/fakeable;
+no UI control ever calls `businessApi.publish`/`setPrivacy`/etc.), 5× 🟡
+(Redis check-then-delete race on verification codes; wrong support-email
+domain on one landing page; `llms.txt` links the agent manifest at the wrong
+subdomain and undercounts MCP tools; `teta_get_profile` renders `undefined`
+media fields; MCP `apiFetch` has no timeout).
+Changed: `docs/known-issues.md` (append), this changelog entry. No source
+files touched — audit only, per task scope.
+Risk: none (read-only). All 17 are unfixed and open; several (🔴 #1-4) are
+worth prioritizing before any other session touches media serving, the MCP
+intent flow, or public-facing landing docs.
+Next: turn the 🔴 items into their own numbered tasks first (media path
+traversal is the most exposed — unauthenticated, live in prod); 🟠 #6/#8/#9
+are backend follow-ups in the same family as the already-queued 1.5
+(`registry_status` reset) task.
+
 ## 2026-07-12 · 1.4 backend · TWIRA source_weight per verification method
 Done: `app/twira/trust.py:SOURCE_W` extended from the registry/self-declared
 placeholder to per-method weights read from `verification_events.source` as
