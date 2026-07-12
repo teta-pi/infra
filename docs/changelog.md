@@ -6,6 +6,37 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 1.3 backend · verification rework — methods + decoupled creation
+Done: `POST /businesses` no longer calls the registry — any name is creatable
+immediately, free, unverified (`registry_status="unverified"`,
+`is_published=is_public=true` for every entity_type; L0). Registry match is
+now explicit/optional (`POST /{id}/verify/registry`, was automatic at
+create/rename). Two new independent methods, each writing its own append-only
+`verification_events` row: Business Email Control (`/verify/email/start`
++`/confirm` — 6-digit Resend code to an address on the brand's own domain,
+Redis-namespaced `biz_email_code:*`, rejects free-mailbox domains) and Domain
+Ownership (`/verify/domain/start`+`/check` — DNS TXT via DNS-over-HTTPS or a
+`.well-known` file token, same mechanism as the WordPress plugin; no new DNS
+dependency). Brand↔legal-entity link (`POST`/`DELETE /{id}/legal-entity`,
+writes `businesses.legal_entity_id`; requires owning both sides + the legal
+entity already `registry_status=verified`), publicly disclosed via
+`legal_entity` on `GET /businesses/by-slug/{slug}/public`. `/publish` no
+longer gates on registry verification. `verification_level` is now computed
+on read from `registry_status` + `verification_events` instead of stored.
+Document upload: nothing shipped (by design — 3.4/future, UI-only "coming soon").
+Changed: `api/app/api/routes/businesses.py`; new
+`api/app/services/verification/{email_control,domain_ownership}.py`.
+`api/app/api/routes/auth.py` untouched — reused via import
+(`send_verification_code`) and pattern only.
+Risk: `web/src/lib/types.ts`'s `registry_status`/`VerificationLevel` unions
+don't know the new values yet (`unverified`, `email`, `domain`) — cosmetic
+frontend gap until 3.4, see `docs/known-issues.md`. `AgentBusinessProfile`/
+`BusinessOut` weren't extended with `legal_entity_id` (kept the diff inside
+the scoped files) — only the public-by-slug payload discloses the link today.
+Next: 1.4 (TWIRA `source_weight` per method), then 3.4 (verification-methods
+chooser UI, brand↔legal link UI, public disclosure on the profile page, and
+the frontend type/schema follow-ups noted above).
+
 ## 2026-07-12 · 4.1 db · verification rework migration (legal_entity_id + event_type)
 Done: migration 011 adds `businesses.legal_entity_id` (nullable, self-referencing
 FK — brand→verified legal entity link, e.g. "Google"→"Alphabet Inc.") with an
