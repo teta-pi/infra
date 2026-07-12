@@ -6,6 +6,20 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · manager · unfreeze 3.3 camera (full product) + MCP end-goal 2.5
+Done: owner set two priorities. (1) **3.3 camera** un-paused and scope upgraded
+to a full product: capture → existing C2PA/OTS pipeline → verified block on the
+profile/public page, proof visible via `/proof` + MCP. De-coupled from 5.2 (the
+split is frozen indefinitely; camera never needed it — one-off request load
+only). (2) **2.5 mcp** added — the direction's end goal: fully working, debugged
+MCP in the Claude ecosystem and others: e2e testing from real clients, protocol
+fixes, then owner-approved registry/directory listings. 2.2 (agent auth design)
+marked next in direction 2.
+Changed: `docs/roadmap.md` (3.3 unfrozen + rescoped, new 2.5, 2.2 flip).
+Risk: none — docs only. Camera signing load is per-request, same as existing
+block flow.
+Next: boot 3.3 (worktree reset to current main) and 2.2/2.5.
+
 ## 2026-07-12 · manager · directions 12 wordpress + 13 gtm
 Done: owner added two directions. **12 wordpress** — the TETA+PI WordPress
 plugin (new `wordpress-plugin/` folder): free verification tier + $25 premium
