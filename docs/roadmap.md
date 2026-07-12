@@ -10,7 +10,7 @@ Status legend: ✅ done · 🔄 in progress · ⏳ queued/blocked · 🔴 blocke
 
 ## Current sprint — numbered directions, sub-numbered tasks
 Naming: `TTPI · <n> <direction> · <n.m> <task>` (see `docs/workflow.md`). Directions:
-**1 backend · 2 mcp · 3 frontend · 4 db · 5 devops · 6 manager · 7 github · 8 analytics · 9 server**. Historical ✅ work
+**1 backend · 2 mcp · 3 frontend (product UI) · 4 db · 5 devops · 6 manager · 7 github · 8 analytics · 9 server · 10 landing (promo) · 11 backoffice**. Historical ✅ work
 (pre-numbering: /auth/register removal, resolve_intent enrich, product metrics,
 share button, landing pricing, TWIRA embedding code) lives in `docs/changelog.md`.
 File ownership is disjoint so sessions never collide in git.
@@ -19,6 +19,8 @@ File ownership is disjoint so sessions never collide in git.
 |---|---|---|---|---|
 | 1.1 | `1 backend · 1.1 fix private-block leak` | close 🟡 leak in `GET /businesses/{id}/blocks` — owner sees all, others only `is_public` | ✅ done 2026-07-12, PR #10 | `routes/blocks.py` |
 | 1.2 | `1 backend · 1.2 registry search logging` | append-only request log in `services/registry/*` → unlocks `registry_search_health` | ⚪ queued | `services/registry/*`, new migration |
+| 1.3 | `1 backend · 1.3 verification methods` | **verification rework** (`docs/verification-rework.md`): decouple entity creation from registry (L0 free); registry → optional method; NEW email-control + domain-ownership methods; brand↔legal link endpoint + public disclosure. Document upload: NO backend | ⏳ after 4.1 | `routes/businesses.py`, `routes/auth.py` (reuse), new `services/verification/*` |
+| 1.4 | `1 backend · 1.4 TWIRA source_weight` | per-method trust weights (registry/email/domain/document) feeding T-component | ⏳ after 1.3 · small | `api/app/twira/*` |
 | 2.1 | `2 mcp · 2.1 get_proof depth` | roadmap #5: ots_status, btc_timestamp_depth, C2PA chain → MCP 1.3.0 | ✅ done 2026-07-12, PR #9, live on prod | proof route + `mcp/src/*` |
 | 2.2 | `2 mcp · 2.2 agent auth design` | roadmap #6: design doc for scoped `pk_live_` agent auth (no code) | ⚪ after 2.1 · zero deploy | `docs/decisions.md` only |
 | 2.3 | `2 mcp · 2.3 SSE streaming` | roadmap #7 | 🔴 deferred: server load | — |
@@ -26,6 +28,8 @@ File ownership is disjoint so sessions never collide in git.
 | 3.1 | `3 frontend · 3.1 web copy sync` | claim checkbox $21→$25, meta description (About link + title were already correct) | ✅ done 2026-07-12, PR #8 | `web/src/app/claim/page.tsx`, `layout.tsx` |
 | 3.2 | `3 frontend · 3.2 drag-to-reorder` | wire block reorder to `blockApi.reorder` (native HTML5 drag + rollback) + admin badge → "FOUNDING LOCKED" | ✅ done 2026-07-12, PR #11 | `web/…/profile/page.tsx`, `admin/page.tsx` |
 | 3.3 | `3 frontend · 3.3 camera capture` | #11b camera → C2PA + OTS (scaffold first) | ⏸ after 5.2 | `ttpi-wt/3.3-camera` · new files `web/src/app/capture/` |
+| 3.4 | `3 frontend · 3.4 verification methods UI` | rework UI (`docs/verification-rework.md`): method chooser (registry/email/domain active; document visible-DISABLED "Coming soon"); brand↔legal link UI; public disclosure of the link on profile + `/e/[slug]` | ⏳ after 1.3 | claim/profile verification UI |
+| 4.1 | `4 db · 4.1 verification rework migration` | migration: `entities.legal_entity_id` nullable self-FK + extend `verification_events.event_type` enum (`email_verified`, `domain_verified`, `document_verified`); append-only trigger must survive | 🟢 **START HERE** (unblocks 1.3→1.4/3.4) | new migration + models |
 | 5.1 | `5 devops · 5.1 enable TWIRA embeddings` | key → server `.env`, backfill, verify (code already merged) | 🔴 deferred: OpenAI billing unpaid + server capacity | server `.env` + one-off backfill |
 | 5.2 | `5 devops · 5.2 split monorepo` | monorepo → hybrid polyrepo. Session findings (2026-07-12, plan phase only, no code): (1) `decisions.md` has NO split plan — it must be designed and written first; (2) scope undecided, owner must pick: (a) split npm workspace + per-component deploy workflows (prod-affecting), (b) JS/structural decoupling keeping one deploy.yml, or (c) full extraction to separate repos. Restart as: pick scope → write plan to `decisions.md` → execute | 🔴 deferred: server upgrade first + owner scope decision (a/b/c) | `ttpi-wt/5.2-split` (clean, rebased) |
 | 7.1 | `7 github · 7.1 branch protection` | protect `main`: PRs only, no force-push/delete, enforce_admins | ✅ done 2026-07-12, verified live | GitHub settings only, no code |
@@ -35,6 +39,8 @@ File ownership is disjoint so sessions never collide in git.
 | 8.2 | `8 analytics · 8.2 build dashboard` | implement the approved 8.1 design in the admin UI (read-only queries on existing endpoints, no new tables/workers) | ⚪ after 8.1 | admin UI + `routes/admin.py` (append-only) |
 | 8.3 | `8 analytics · 8.3 metrics notify agent` | agent that polls key metrics and notifies on thresholds (runs OFF-server — scheduled Claude session / local cron hitting read-only admin API); no server-side workers until upgrade | ⚪ after 8.1 · off-server | new scripts/ or scheduled task, read-only API key |
 | 9.1 | `9 server · 9.1 capacity audit + upgrade plan` | measure what's eating the droplet (RAM/CPU/disk per service), pick target droplet size + cost, write the upgrade runbook; unblocks 5.1/5.2/2.3 | ⚪ owner to schedule | server (read-only audit), `docs/deployment.md` |
+| 10.1 | `10 landing · 10.1 verification methods copy pass` | after the rework ships: "How it works" + "Verification levels" mention email/domain/document methods | ⏸ after 3.4 ships | `landing/index.html` |
+| 11.x | `11 backoffice · …` | back office gets its own direction; first tasks defined after 8.1 design lands (dashboard build 8.2 may move here) | ⚪ boot after 8.1 | `/admin` UI + admin routes |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another
