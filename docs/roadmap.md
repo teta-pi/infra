@@ -10,7 +10,7 @@ Status legend: ✅ done · 🔄 in progress · ⏳ queued/blocked · 🔴 blocke
 
 ## Current sprint — numbered directions, sub-numbered tasks
 Naming: `TTPI · <n> <direction> · <n.m> <task>` (see `docs/workflow.md`). Directions:
-**1 backend · 2 mcp · 3 frontend (product UI) · 4 db · 5 devops · 6 manager · 7 github · 8 analytics · 9 server · 10 landing (promo) · 11 backoffice**. Historical ✅ work
+**1 backend · 2 mcp · 3 frontend (product UI) · 4 db · 5 devops · 6 manager · 7 github · 8 analytics · 9 server · 10 landing (promo) · 11 backoffice · 12 wordpress (plugin) · 13 gtm (autonomous go-to-market)**. Historical ✅ work
 (pre-numbering: /auth/register removal, resolve_intent enrich, product metrics,
 share button, landing pricing, TWIRA embedding code) lives in `docs/changelog.md`.
 File ownership is disjoint so sessions never collide in git.
@@ -43,6 +43,10 @@ File ownership is disjoint so sessions never collide in git.
 | 10.1 | `10 landing · 10.1 verification methods copy pass` | after the rework ships: "How it works" + "Verification levels" mention email/domain/document methods | ⏸ after 3.4 ships | `landing/index.html` |
 | 11.1 | `11 backoffice · 11.1 build dashboard v2` | owner dashboard per the 8.1 design (took over 8.2): Dashboard tab in `/admin` + thin `GET /admin/health-check` | ✅ done 2026-07-12, PR #16 | `web/src/app/admin/page.tsx`, `web/src/lib/api.ts`, `routes/admin.py` (append) |
 | 11.2 | `11 backoffice · …` | next backoffice tasks defined by owner/manager (e.g. claims ops tooling) | ⚪ open | `/admin` UI + admin routes |
+| 12.1 | `12 wordpress · 12.1 plugin MVP` | **owner priority — first public release.** TETA+PI WordPress plugin, free tier: connect the WP site to a TETA+PI entity (`pk_live_` key), auto domain-ownership verification (plugin serves `/.well-known/tetapi-verify.txt`, calls `/verify/domain/start`+`/check`), verified-badge widget/shortcode. Define the $25 premium pack (aligned with Module #1 pricing) — PLAN the pack contents first, then build free tier fully + premium as licensed stubs. No server-side changes | 🟢 **START** | new `wordpress-plugin/` only (excluded from deploy.yml) |
+| 12.2 | `12 wordpress · 12.2 publish to wordpress.org` | plugin review submission, listing copy (assets/screenshots/readme.txt), $25 pack purchase flow decision (license key via claim/Stripe — owner to pick); landing gets a "WordPress" mention (goes through 10.x) | ⏳ after 12.1 · owner approves the actual publish | `wordpress-plugin/` + listing metadata |
+| 13.1 | `13 gtm · 13.1 GTM machine design` | design doc for the autonomous GTM machine: channels (wordpress.org listing, directories, content/SEO/AEO, outreach), cadence, what runs autonomously vs. owner-approved (all public posting = owner-gated), OFF-server runtime (scheduled Claude sessions / local cron; no droplet load, no OpenAI dependency), metrics loop into the 8.x dashboard | ⚪ can design in parallel; ACTIVATION ⏳ right after 12.2 publishes | `docs/gtm.md` (new) |
+| 13.2 | `13 gtm · 13.2 GTM machine v1` | implement the approved 13.1 design: first automated loops (content gen → owner review queue → publish), launch checklist for the plugin release | ⏳ after 13.1 + 12.2 | per 13.1 design, off-server scripts/ |
 
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another

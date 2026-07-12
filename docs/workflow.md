@@ -26,6 +26,8 @@ The owner always knows how many session groups exist and where a task lives.
 | 9 | server | the droplet ONLY: capacity/upgrade, nginx, systemd, .env, monitoring — never code |
 | 10 | landing | tetapi.dev promo site only (`landing/`): positioning, copy, pricing page — never product UI |
 | 11 | backoffice | admin back office (`/admin` UI + admin routes): tools for operating the registry |
+| 12 | wordpress | the TETA+PI WordPress plugin (`wordpress-plugin/`): free verification plugin + $25 premium pack; wordpress.org listing. First public distribution channel |
+| 13 | gtm | autonomous go-to-market machine: content, distribution, outreach automation. Runs OFF-server (scheduled/local agents), activated right after the plugin publishes (12.2) |
 
 ```
 TTPI · <n> <direction> · <n.m> <what we do>

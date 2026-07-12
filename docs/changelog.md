@@ -6,6 +6,18 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · manager · directions 12 wordpress + 13 gtm
+Done: owner added two directions. **12 wordpress** — the TETA+PI WordPress
+plugin (new `wordpress-plugin/` folder): free verification tier + $25 premium
+pack; this is the first thing we build AND publish (wordpress.org = first
+public distribution channel). **13 gtm** — autonomous go-to-market machine,
+designed in 13.1 (`docs/gtm.md`), activated immediately after the plugin
+publishes (12.2); runs off-server, all public posting owner-gated.
+Changed: `docs/workflow.md` (directions table +12/+13),
+`docs/roadmap.md` (rows 12.1, 12.2, 13.1, 13.2).
+Risk: none — docs only.
+Next: boot 12.1 (worktree ready); 13.1 design can run in parallel.
+
 ## 2026-07-12 · 11.1 backoffice · dashboard v2 build
 Done: implemented the approved 8.1 design as a new "Dashboard" tab in `/admin`
 (now the default tab) — health row (api/mcp/stats), growth sparklines +
