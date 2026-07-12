@@ -27,7 +27,8 @@ The owner always knows how many session groups exist and where a task lives.
 | 10 | landing | tetapi.dev promo site only (`landing/`): positioning, copy, pricing page — never product UI |
 | 11 | backoffice | admin back office (`/admin` UI + admin routes): tools for operating the registry |
 | 12 | wordpress | the TETA+PI WordPress plugin (`wordpress-plugin/`): free verification plugin + $25 premium pack; wordpress.org listing. First public distribution channel |
-| 13 | gtm | autonomous go-to-market machine: content, distribution, outreach automation. Runs OFF-server (scheduled/local agents), activated right after the plugin publishes (12.2) |
+| 13 | gtm | autonomous go-to-market machine per the owner's Autonomous GTM Plan (July 2026 PDF → `docs/gtm.md`): agent-side loops (registry listings, self-verification, pre-verification, badges) + site-side arm (platform plugins). Runs OFF-server; all public posting/outreach owner-gated |
+| 14 | camera | PI Camera as a standalone product: capture → C2PA + OTS → verified block + public proof; the C2PA loop in the GTM plan (every signed asset links back to the creator's profile) |
 
 ```
 TTPI · <n> <direction> · <n.m> <what we do>

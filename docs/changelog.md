@@ -6,6 +6,22 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · manager · GTM plan reconciled (PDF) + camera → direction 14
+Done: owner delivered the **Autonomous GTM Plan** PDF (zero-budget, 90-day,
+agent-network-effect: Phase 0 self-registration on 6 MCP surfaces → Phase 1
+agent discovery → Phase 2 top-500 pre-verification with guarded claim outreach
+→ Phase 3 self-running loops; WP plugin = parallel site-side arm §07).
+Reconciled roadmap 13.x with it — key fix: **GTM activation trigger changed
+from "after 12.2 (plugin publish)" to "after 2.5 (MCP listings = Phase 0)"**;
+13.1 is now "transcribe+operationalize the PDF into docs/gtm.md". Camera moved
+out of frontend into its own **direction 14** (owner: standalone product) —
+3.3 → 14.1, same full-product scope, plus the GTM C2PA-loop tie-in.
+Changed: `docs/workflow.md` (+14, 13 rewritten), `docs/roadmap.md` (3.3 moved,
+14.1 added, 13.1/13.2 rewritten).
+Risk: none — docs only. Open decisions flagged for 13.1: lightweight MCP call
+logging vs deferred 2.4 (droplet), badge SVG endpoint as a new small backend task.
+Next: boot 14.1 + updated 13.1; 2.5 becomes the GTM critical path.
+
 ## 2026-07-12 · manager · unfreeze 3.3 camera (full product) + MCP end-goal 2.5
 Done: owner set two priorities. (1) **3.3 camera** un-paused and scope upgraded
 to a full product: capture → existing C2PA/OTS pipeline → verified block on the
