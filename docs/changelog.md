@@ -6,6 +6,26 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 4.1 db · verification rework migration (legal_entity_id + event_type)
+Done: migration 011 adds `businesses.legal_entity_id` (nullable, self-referencing
+FK — brand→verified legal entity link, e.g. "Google"→"Alphabet Inc.") with an
+index; asserts the 006 append-only trigger on `verification_events` is still
+attached before proceeding. `verification_events.event_type` gains
+`email_verified` / `domain_verified` / `document_verified` as documented
+allowed values on the `VerificationEvent` model — the column has always been a
+plain `String(50)` with no DB-level enum/check constraint, so no schema change
+was needed for that part, only the model comment. `document_verified` is
+type-only: no backend/upload endpoint until file-upload risk is handled.
+Changed: `api/alembic/versions/011_legal_entity_link.py` (new),
+`api/app/models/business.py` (`legal_entity_id` column + self-relationship),
+`api/app/models/verification_event.py` (comment), `docs/database.md`.
+Risk: could not run `alembic upgrade head` locally (no docker/postgres in this
+environment) — verified via AST/compile checks and manual review only; CI/next
+session against a real DB should confirm the migration applies cleanly.
+Next: 1.3 backend — decouple entity creation from registry match, add
+email-control + domain-ownership verification methods, brand↔legal link
+endpoint (see `docs/verification-rework.md`).
+
 ## 2026-07-12 · 8.1 analytics · dashboard v2 design
 Done: design doc for the owner's super-dashboard + alerting agent — data source
 inventory (what `/admin/stats`, `/admin/analytics`, `/admin/product-metrics` give
