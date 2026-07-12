@@ -161,6 +161,17 @@ Design only — no code in this session. Scope: the owner's single "super
 dashboard" screen (admin back-office) plus the alerting agent that watches it.
 Implementation is 8.2 (UI) and 8.3 (notifier agent).
 
+Implemented 2026-07-12 (session 11.1) as the "Dashboard" tab in `/admin`
+(default tab). Read-only, admin-gated, matches the layout in §2 exactly —
+including the two "not available" placeholders (MCP usage, registry search
+health), shown labeled rather than hidden. One addition beyond the endpoints
+listed in §1: `GET /admin/health-check` (thin server-side aggregation) pings
+`mcp.tetapi.dev/health` and `stats.tetapi.dev` from the API instead of the
+browser, because `mcp.tetapi.dev`'s `/health` handler sends no CORS headers —
+a direct browser fetch from `app.tetapi.dev` would misreport "down". The
+notifier agent (8.3) can reuse this endpoint instead of pinging `/health`
+itself.
+
 ### 1. Data source inventory
 
 | Source | Endpoint | What it gives | Gaps |

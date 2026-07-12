@@ -6,6 +6,29 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-12 · 11.1 backoffice · dashboard v2 build
+Done: implemented the approved 8.1 design as a new "Dashboard" tab in `/admin`
+(now the default tab) — health row (api/mcp/stats), growth sparklines +
+claim→verified funnel, entity mix + verification level, MCP usage + registry
+search health as labeled "not available" placeholders (not hidden), traffic
+sparkline + top referrers. Added `GET /admin/health-check` (thin, admin-gated,
+audited) because a browser can't reliably CORS-check `mcp.tetapi.dev/health`
+from `app.tetapi.dev` — pings mcp + stats.tetapi.dev server-side instead.
+Extracted `FunnelChart` so the Dashboard and Analytics tabs share the funnel
+render instead of duplicating it.
+Changed: `web/src/app/admin/page.tsx` (new `DashboardTab`, `FunnelChart`,
+`HealthRow`, `NotAvailable`, `timeAgo`), `web/src/lib/api.ts` (append:
+`adminApi.healthCheck`, `AdminHealthCheck`), `api/app/api/routes/admin.py`
+(append: `GET /admin/health-check`).
+Risk: `health-check` makes two outbound HTTPS calls per request (mcp +
+stats.tetapi.dev), 5s timeout each — worst case ~10s if both are unreachable;
+acceptable for a manually-viewed dashboard tab, would need caching if polled
+by the 8.3 notifier agent. No DB/docker available in this sandbox to run the
+full authenticated flow — verified via `tsc --noEmit` + `next build` only, not
+a live browser session.
+Next: 8.3 notifier agent (off-server) can reuse `/admin/health-check` instead
+of pinging `/health` from its own process.
+
 ## 2026-07-12 · 1.3 backend · verification rework — methods + decoupled creation
 Done: `POST /businesses` no longer calls the registry — any name is creatable
 immediately, free, unverified (`registry_status="unverified"`,
