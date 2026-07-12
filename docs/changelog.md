@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 13.1 gtm · GTM machine design
+
+Done: transcribed + operationalized the owner's Autonomous GTM Plan PDF
+(`~/Downloads/TETAPI_Autonomous_GTM.pdf`) into `docs/gtm.md`. Mapped every
+phase item to a session number + owner: Phase 0 (6 registry listings in
+exact order → `2.5` preps artifacts, Bob executes; self-verification →
+existing claim flow, no new code; `llms.txt` → `10.2`; tool description
+rewrite → `2.5`), Phase 1 (tool-call instrumentation = roadmap `2.4`, flagged
+🟠 for an owner decision between file-log vs DB-table logging shape;
+`proof_url` → new `2.6`; Show HN/Discord = owner-gated, `13.2` drafts copy
+only; top-500 dataset script → new `13.3`, off-server), Phase 2
+(pre-verification pipeline → new `1.7`, hard-dep claim flow already
+satisfied; outreach = Bob, guardrails transcribed verbatim), Phase 3 (badge
+loop → new `1.10` badge SVG endpoint, pulled forward since Phase 0's
+self-verification badges need it; C2PA loop → folds into direction 14 PI
+Camera; cross-verification notifications → unscoped, depends on `2.4`
+shipping first). Metrics scorecard mapped into the `8.x` dashboard (new
+`8.4` for pre-verified/claimed/badge counts once `1.10`/`1.7` exist). Flagged
+§07 (Shopify/Wix/universal snippet) as blocked on reading the companion
+`TETAPI_Platform_Integration_Strategy.pdf`, not yet transcribed.
+Changed: `docs/gtm.md` (new).
+Risk: none — docs only. The doc introduces several new session numbers
+(`1.6`, `1.7`, `2.5`, `2.6`, `8.4`, `10.2`, `13.3`) that aren't yet reflected
+in `docs/roadmap.md`'s own table — the manager session should reconcile
+those into the roadmap before booting them, same as any design doc.
+Next: manager adds the new n.m rows to `docs/roadmap.md`; owner decides the
+`2.4` logging shape (file vs DB table) before that session boots; owner
+reads the Platform Integration Strategy PDF before `12.3`.
+
 ## 2026-07-13 · 3.4 frontend · verification methods chooser + brand↔legal UI
 Done: new **Verification** section in the owner dashboard (`/profile` EditView).
 Registry / Email / Domain are ACTIVE, each wired to its `/verify/*` endpoint:
