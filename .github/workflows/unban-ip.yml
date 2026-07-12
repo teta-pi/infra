@@ -1,0 +1,33 @@
+name: Unban IP (fail2ban)
+
+# One-purpose ops workflow: unban an owner IP that fail2ban locked out after
+# failed SSH password attempts (recurring: 2026-07-13). Runs over the same
+# deploy SSH key. Manual trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      ip:
+        description: "IP address to unban + add to fail2ban ignoreip"
+        required: true
+        type: string
+
+jobs:
+  unban:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/tetapi_ed25519
+          chmod 600 ~/.ssh/tetapi_ed25519
+          ssh-keyscan -H 164.90.235.66 >> ~/.ssh/known_hosts
+      - name: Unban
+        run: |
+          ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66 '
+            echo "--- status before ---"
+            fail2ban-client status sshd || true
+            fail2ban-client set sshd unbanip "${{ inputs.ip }}" || echo "not in ban list"
+            fail2ban-client set sshd addignoreip "${{ inputs.ip }}" || true
+            echo "--- status after ---"
+            fail2ban-client status sshd || true
+          '
