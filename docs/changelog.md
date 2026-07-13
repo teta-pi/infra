@@ -6,6 +6,28 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 2.2 agent auth design · scoped pk_live_ design doc
+Done: design-only (no code) for scoped `pk_live_` agent auth, written in
+`docs/decisions.md`. Scope model (`admin:read`, `admin:write`,
+`entity:write:<id>`, `entity:write:*` default), a new additive
+`agent_api_keys` table (hashed keys, per-key scopes, soft-revoke — existing
+`User.api_key`/`/auth/personal-api-key` untouched for backward compat),
+issuance/rotation/revocation endpoints (`POST`/`GET`/`DELETE
+/auth/agent-keys`), and how `require_admin`-style deps become a
+`require_scope(...)` factory (entity-scoped writes checked inline next to the
+existing owner-check, since the target id is a path param, not knowable at
+`Depends()` time). Confirmed the design is general enough for 8.3 (metrics
+notifier) to reuse as an `admin:read`-only key rather than inventing its own
+mechanism, per `docs/analytics.md` §4's explicit ask.
+Changed: `docs/decisions.md` only.
+Risk: none — no code touched. The design itself flags rate-limiting of agent
+keys as explicitly deferred (ties into the existing in-memory-rate-limiter
+known-issue).
+Next: implementation session for `agent_api_keys` (migration + deps.py +
+`/auth/agent-keys` routes) whenever MCP write tools or 8.3 are actually
+scheduled to build; 8.3 should wait for that implementation rather than
+building its own scope check.
+
 ## 2026-07-13 · 10.2 landing · research-lab positioning, no money on hero
 Done: removed all "TetaPi GmbH" claims from `landing/*.html` (we are not a
 company yet) — repositioned as "TETA+PI research lab" everywhere (nav-adjacent
