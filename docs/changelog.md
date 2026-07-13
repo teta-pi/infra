@@ -6,6 +6,20 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · manager · 5.2 monorepo split — scope decided (C: separate repos)
+Done: owner picked **scope C** for the long-deferred monorepo split — full
+extraction of `api`/`web`/`mcp`/`landing` into separate `teta-pi` repos.
+Reframed roadmap 5.2 as **plan-only** (write the C plan into `docs/decisions.md`:
+history carry via `git filter-repo`, per-repo CI/deploy, cross-repo contracts,
+secrets distribution, cutover+rollback, how the 512MB deploy model changes) —
+zero code, zero deploy, safe to run now. Split execution carved out as new
+**5.3**, 🔴 deferred behind the 9.1 server upgrade (it reworks prod deploy +
+restarts on a capacity-bound box). Confirmed we are still a single repo
+`teta-pi/platform` (npm workspaces web+mcp); split never executed.
+Changed: `docs/roadmap.md` (5.2 rescoped, 5.3 added).
+Risk: none — docs only.
+Next: boot 5.2 plan session (worktree `ttpi-wt/5.2-split` reset to main).
+
 ## 2026-07-13 · 9 server + manager · SSH hardened key-only; owner access + docs
 Done: resolved the recurring "SSH port 22 refused" incident. Root cause was two
 layers: (1) the owner's Mac connected as `ssh root@…` with no `-i`, fell back to
