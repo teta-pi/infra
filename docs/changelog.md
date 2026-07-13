@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 5.2 monorepo → separate repos (scope C) split plan
+Done: wrote the scope-C split plan into `docs/decisions.md` (design only — zero
+code moves, zero repo creation, zero deploy/server changes). Covers: target
+layout (5 repos under `teta-pi`: api/web/mcp/landing + an `infra` meta repo for
+canonical docs/CLAUDE.md/deploy/compose/unban-ip; wordpress-plugin gets its own
+repo in the same cutover); per-folder history via `git filter-repo` (exact
+commands) over a clean cutover; cross-repo contracts (web→api & mcp→api already
+loose HTTP; the only build coupling is the cosmetic root npm-workspace +
+lockfile — no inter-package deps, no shared TS types, so decoupling is a no-op);
+per-repo deploy workflows + org-level `DEPLOY_SSH_KEY` + re-applied branch
+protection; secrets distribution; cutover order + rollback (both pipelines hit
+the same unchanged `/opt/tetapi/*` paths, so rollback = re-enable mono deploy);
+and the 512 MB-box risk. Key finding: components are only bound by one CI file +
+one lockfile — an ideal split.
+Changed: `docs/decisions.md` (+ this entry). No code, no infra.
+Risk: none this session (plan only). Execution risk lives in 5.3: four
+independent deploy pipelines remove the mono's sequential-restart guarantee —
+OOM risk on the 512 MB box.
+Next: 5.3 (execute the split) — 🔴 GATED on 9.1 resize (`s-1vcpu-2gb`) landing +
+this plan reviewed. Do the cutover deploys sequentially inside a merge freeze.
+
 ## 2026-07-13 · manager · 1.13 E2E verified on prod — MCP traction gate CLEAR
 Done: after merging/deploying PR #39 (MCP 1.4.0), ran the resolve→verify→profile
 E2E against live prod. Confirmed: MCP `/.well-known/mcp` = 1.4.0, 7 tools;
