@@ -6,6 +6,31 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 12.1 wordpress · plugin MVP (free tier)
+Done: `wordpress-plugin/` — new standalone WP plugin. Plan + $25 Premium Pack
+proposal in `wordpress-plugin/README.md`. Free tier built in full: Settings >
+TETA+PI page (connect via `pk_live_…` key, `GET /businesses` entity picker);
+Domain Ownership verification (rewrite rule serves
+`/.well-known/tetapi-verify.txt`, `POST /verify/domain/start` + `/check`,
+same mechanism as `docs/verification-rework.md` §2); `[tetapi_badge]`
+shortcode + widget pulling `GET /businesses/by-slug/{slug}/public`
+(trust_level + legal_entity), 15-min transient cache. Premium pack is
+UI-only stubs behind a license-key field, no payment/license-server code.
+API key stored AES-256-CBC-encrypted (site's own `AUTH_KEY` salt) in
+`wp_options`, never re-rendered. WordPress core APIs only — no Composer, no
+build step, PHP 7.4+ compatible; `uninstall.php` cleans up all options.
+Changed: new `wordpress-plugin/` tree only (`teta-pi.php`, `uninstall.php`,
+`readme.txt`, `includes/`, `assets/`); `docs/architecture.md` (new
+"WordPress plugin" section). No changes to `api/`, `web/`, `mcp/`.
+Risk: PHP had no local interpreter in this sandbox to run `php -l` /
+Plugin Check — files were hand-reviewed for syntax (brace/paren balance,
+ABSPATH guards, escaping/sanitization/nonces on every input and output) but
+not executed inside a real WordPress install. Verify with Plugin Check
+before submitting to wordpress.org.
+Next: install on a real WP site (or wp-env) to verify the connect → domain
+verify → badge flow end-to-end, then run the official Plugin Check tool;
+after that, 12.2 (publish to wordpress.org).
+
 ## 2026-07-13 · manager · 5.2 monorepo split — scope decided (C: separate repos)
 Done: owner picked **scope C** for the long-deferred monorepo split — full
 extraction of `api`/`web`/`mcp`/`landing` into separate `teta-pi` repos.

@@ -35,6 +35,20 @@
 - **Workers** — Celery + Redis. Beat schedule: OTS lifecycle (30 min), endpoint
   probes (30 min), TWIRA T/P recompute (nightly), BTC confirmations (hourly).
 
+## WordPress plugin (`wordpress-plugin/`)
+Standalone client of the public API, no server-side changes. Free tier: a
+Settings > TETA+PI admin page connects the site to an owned entity via a
+`pk_live_…` personal API key (`GET /businesses` to pick the entity); a rewrite
+rule serves `/.well-known/tetapi-verify.txt` so the owner can run Domain
+Ownership verification (`POST /{id}/verify/domain/start` + `/check`, same
+mechanism as `docs/verification-rework.md` §2's DNS TXT/file check); a
+`[tetapi_badge]` shortcode + widget render the public `by-slug/{slug}/public`
+payload (trust_level + legal_entity disclosure), cached in a 15-min transient.
+$25 Premium Pack (extra badge styles, auto-placement, multi-entity,
+WooCommerce) is UI-stubbed only (`Tetapi_Premium::is_licensed()` always
+`false`) — no license-server or payment code yet. See
+`wordpress-plugin/README.md` for the full plan.
+
 ## Data model (core tables)
 `users` · `businesses` (= entities) · `blocks` (+ pgvector embedding) · `media` ·
 `devices` · `claims` (waitlist) · `verification_events` (append-only Temporal Moat)
