@@ -6,6 +6,47 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 2.5 mcp ecosystem hardening · E2E-tested + fixed live MCP server
+Done: E2E-tested `mcp.tetapi.dev` from real clients — `claude mcp add
+--transport http`, official `@modelcontextprotocol/inspector --cli`, and raw
+JSON-RPC over curl — exercising all 7 tools with real + edge inputs. Found and
+fixed 3 live protocol bugs: (1) **critical** — the server used one shared
+`StreamableHTTPServerTransport` for the whole process, so only one client
+could ever be connected at a time; every second client (confirmed with
+`claude mcp add` and Inspector both failing while another session was open)
+got `"Server already initialized"` until a restart. Fixed with a per-session
+`Map<sessionId, transport>` (official SDK stateful-HTTP pattern), each with
+its own `McpServer`. (2) No CORS — `OPTIONS /mcp` was a bare 405, blocking any
+browser-based client. Added CORS headers + preflight handling. (3) Routing
+wasn't scoped to `/mcp` — any path fell through to the transport handler; now
+a clean 404. Also added a 15s request timeout in `client.ts` (previously
+unbounded). Found but **not fixed** (outside `mcp/src/*` scope): `GET
+/businesses/{id}/preview` 500s in prod, breaking `teta_verify_entity`,
+`teta_get_profile`, `teta_verify_claim` (3/7 tools) — confirmed backend-side
+via direct API curl, logged in `docs/known-issues.md` as 🔴, needs a backend
+session. Prepared (not submitted) registry listing metadata: `mcp/server.json`
+for the official MCP registry, plus a checklist for the Claude connectors
+directory and other catalogs in `docs/mcp.md`. Documented client-setup
+snippets (Claude Code/Desktop, Cursor, generic HTTP, Inspector) in
+`docs/mcp.md`. Version bumped 1.3.0 → 1.3.1 (bootstrap-only fix, no tool
+schema change) across `mcp/package.json`, `mcp/src/index.ts`, the
+`/.well-known/mcp` manifest, and both `agent.json` files — all confirmed
+still in sync.
+Changed: `mcp/src/index.ts` (session-per-transport, CORS, routing, version),
+`mcp/src/client.ts` (fetch timeout), `mcp/package.json`, `package-lock.json`,
+`mcp/server.json` (new), `landing/.well-known/agent.json`,
+`web/src/app/.well-known/agent.json/route.ts`, `docs/mcp.md`,
+`docs/known-issues.md`.
+Risk: bootstrap rewrite touches how every MCP request is routed — typechecked
+clean and verified locally (two concurrent sessions, CORS preflight, 404
+routing, tool calls) before push, but worth a live re-check against
+`mcp.tetapi.dev` after deploy (re-run `claude mcp add --transport http` and
+confirm it connects while a second session is also open).
+Next: backend session to fix `/businesses/{id}/preview` 500 (🔴 in
+known-issues.md, blocks 3/7 tools); owner decides on registry namespace
+(`dev.tetapi/mcp` DNS-verified vs `io.github.teta-pi/mcp` GitHub-verified) and
+runs the actual registry/connectors-directory submissions.
+
 ## 2026-07-13 · 12.1 wordpress · plugin MVP (free tier)
 Done: `wordpress-plugin/` — new standalone WP plugin. Plan + $25 Premium Pack
 proposal in `wordpress-plugin/README.md`. Free tier built in full: Settings >

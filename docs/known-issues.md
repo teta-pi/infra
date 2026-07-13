@@ -245,6 +245,31 @@ the server-side block ids in their new order. Only real UUIDs are sent (unsaved
 `block-N` blocks have no row yet); a failed save rolls the order back to the
 pre-drag snapshot. `blockApi.reorder` now has a caller.
 
+## 🔴 `GET /businesses/{id}/preview` 500s for real entities in production
+Found during 2.5 MCP live E2E testing (2026-07-13): `teta_verify_entity`,
+`teta_get_profile`, and `teta_verify_claim` — 3 of the MCP server's 7 tools —
+all call this endpoint and all three fail with `API 500: Internal Server
+Error` against real entities on `mcp.tetapi.dev`. Reproduced directly against
+`api.tetapi.dev` with `curl`, so it's a backend bug, not the MCP layer (which
+surfaces the failure cleanly as `isError: true` rather than crashing).
+`GET /businesses/{id}/proof` on the same entity ids returns 200 fine, so it's
+specific to the `/preview` handler/schema. **Fix:** needs a backend session —
+reproduce locally with a real entity id (e.g. `b75914b9-b0a9-4170-a3c2-7df87ba26633`
+on prod) and get the actual traceback (prod only returns "Internal Server
+Error" with no detail).
+Status: OPEN (blocks 3/7 MCP tools; not fixed in 2.5 since it's outside
+`mcp/src/*` scope).
+
+## 🟡 `/search` relevance looks off for unrelated queries
+Found during 2.5 MCP live E2E testing (2026-07-13): `teta_search` (backend
+`/search`) returned the same two unrelated people ("Test Reporter", "tetakta")
+for both `query="bakery"` and `query=""`. Might be intentional fallback
+behavior for a near-empty dev dataset, or a relevance bug — not investigated
+further (out of scope for 2.5, and could just be sparse seed data in prod).
+**Fix:** check with more entities in the DB / a non-trivial query before
+concluding it's a real bug.
+Status: OPEN (unconfirmed, low priority).
+
 ## 🟠 `/auth/register` is public, unauthenticated, and unused
 `routes/auth.py::register` creates a user with no email verification. The frontend
 no longer calls it (onboarding uses email-code). It's dead code + attack surface
