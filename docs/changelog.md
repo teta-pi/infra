@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 9.1 capacity audit + upgrade plan
+Done: read-only audit of the prod droplet (no config/service changes).
+Measured per-service RAM: TETA+PI stack (api+web+mcp+nginx+postgres+redis)
+only ~116 MB; the box swaps (379 MB in swap at idle) because ~170 MB of fixed
+non-app overhead (dockerd/containerd, goatcounter, an unrelated btc-robot
+trio, multipathd, fail2ban) plus the stack leaves almost no headroom in
+458 MB total — RAM-bound, not CPU-bound (load avg <0.2). Disk 78% used
+(6.7/8.7 GB), dominated by OS packages + active docker image layers (772 MB,
+not reclaimable garbage) + 341 MB Python venv; no large media/upload data yet.
+Decided target: `s-1vcpu-2gb` (2 GB RAM / 50 GB disk, $12/mo) over the
+literal-2x `s-1vcpu-1gb` ($6/mo) — the cheaper tier only patches today's swap,
+not the RAM growth already queued in 5.1 (embeddings) and 5.3. Wrote the full
+runbook (pre-flight snapshot, exact DO panel steps, merge-freeze coordination,
+post-resize verification, rollback).
+Changed: `docs/deployment.md` (new "Server resize runbook" section).
+Risk: none — audit was read-only, no server changes made. Confirmed no
+automated backup/snapshot exists — the runbook makes a manual pre-resize
+snapshot a hard pre-flight step.
+Next: owner schedules the resize window; manager declares the merge freeze in
+this changelog before it starts; then 5.1/5.3 unblock.
+
 ## 2026-07-13 · manager · MCP status audit → task 1.13 (traction-readiness gate)
 Done: live-probed prod MCP for a status report (owner priority: MCP is the
 traction surface). Working: server up v1.3.1, http+sse, 7 tools registered,
