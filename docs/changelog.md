@@ -6,6 +6,34 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 10.2 landing · research-lab positioning, no money on hero
+Done: removed all "TetaPi GmbH" claims from `landing/*.html` (we are not a
+company yet) — repositioned as "TETA+PI research lab" everywhere (nav-adjacent
+copy, footers, schema.org JSON-LD `publisher`, meta/og/twitter descriptions).
+`about.html` "Company" section reworked into "The lab": dropped the invented
+"Handelsregister · Germany" registry-entry claim, "Founded" → "Started ... as
+a research lab". `terms.html`/`privacy.html` operator/controller language
+reworded to "the TETA+PI research lab" + hello@tetapi.dev contact — legal
+page structure and substantive clauses (liability, governing law, retention)
+left untouched, no new legal entity invented. Hero CTA "Get verified — lock
+$25 founding price" → "Create your page" (now links to app.tetapi.dev/claim
+instead of the in-page anchor). Claim form below hero: kept, dropped the "$25
+when billing launches" checkbox + its label, button → "Join early access —
+be first"; removed `ready_to_pay` from the `POST /claim` payload accordingly
+(backend field is optional, defaults `false` — confirmed in
+`api/app/schemas/claim.py`, no backend change needed). Pricing section and
+final-CTA money mentions further down the page left as-is per scope.
+Changed: `landing/index.html`, `about.html`, `terms.html`, `privacy.html`,
+`how-it-works.html`, `registries.html`, `for-agents.html`,
+`for-businesses.html`.
+Risk: none identified — verified all 8 edited pages render correctly via
+local static preview; only remaining "GmbH" strings in `landing/` are
+unrelated (third-party example entities like "GreenFarm GmbH", registry
+category descriptions, form placeholder text).
+Next: same GmbH/pricing cleanup for `landing/llms.txt` if the owner wants it
+(out of scope here — task was `landing/*.html` only); app.tetapi.dev copy is
+a separate task if the owner wants matching positioning there.
+
 ## 2026-07-13 · 2.5 mcp ecosystem hardening · E2E-tested + fixed live MCP server
 Done: E2E-tested `mcp.tetapi.dev` from real clients — `claude mcp add
 --transport http`, official `@modelcontextprotocol/inspector --cli`, and raw
