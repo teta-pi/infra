@@ -6,6 +6,21 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · manager · MCP status audit → task 1.13 (traction-readiness gate)
+Done: live-probed prod MCP for a status report (owner priority: MCP is the
+traction surface). Working: server up v1.3.1, http+sse, 7 tools registered,
+`.well-known/mcp`+`agent.json` consistent, `teta_search`/`teta_get_proof`
+return 200, 2.5 hardening + `server.json` listing metadata merged. Broken
+(each reproduced live): 🔴 `/businesses/{id}/preview` 500 (breaks 3/7 tools),
+🔴 `resolve_intent` returns slug not UUID (flagship resolve→verify dead),
+🟠 `verified_only` no-op, 🟡 `get_profile` undefined media. Consolidated all
+four into new **1.13 MCP traction-readiness** (folds in 1.12) — the gate that
+must land before submitting any MCP registry listing (GTM Phase 0), else
+agents' first contact hits 500s.
+Changed: `docs/roadmap.md` (1.13 added, 1.12 folded).
+Risk: none — docs only. The bugs themselves are live on prod now.
+Next: boot 1.13; then server resize; then GTM Phase 0 listings.
+
 ## 2026-07-13 · 2.2 agent auth design · scoped pk_live_ design doc
 Done: design-only (no code) for scoped `pk_live_` agent auth, written in
 `docs/decisions.md`. Scope model (`admin:read`, `admin:write`,
