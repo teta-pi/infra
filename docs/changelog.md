@@ -6,6 +6,21 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · manager · 1.13 E2E verified on prod — MCP traction gate CLEAR
+Done: after merging/deploying PR #39 (MCP 1.4.0), ran the resolve→verify→profile
+E2E against live prod. Confirmed: MCP `/.well-known/mcp` = 1.4.0, 7 tools;
+`resolve-intent {query:"reporter",entity_type:"person"}` → real **UUID**
+`b75914b9…` (was slug — #2 fixed); `get_proof(UUID)` 200; `preview(UUID)` 200
+(was 500 — 1.12 fixed). `verified_only` now sends `level="registry"` (#5, code
+verified). **The gate before GTM Phase 0 registry listings is now clear** — the
+flagship agent flow (find an entity, then verify it) works end to end.
+Changed: `docs/roadmap.md` (1.13 → E2E VERIFIED).
+Risk: none — verification only. Note: `resolve-intent` semantic ranking still
+needs `OPENAI_API_KEY` (deferred, 5.1); keyword fallback works and returns
+UUIDs correctly, which is what the fix targeted.
+Next: GTM Phase 0 (2.5 listing metadata is ready) is unblocked; server resize
+(9.1 runbook) before turning on 5.1/2.4.
+
 ## 2026-07-13 · 9.1 capacity audit + upgrade plan
 Done: read-only audit of the prod droplet (no config/service changes).
 Measured per-service RAM: TETA+PI stack (api+web+mcp+nginx+postgres+redis)
