@@ -122,3 +122,14 @@ system; open it only to look up a specific old decision.
 ## Task queue = docs/roadmap.md
 Pick the top open item, run it in one session per the boot template, update docs,
 `/clear`. The roadmap is ordered so the top item unblocks the most.
+
+## GitHub Project board — generated view, not a second source of truth
+The org-level Project ["TETA+PI Roadmap"](https://github.com/orgs/teta-pi/projects/1)
+mirrors `docs/roadmap.md` as a kanban (Direction × Status). **`docs/roadmap.md`
+stays canonical** — it's git-tracked and PR-reviewed, matching the session
+discipline above. The board is a one-time bulk import kept in sync manually:
+**whenever a session flips a `docs/roadmap.md` row's status, also update the
+matching Project item's Status field** (and Direction, if it moved). No
+automation wires the two together yet — that's a possible future task
+(webhook or Action syncing roadmap.md → Project on merge to `main`), not built
+in this session. If the two ever disagree, `docs/roadmap.md` wins.
