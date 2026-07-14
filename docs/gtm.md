@@ -69,6 +69,11 @@ behalf (Explicit-permission-required territory: publishing/posting).
 
 - TETA+PI becomes the **first verified entity in its own registry**: TetaPi
   GmbH, L2, with public C2PA + Bitcoin OTS proof page.
+  > **Superseded 2026-07-14 (owner decision, see `docs/changelog.md`):** no
+  > legal-entity claim until one actually exists — no GmbH/UG registered yet.
+  > Self-verify as **"TETA+PI"** (the project), not a company name. This
+  > note corrects the verbatim PDF quote above without editing the quote
+  > itself.
 - Verified badge (SVG served from `tetapi.dev/badge/{entity_id}`) on all 4
   GitHub repos — the badge endpoint doubles as a free impression counter.
 - Verify **Bob V.** and **Mykhailo M.** as person entities — founders eat
@@ -79,7 +84,8 @@ behalf (Explicit-permission-required territory: publishing/posting).
 **Session mapping:** no new code needed for the verification itself — the
 claim flow, L2 method chooser, and public proof page all shipped in
 `1.3`/`3.4`/`4.1` (verification rework, merged 2026-07-12). This is an
-**owner action**: Bob runs TetaPi GmbH + himself + Mykhailo through the
+**owner action**: Bob runs TETA+PI (as the project, no legal-entity claim
+yet — see the 2026-07-14 note above) + himself + Mykhailo through the
 existing `/claim` flow. The **badge SVG endpoint** it depends on does not
 exist yet — new task **`1.10 backend · badge SVG endpoint`** (see §Phase 3
 below, pulled forward since 0.2 needs it). Public GitHub repo README edits
@@ -300,7 +306,7 @@ which isn't a DB row anywhere else.
 - [ ] mcp.so + PulseMCP
 - [ ] awesome-mcp-servers PR merged
 - [ ] GitHub MCP Registry
-- [ ] TetaPi GmbH self-verified L2 + public proof page live
+- [ ] TETA+PI self-verified L2 + public proof page live (as the project, no legal-entity name — 2026-07-14 decision)
 - [ ] Bob V. + Mykhailo M. verified as person entities
 - [ ] `llms.txt` live
 - [ ] `agent.json` bumped to v1.1.0 (both landing + app)
