@@ -6,6 +6,30 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-14 · manager · registration flow is still registry-gated in the UI → 3.7 + 1.16
+Done: owner reported they couldn't find how to register a business without a
+registry. Traced it: backend 1.3 decoupled `create_business` from registry
+matching (confirmed — no registry call, `registry_status="unverified"`), BUT
+the frontend claim flow (`web/src/app/claim/page.tsx`) never caught up — for
+`entityKind === "business"`, step 1 still runs a registry search
+(Handelsregister/Companies House) as the path forward. So the UI still feels
+registry-first. Added **3.7** (frontend): rework the flow to type-first
+(Business/Organization OR Person with journalist/actor/creator/other) →
+email → create immediately at L0, registry becomes an optional later action
+on the profile, not a creation gate. Added **1.16** (backend): verify the
+create/claim endpoints accept the simplified payload with no registry fields
+(likely already true post-1.3, small verification task).
+Changed: `docs/roadmap.md` (new 3.7, 1.16).
+Risk: none — docs only.
+Next: boot 3.7 (frontend, `teta-pi/web`) + 1.16 (backend, `teta-pi/api`)
+together; they're the fix for the owner's blocker.
+
+## PENDING BOOTS (not yet launched as of 2026-07-14, for the next manager session)
+- **6.2 core-flow QA** (worktree `ttpi-wt/6.2-core-flow-qa`, repo teta-pi/infra) — GATE before GTM Phase 0. Full boot text is in the 2026-07-14 chat; entity→block→file→search(human+MCP)→/e/[slug], read-only, log to known-issues.
+- **14.2 camera QA** (worktree `ttpi-wt/14.2-camera-qa`, repo teta-pi/pi-cam) — parallel to 6.2, device flow QR→capture→C2PA→device-upload→proof.
+- **3.7 + 1.16 registration flow** (this entry) — worktrees not yet created.
+- GTM Phase 0 (owner-executed): registry listings + self-verification — unblocked, waits on 6.2 green.
+
 ## 2026-07-14 · manager · pre-GTM QA gate — 6.2 (core flow) + 14.2 (camera)
 Done: owner asked for a full live E2E QA pass before starting GTM Phase 0 —
 entity creation, block creation, file/image upload, search (human UI + MCP
