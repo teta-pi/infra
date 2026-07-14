@@ -6,6 +6,44 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-14 · github · org-level GitHub Project "TETA+PI Roadmap" created
+Done: created an **org-level** GitHub Project v2 (github.com/orgs/teta-pi/projects/1)
+that mirrors `docs/roadmap.md` as a visual kanban spanning all repos.
+- Two custom single-select fields: **Direction** (15 options, 1 backend → 15
+  security, matching `docs/workflow.md`'s direction table) and **Status**
+  (collapsed the roadmap's richer emoji legend — ✅🔄⏳🔴🟠🟡⚪🟢 — onto 5
+  buckets: Done, In Progress, Ready, Backlog, Blocked).
+- Bulk-imported all **48** `n.m` rows from the current `docs/roadmap.md` as
+  draft issue items (no repo currently has GitHub Issues open — checked
+  `api`/`web`/`mcp`/`landing`/`infra`/`platform`, all empty — so draft items
+  are the right default; nothing to link yet). Each item's body carries the
+  row's task summary + a pointer back to `docs/roadmap.md` for full detail.
+  Status/Direction were set to reflect **current real state**, not the
+  roadmap's literal historical text — e.g. 13.2 and 15.2 read "after X" in
+  the table but X has since shipped, so both are tagged Ready, not Backlog.
+- **Views:** the Projects v2 GraphQL API has no mutation for creating or
+  configuring views (layout, grouping) — confirmed by schema introspection,
+  not an assumption. Only the default single ungrouped table view exists.
+  Both fields are populated so the owner can stand up "Board grouped by
+  Status" and "Board/Table grouped by Direction" in a few clicks each; this
+  is the one piece of the design that could not be automated.
+- Set the Project's `shortDescription` + `readme` (via `updateProjectV2`)
+  stating the source-of-truth convention explicitly.
+- Added the matching convention note to `docs/workflow.md` (PR #3): the
+  board is a generated view, `docs/roadmap.md` stays canonical, sync is
+  manual per session for now — automation flagged as a possible future task,
+  not built here.
+Changed: GitHub org Project settings (new), `docs/workflow.md` (PR #3, this
+repo), `docs/changelog.md` (this entry).
+Risk: none — no code, no deploy. The one real risk is drift between the
+board and `docs/roadmap.md` if a session forgets the manual sync step; the
+workflow.md note is the mitigation until automation exists.
+Next: owner adds the 2 views manually (Board → group by Status; Board or
+Table → group by Direction); consider a future roadmap.md→Project sync
+Action if drift becomes a recurring problem.
+
+---
+
 ## 2026-07-13 · manager · 5.3 execution started — MERGE FREEZE declared
 Declaring a merge freeze on `teta-pi/platform` main while 5.3 (repo split
 execution) runs, per the 5.2 plan's cutover protocol. No PRs will be merged
