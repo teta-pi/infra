@@ -13,7 +13,7 @@ Status: DRAFT ONLY.
 
 **Timing dependency — do not post before this is true:** Phase 0 exit
 criterion met — 6+ registry listings live (see the execution checklist in
-`gtm.md`) and TetaPi GmbH self-verified with a public proof page. Posting
+`gtm.md`) and TETA+PI self-verified with a public proof page. Posting
 before listings are live undercuts the post itself (an agent reading it
 would find nothing to point at yet).
 
@@ -42,7 +42,7 @@ you can verify the timestamp independently.
 We built an MCP server (`mcp.tetapi.dev`) so agents can query this
 directly instead of scraping a webpage: `teta_verify_entity`,
 `teta_search`, `teta_verify_endpoint`, and a few others. We also
-self-verified — TetaPi GmbH, and both founders, are themselves the first
+self-verified — TETA+PI and both founders are themselves the first
 verified entries in our own registry. Proof page: [link to our L2 proof
 page].
 
@@ -160,7 +160,7 @@ both places if either changes):
 - [ ] mcp.so + PulseMCP listed/claimed
 - [ ] awesome-mcp-servers PR merged
 - [ ] GitHub MCP Registry submission live
-- [ ] TetaPi GmbH self-verified L2, public proof page reachable
+- [ ] TETA+PI self-verified L2, public proof page reachable
 - [ ] Bob V. + Mykhailo M. verified as person entities
 - [ ] `llms.txt` live
 - [ ] `agent.json` bumped to v1.1.0 (landing + app)
