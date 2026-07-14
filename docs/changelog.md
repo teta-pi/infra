@@ -6,6 +6,23 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · 9.1 devops · server resize executed — capacity blocker resolved
+Done: owner executed the 9.1 runbook live. Pre-flight snapshot
+(`pre-resize-2026-07-13`, 7.19GB, FRA1) → power off → resize `s-1vcpu-512mb-10gb`
+→ **`s-1vcpu-2gb`** (2GB RAM / 50GB disk, $12/mo) → power on. Manager declared
+a merge freeze for the window (no PRs merged during power-off) and ran full
+post-resize verification: RAM 1.9GB total (798MB free, swap 0/2GB — was
+swapping 323MB before), disk 6.8/48GB = 15% (was 78%), all services
+(nginx/tetapi-api/tetapi-web/tetapi-mcp/docker/fail2ban) `active`, all 4
+subdomains 200 (tetapi.dev, app, api/health, mcp/.well-known/mcp v1.4.0).
+Merge freeze lifted.
+Changed: `docs/roadmap.md` (server-capacity blocker section marked RESOLVED;
+5.1, 5.3 unblocked on capacity grounds).
+Risk: none — verified clean. 5.1 still separately blocked on unpaid OpenAI
+billing (unrelated to capacity). Snapshot retained as rollback safety net.
+Next: 5.3 (execute repo split) can be scheduled; 5.1 waits on billing; 2.4
+usage analytics and Redis #12 no longer capacity-blocked.
+
 ## 2026-07-13 · 5.2 monorepo → separate repos (scope C) split plan
 Done: wrote the scope-C split plan into `docs/decisions.md` (design only — zero
 code moves, zero repo creation, zero deploy/server changes). Covers: target

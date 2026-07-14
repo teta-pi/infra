@@ -1,9 +1,10 @@
 # Deployment
 
 ## Server
-DigitalOcean droplet, Frankfurt, `164.90.235.66` (`ubuntu-s-1vcpu-512mb-10gb-fra1`
-— 1 vCPU / 512 MB / 10 GB; this is why sustained-load tasks are deferred, see
-roadmap 9.1). SSH:
+DigitalOcean droplet, Frankfurt, `164.90.235.66` — resized 2026-07-13 to
+`s-1vcpu-2gb` (1 vCPU / 2 GB / 50 GB, $12/mo; was `s-1vcpu-512mb-10gb`, see the
+9.1 runbook below for the historical measurements and the resize itself). The
+sustained-load restriction from the old 512MB spec is lifted. SSH:
 `ssh -i ~/.ssh/tetapi_ed25519 root@164.90.235.66` (owner's Mac has a `Host tetapi`
 alias in `~/.ssh/config` → just `ssh tetapi`).
 

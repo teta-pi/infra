@@ -40,9 +40,9 @@ File ownership is disjoint so sessions never collide in git.
 | 3.5 | `3 frontend · 3.5 claim page: no money` | mirror of 10.2 on app.tetapi.dev (owner 2026-07-13): remove the "$25 when billing launches — lock my founding price" checkbox from `/claim` (both form states), reframe to early access ("Join early access — be first"); `pay_ready` simply not sent (verify POST /claim tolerates absence — flag, don't fix backend). NOTE: coordinate with 3.4 — if 3.4 touches claim UI, land 3.4 first | 🟢 owner priority · after 3.4 lands if it touches claim | `web/src/app/claim/page.tsx` |
 | 3.6 | `3 frontend · 3.6 auth store unification + real controls` | audit #10 (`/profile` never reads `useAuthStore` — login/settings users silently unauthenticated with false "Saved"), #11 (claim "domain email" step fully fake, `onClick={()=>{}}` + any 3 chars pass — wire to real `/verify/email/*` or hide; skip if 3.4 already wired it), #12 (no UI calls `businessApi.publish`/`setPrivacy` — build controls or remove dead surface) | ⚪ queued after 3.4 | `web/…/profile/page.tsx`, `login/settings/claim` auth wiring |
 | 4.1 | `4 db · 4.1 verification rework migration` | migration: `entities.legal_entity_id` nullable self-FK + extend `verification_events.event_type` enum (`email_verified`, `domain_verified`, `document_verified`); append-only trigger must survive | ✅ done 2026-07-12, PR #14 (migration ran on prod deploy) | new migration + models |
-| 5.1 | `5 devops · 5.1 enable TWIRA embeddings` | key → server `.env`, backfill, verify (code already merged) | 🔴 deferred: OpenAI billing unpaid + server capacity | server `.env` + one-off backfill |
-| 5.2 | `5 devops · 5.2 split plan (scope C)` | **owner decided 2026-07-13: scope C — full extraction to separate GitHub repos** (`api` / `web` / `mcp` / `landing` each own repo under `teta-pi`). This task = WRITE the C split plan into `docs/decisions.md` ONLY (zero code, zero deploy): repo layout, how git history is carried per component (`git filter-repo` subtree), per-repo CI/deploy workflow design, cross-repo contracts (web→api URL, mcp→api URL, shared types/agent.json), secrets/`.env` distribution, cutover order + rollback, and how the 512MB droplet deploy model changes. Execution is 5.3+ (gated on server upgrade — do NOT execute here) | ✅ done 2026-07-13, PR #41 — C plan in decisions.md (filter-repo per folder, infra meta-repo, per-repo deploy; 5.3 gated on 9.1 resize) | `docs/decisions.md`; worktree `ttpi-wt/5.2-split` (reset to main) |
-| 5.3 | `5 devops · 5.3 execute repo split (C)` | execute the approved 5.2 plan: create the repos, carry history, stand up per-repo deploy pipelines, cut over. **Prod-affecting (deploy rework + restarts on a 512MB box)** | 🔴 deferred: needs 9.1 server upgrade + reviewed 5.2 plan | new repos + per-repo `.github/workflows/*` |
+| 5.1 | `5 devops · 5.1 enable TWIRA embeddings` | key → server `.env`, backfill, verify (code already merged) | 🟢 server capacity unblocked (9.1 resize done); still needs OpenAI billing paid | server `.env` + one-off backfill |
+| 5.2 | `5 devops · 5.2 split plan (scope C)` | **owner decided 2026-07-13: scope C — full extraction to separate GitHub repos** (`api` / `web` / `mcp` / `landing` each own repo under `teta-pi`). This task = WRITE the C split plan into `docs/decisions.md` ONLY (zero code, zero deploy): repo layout, how git history is carried per component (`git filter-repo` subtree), per-repo CI/deploy workflow design, cross-repo contracts (web→api URL, mcp→api URL, shared types/agent.json), secrets/`.env` distribution, cutover order + rollback, and how the 512MB droplet deploy model changes. Execution is 5.3+ (gated on server upgrade — do NOT execute here) | ✅ done 2026-07-13, PR #41 — C plan in decisions.md (filter-repo per folder, infra meta-repo, per-repo deploy) | `docs/decisions.md`; worktree `ttpi-wt/5.2-split` (reset to main) |
+| 5.3 | `5 devops · 5.3 execute repo split (C)` | execute the approved 5.2 plan: `git filter-repo` extraction per component, create `teta-pi/{api,web,mcp,landing,infra}` repos, per-repo deploy workflows + secrets, cutover in a merge freeze, rollback = re-enable mono deploy. **Prod-affecting (deploy rework + restarts)** | 🟢 unblocked — 9.1 resize landed 2026-07-13 (2GB/50GB); schedule cutover window | new repos + per-repo `.github/workflows/*` |
 | 6.1 | `6 manager · 6.1 system-wide bug audit` | read-only sweep api/web/mcp/landing → 17 verified findings in `docs/known-issues.md`; spawned tasks 1.6-1.9, 3.6, 10.3 + absorbed into 2.5 | ✅ done 2026-07-13, PR #23 | `docs/known-issues.md` only |
 | 7.1 | `7 github · 7.1 branch protection` | protect `main`: PRs only, no force-push/delete, enforce_admins | ✅ done 2026-07-12, verified live | GitHub settings only, no code |
 | 7.2 | `7 github · 7.2 repo descriptions vs landing` | audit org/repo descriptions + READMEs against current landing copy (Modules, $25, "Digital Entities"); propose diffs, land as one batched PR | ⚪ queued · no deploy until merge | GitHub metadata + `README.md`s |
@@ -76,17 +76,20 @@ File ownership is disjoint so sessions never collide in git.
 - Each session ends with the `Done / Changed / Risk / Next` block and updates the
   matching `docs/*.md`.
 
-## Blocked — waiting on keys / DNS / server (don't start until provided)
-**Server capacity (2026-07-11):** the prod droplet is at its limit until the owner
-upgrades it. Until then: no tasks that add SUSTAINED load (embeddings backfill,
-Redis #12, SSE streaming #7, extra workers) and no deploy rework (S8 split
-execution). One-off merges are fine (build runs on the GitHub runner; server side
-is rsync + brief restarts) — but batch them.
+## Server capacity — RESOLVED 2026-07-13
+Prod droplet resized `s-1vcpu-512mb-10gb` → **`s-1vcpu-2gb`** (2GB RAM / 50GB
+disk, $12/mo) per the 9.1 runbook. Pre-flight snapshot taken
+(`pre-resize-2026-07-13`, restorable if ever needed). Post-resize verified:
+RAM 1.9GB (798MB free, swap 0/2GB, was swapping 323MB at 458MB total before),
+disk 6.8/48GB = 15% (was 78%), all services `active`, all 4 subdomains 200.
+The sustained-load restriction below is LIFTED — 5.1, 5.3, Redis #12, SSE
+streaming (2.3), 2.4 usage analytics are all clear to proceed on capacity
+grounds (other gates, e.g. OpenAI billing for 5.1, may still apply).
 
+## Blocked — waiting on keys / DNS (don't start until provided)
 | Item | Needs | Effect when unblocked |
 |---|---|---|
-| Turn on TWIRA semantics (#3, session 7) | `OPENAI_API_KEY` **billing unpaid (429)** + server upgrade | semantic search + `/resolve-intent` + block embeddings turn on |
-| S8 monorepo split (execution) | server upgrade (deploy rework + restarts) | hybrid polyrepo; then S5 camera |
+| Turn on TWIRA semantics (5.1) | `OPENAI_API_KEY` **billing unpaid (429)** — server capacity no longer blocks this | semantic search + `/resolve-intent` + block embeddings turn on |
 | Resend domain verification (#11) | DNS on `tetapi.dev` (DKIM/SPF) | emails reach everyone, not just the owner inbox |
 | Ukraine registry | `OPENDATABOT_API_KEY` | UA registry search works (verifier already written) |
 
