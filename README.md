@@ -1,35 +1,31 @@
-# TETA+PI Platform
+# TETA+PI Infra
 
-> Verified entity registry for Agent Internet.
-> Create a profile. Add blocks. TETA+PI verifies the rest.
+Canonical docs + deploy configuration for **TETA+PI** — Trust Infrastructure
+for Digital Entities. This repo holds no application code.
 
-## What it does
+## What lives here
+- `docs/` — canonical, cross-cutting docs: overview, architecture, decisions,
+  roadmap, changelog, glossary, known-issues, deployment, security, GTM,
+  verification rework. (Component-specific docs — API routes, MCP tools —
+  live with their component repo.)
+- Root `CLAUDE.md` — the coding rules / working agreement referenced by every
+  component repo's thin pointer `CLAUDE.md`.
+- `deploy/` — nginx configs, `deploy.sh`, server runbooks.
+- `docker-compose*.yml`, `.env.example`.
 
-Any entity — business, journalist, creator, organization — registers a verified profile. TETA+PI automatically structures, categorizes, and verifies it. AI agents discover verified entities through the Intent Graph via MCP.
+## Where the code is
+TETA+PI split from a monorepo into separate repos 2026-07-13 (see
+`docs/decisions.md`). The running system:
 
-## Stack
+| Repo | Runtime | Live at |
+|---|---|---|
+| [`teta-pi/api`](https://github.com/teta-pi/api) | FastAPI · PostgreSQL 16 + pgvector | api.tetapi.dev |
+| [`teta-pi/web`](https://github.com/teta-pi/web) | Next.js 15 | app.tetapi.dev |
+| [`teta-pi/mcp`](https://github.com/teta-pi/mcp) | TypeScript MCP server | mcp.tetapi.dev |
+| [`teta-pi/landing`](https://github.com/teta-pi/landing) | static HTML | tetapi.dev |
 
-- **Frontend:** Next.js 15 · TypeScript · Tailwind CSS
-- **Backend:** FastAPI · PostgreSQL 16 · pgvector
-- **Verification:** C2PA · Bitcoin OpenTimestamps
-- **Protocol:** MCP server · Intent Graph · `/.well-known/agent.json`
-- **Infrastructure:** DigitalOcean · Nginx · Cloudflare · Full (strict) SSL
-
-## Architecture
-
-```
-web/              Next.js 15 frontend
-api/
-  routers/        entity · blocks · verification · mcp · endpoint_verification
-  intent_graph/   schema · resolver
-  models/         entity · block · verification
-mcp/              TypeScript MCP server (HTTP + SSE · port 3002)
-```
-
-## Live
-
-tetapi.dev — production deployment
+`teta-pi/platform` is the retired pre-split monorepo, kept read-only for
+history.
 
 ## License
-
 MIT © 2026 TETA+PI · tetapi.dev
