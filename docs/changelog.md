@@ -43,6 +43,24 @@ Table → group by Direction); consider a future roadmap.md→Project sync
 Action if drift becomes a recurring problem.
 
 ---
+---
+
+## 2026-07-14 · 13.2 gtm · launch materials drafted (Show HN, Discord, outreach template, checklist)
+Done: drafted Show HN post ("Show HN: TETA+PI – a verified entity registry
+for AI agents", with explicit timing dependency on Phase 0 listings being
+live), MCP Discord announcement (shorter, community-appropriate tone),
+Phase 2 outreach message template (guardrail language verbatim: "we found
+and attested your public data — take control of it", never "we registered
+you", instant opt-out/removal, one message only), and a launch checklist
+tying the Phase 0 execution checklist to a coordinated Show HN + Discord +
+WordPress-plugin announcement.
+Changed: new file `docs/gtm-drafts.md`. No code changes, nothing published
+or sent — draft copy only, per `gtm.md`'s owner-gating rule.
+Risk: none — no droplet load, no external calls, no publish action taken.
+Next: Bob reviews `docs/gtm-drafts.md`, edits as needed, and posts Show
+HN/Discord himself once the Phase 0 execution checklist in `gtm.md` is
+fully checked. Phase 2 outreach template stays unsent until Phase 2 starts
+(after `1.7`/bulk pre-verification import and the top-500 dataset, `13.3`).
 
 ## 2026-07-13 · manager · 5.3 execution started — MERGE FREEZE declared
 Declaring a merge freeze on `teta-pi/platform` main while 5.3 (repo split
