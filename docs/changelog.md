@@ -6,6 +6,16 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-13 · manager · 5.3 execution started — MERGE FREEZE declared
+Declaring a merge freeze on `teta-pi/platform` main while 5.3 (repo split
+execution) runs, per the 5.2 plan's cutover protocol. No PRs will be merged
+into this mono until the split's cutover (or an abort) completes and prod is
+re-verified. Pre-existing org repos discovered NOT in the 5.2 plan:
+`teta-pi/pi-camera`, `teta-pi/mcp-server`, `teta-pi/protocol` — all trivial
+placeholders (2 commits, README/LICENSE only, dated 2026-06-26/28, predate the
+session-numbered engineering process). Left untouched; not part of 5.3's
+critical path; flagged for a separate cleanup decision later.
+
 ## 2026-07-13 · 9.1 devops · server resize executed — capacity blocker resolved
 Done: owner executed the 9.1 runbook live. Pre-flight snapshot
 (`pre-resize-2026-07-13`, 7.19GB, FRA1) → power off → resize `s-1vcpu-512mb-10gb`
