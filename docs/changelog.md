@@ -6,6 +6,23 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-14 · manager · pre-GTM QA gate — 6.2 (core flow) + 14.2 (camera)
+Done: owner asked for a full live E2E QA pass before starting GTM Phase 0 —
+entity creation, block creation, file/image upload, search (human UI + MCP
+agent), and camera sync. Added **6.2** as the blocking gate: create business
+→ add block → upload file/image → confirm search finds it both via
+`app.tetapi.dev` and a real MCP client (`teta_search`/`teta_resolve_intent`)
+→ confirm `/e/[slug]` renders it. Read-only QA session — findings logged to
+`known-issues.md`, not silently fixed. **14.2** runs in parallel (owner's own
+suggestion) — full device flow QA in `teta-pi/pi-cam` (QR-link → capture →
+C2PA sign → device-upload → verified block → proof), plus re-checking the
+known "Connect Pi CAM no-ops when token null" finding. Also flipped 14.1 to
+reflect reality: platform side already merged (PR #27), app repo already
+transferred to `teta-pi/pi-cam`.
+Changed: `docs/roadmap.md` (new 6.2, 14.2; 14.1 status corrected).
+Risk: none — docs only.
+Next: boot 6.2 and 14.2 in parallel.
+
 ## 2026-07-14 · github · org-level GitHub Project "TETA+PI Roadmap" created
 Done: created an **org-level** GitHub Project v2 (github.com/orgs/teta-pi/projects/1)
 that mirrors `docs/roadmap.md` as a visual kanban spanning all repos.
