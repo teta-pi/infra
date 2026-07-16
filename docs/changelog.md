@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-16 · manager · 6.2 follow-up — steps 2/3/4(a) now testable, all fail (still RED)
+Done: a real owner `pk_live_…` key became available after the entry below was
+written, unblocking steps 2/3 (previously untested for lack of auth) and
+step 4(a) (previously not re-verified — Browser tool was down). Ran all
+three live against prod. Step 2: `POST /businesses/{id}/blocks` 500s on
+every payload tried (full body, minimal `{"title":"x"}`, explicit `order`),
+across two different entities — the route itself is broken, not a
+validation edge case; step 3 is unreachable as a result since
+`/media/upload` requires an existing `block_id`. Step 4(a): the homepage
+search box (`app.tetapi.dev`) fires a client-side navigation to
+`/search?q=...`, which 404s — no such page route exists in the Next app,
+and the UI shows no error, the input just clears. Also found, while trying
+to clean up the two test entities this session created: `PATCH
+/businesses/{id}` 500s whenever `is_public` or `is_published` is in the
+body (isolated field-by-field; `name`-only patches work fine) — so the
+"unpublish via PATCH" fallback cleanup path (there's no `DELETE`) is itself
+broken, leaving `44edb26e-…` (from the first pass) and a second, new
+diagnostic-only entity `4cfe5174-…` stuck live/public on prod.
+Changed: `docs/known-issues.md` (three new 🔴 entries with isolated repro);
+`docs/roadmap.md` new row 1.18 (blocks-create 500, PATCH 500, missing
+search page) + row 6.2 status updated to summarize both passes.
+Risk: two test entities remain publicly visible/searchable on prod
+(`teta-qa-test-entity-62`, `teta-qa-diagnostic-entity`) until 1.18 lands and
+someone re-runs the unpublish, or a human does a direct DB cleanup. No
+product code was touched this session (read-only QA, docs-only diff).
+Next: backend session on 1.18 (blocks-create + PATCH 500s) alongside 1.17
+(search/resolve-intent), then a frontend session for the missing search
+page; once all three land, re-run 6.2 end-to-end for a real GREEN.
+
 ## 2026-07-16 · manager · 6.2 pre-GTM core flow QA — GATE FAILED (RED)
 Done: ran the 6.2 live E2E QA sweep against prod (`api.tetapi.dev`,
 `app.tetapi.dev`, `mcp.tetapi.dev`) per the owner's gate. Verdict is **RED**,
