@@ -6,6 +6,29 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-17 · manager+owner · Resend incident closed: key rotated, domain verified
+Done: (1) **key rotation** — a Resend API key was exposed in a session
+transcript during 3.7 diagnostics (2026-07-16); owner created a Full-access
+replacement (two failed attempts first: an edited-but-never-restarted service,
+then an invalid key — diagnosed via direct Resend API calls from the server),
+manager restarted `tetapi-api`, verified the live `/auth/email-code` flow sends
+clean (no Resend error in logs). Owner deletes the old exposed key in the
+dashboard. (2) **domain verification (backlog #11, was DNS-blocked)** — owner
+added `tetapi.dev` in Resend (EU region) and used the Cloudflare auto-config
+authorization; DKIM/SPF/MX records propagated in ~4 min; Resend shows Verified;
+manager's direct test send from `verify@tetapi.dev` to a **non-owner** address
+was accepted — the only-owner-inbox sandbox restriction is gone. Root cause of
+the owner's original "no email on registration" report was BOTH: sandbox mode
+(only tetakta@gmail.com could receive) AND the in-flight key rotation.
+Changed: server `.env` (new key; owner-performed), Cloudflare DNS (3 records,
+auto-added by Resend), `docs/roadmap.md` (blocked-table #11 RESOLVED; new 1.19
+row). No repo code changed yet — that's 1.19 (from-address swap + surfacing
+send failures instead of silent 200), boot issued.
+Risk: emails still sent from `onboarding@resend.dev` until 1.19 lands, so
+non-owner recipients still fail — 1.19 is the last mile. Old exposed key must
+actually be deleted in the dashboard (owner action, confirmed in chat).
+Next: 1.19 session; then registration is testable with any email address.
+
 ## 2026-07-16 · 1.17 backend · /search + /resolve-intent query filtering fixed, verified on prod
 Done: root cause found and fixed (api PR #4): in both endpoints the query text
 never reached the SQL WHERE — all other filters (level, country, entity_type,
