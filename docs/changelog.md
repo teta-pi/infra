@@ -6,6 +6,28 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-16 · 3.7 frontend + 1.16 backend · registry-free registration shipped
+Done: **3.7** — claim flow reworked to type-first (step 0: Business/Organization
+vs Person with journalist · actor · creator · other sub-copy) → email → entity
+created immediately at L0 (`registry_status=unverified`), no registry step in
+the create path; registry match is now optional-later via the 3.4 method
+chooser on the profile. Merged as `teta-pi/web` PR #4, auto-deployed, `/claim`
+verified 200 on prod. **1.16** — verified, no gap: `BusinessCreate` carries no
+registry fields at all, `ClaimCreate` is type+email only, DB registry columns
+nullable — no code change needed, no PR.
+Changed: web `claim/page.tsx`, `useOnboardingStore`, `useProfileStore`,
+`profile/page.tsx`, `lib/types.ts` (EntityKind = single source of truth, 6
+values; old localStorage `"artist"` migrated via `normalizeEntityKind()`).
+Risk: wider EntityKind surface — migration path covers old stored values; the
+3.7 session also hit the `PATCH /businesses/{id}` 500 live and root-caused it:
+`MissingGreenlet` serializing `updated_at` post-commit (`businesses.py:232`) —
+folded into 1.18 as a root-cause lead. ⚠️ Ops note: a diagnostic grep during
+the session exposed a server `.env` secret in a session transcript — owner
+advised to rotate the affected key (done outside the repo; no secret committed
+anywhere).
+Next: 1.17 + 1.18 backend fixes, then frontend `/search` page, then full 6.2
+re-run for GREEN.
+
 ## 2026-07-16 · manager · 6.2 follow-up — steps 2/3/4(a) now testable, all fail (still RED)
 Done: a real owner `pk_live_…` key became available after the entry below was
 written, unblocking steps 2/3 (previously untested for lack of auth) and
