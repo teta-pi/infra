@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-16 · 1.17 backend · /search + /resolve-intent query filtering fixed, verified on prod
+Done: root cause found and fixed (api PR #4): in both endpoints the query text
+never reached the SQL WHERE — all other filters (level, country, entity_type,
+location) were applied, but `q`/`raw_query` was only used to re-score whichever
+rows the LIMIT/OFFSET window happened to fetch. Once entity count exceeded the
+window (10 for search, 50 for resolve-intent), true matches fell outside it —
+hence identical results for any `q` in search, and empty resolve-intent. Fix:
+ILIKE OR-filter (name/slug/description/ai_categories) added to the WHERE before
+LIMIT/OFFSET in both paths; keyword fallback confirmed independent of the
+OpenAI key. Manager merged + verified live on prod: `/search` correct on all 4
+QA repro variants; `/resolve-intent` returns the right UUID on exact match.
+Changed: api `app/api/routes/search.py`, `app/intent_graph/resolver.py`;
+infra `docs/known-issues.md` (both 🔴 marked FIXED; new 🟡 on the
+`verified_only=true` default hiding L0 entities from default agent calls —
+product decision for the owner, not a defect), `docs/roadmap.md` (1.17 ✅).
+Risk: low — additive WHERE clause, browse mode (empty q) unchanged. The 🟡
+default means new L0 entities stay invisible to default `teta_resolve_intent`
+calls until they verify — intended trust-first behavior, flagged for review.
+Next: 1.18 (blocks-create 500 + PATCH 500) and the frontend `/search` page,
+then full 6.2 re-run for GREEN.
+
 ## 2026-07-16 · 3.7 frontend + 1.16 backend · registry-free registration shipped
 Done: **3.7** — claim flow reworked to type-first (step 0: Business/Organization
 vs Person with journalist · actor · creator · other sub-copy) → email → entity
