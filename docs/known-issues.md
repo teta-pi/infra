@@ -3,7 +3,29 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 `resolve-intent` `verified_only` defaults to `true` — L0 entities invisible to default agent calls (2026-07-16)
+Found while verifying the 1.17 fix on prod. `POST /resolve-intent` with only a
+`query` returns empty for any L0 (`verification_level="none"`) entity even on
+an exact name match, because `verified_only: bool = True` is the default in
+both `app/intent_graph/schema.py:13` and `routes/intent.py:20` — the filter
+`verification_level != "none"` excludes every unverified entity. With
+`"verified_only": false` the same query returns the correct UUID (score
+0.585). **By design, not a bug** — but it means a freshly registered entity is
+unfindable via default MCP `teta_resolve_intent` calls until it verifies via at
+least one method. Product call for the owner: keep the trust-first default, or
+flip to `false` (include L0, let `relevance_score`/`verification_level` speak).
+Status: OPEN as a product decision, not a defect. `/search` is unaffected
+(`level` param defaults to `any`).
+
 ## 🔴 6.2 pre-GTM QA sweep (2026-07-16) — GATE FAILED, two new blockers, search/intent both broken on prod
+> **UPDATE 2026-07-16: both blockers below are FIXED by 1.17 (api PR #4) and
+> re-verified live on prod** — `/search` returns correct, query-dependent
+> results on all 4 repro variants (empty→browse-all, exact→1, slug→1,
+> nonsense→0); `/resolve-intent` filters by query text correctly (see the 🟡
+> `verified_only` note above for why L0 matches still need
+> `"verified_only": false`). Root cause: the query text never reached the SQL
+> WHERE — it only re-scored whichever rows the LIMIT/OFFSET happened to fetch.
+> The section is kept for the repro record.
 
 Live E2E QA against prod for the 6.2 gate (must be green before GTM Phase 0).
 **Verdict: RED.** Two new 🔴 blockers found; step 4 of 6.2's own exit criteria
