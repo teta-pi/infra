@@ -97,6 +97,70 @@ clear until (a) the search/resolve-intent blockers above are fixed and
 re-verified, and (b) steps 2/3/5(media) are run end-to-end by someone who can
 complete the login.
 
+## 🔴 6.2 follow-up (2026-07-16) — steps 2/3/4(a) now testable, all three fail
+
+A real `pk_live_…` personal API key became available after the section
+above was written, unblocking steps 2/3 (previously "untested, blocked" on
+auth) and step 4(a) (previously not re-verified because the Browser tool was
+down). All three now fail with new, distinct defects — the gate stays RED.
+
+### 🔴 `POST /businesses/{id}/blocks` always 500s — step 2 cannot be completed at all
+Confirmed live with a real owner API key against two different entities
+(`44edb26e-bfab-4c25-bbb0-f251b0a1cf5a` and a second freshly-created one,
+`4cfe5174-f767-46b3-b5fb-e1593c28924d`). Every payload variation 500s —
+full `{"title","description","is_public"}`, minimal `{"title":"x"}`, and
+with `order` explicit — so this isn't a payload-shape issue, the route
+itself is broken for every caller. `GET` on the same
+`/businesses/{id}/blocks` path works fine (200, `[]`), confirming auth and
+routing are otherwise sound; only the `POST` handler is broken. This means
+step 3 (upload a file to a block) is also unreachable, since
+`POST /media/upload` requires an existing `block_id`. **Fix:** needs a
+backend session to trace `routes/blocks.py`'s `create_block` handler —
+likely an unhandled exception on every insert (ORM/schema mismatch?), not a
+validation edge case.
+Status: OPEN (🔴, confirmed 2026-07-16, blocks 6.2 steps 2 and 3).
+
+### 🔴 `PATCH /businesses/{id}` 500s whenever `is_public` or `is_published` is in the payload
+Isolated field-by-field on `44edb26e-bfab-4c25-bbb0-f251b0a1cf5a`:
+`{"name":"..."}` alone → 200 clean; `{"is_public":false}` alone → 500;
+`{"is_published":false}` alone → 500; both together → 500. This is a
+different bug from the already-tracked #6 below (which is about a stale
+`agent_endpoint_verified` flag surviving an endpoint change, not a crash) —
+this one 500s on *any* write to either boolean, full stop. Practical impact
+for this QA sweep: there is no `DELETE /businesses/{id}` endpoint, so
+"unpublish via PATCH" was supposed to be the fallback cleanup path per the
+6.2 task brief — that fallback is itself broken, so **the two test entities
+created this session cannot be unpublished or hidden through any API call**
+and remain live/public/findable on prod:
+- `TETA QA Test Entity 6.2` — `44edb26e-bfab-4c25-bbb0-f251b0a1cf5a` /
+  `/e/teta-qa-test-entity-62`
+- `TETA QA Diagnostic Entity` — `4cfe5174-f767-46b3-b5fb-e1593c28924d` /
+  `/e/teta-qa-diagnostic-entity` (created solely to confirm the blocks-500
+  bug wasn't specific to one entity; pure test junk, safe to hard-delete)
+Needs a manual DB cleanup (or a fix to this PATCH bug followed by a
+proper unpublish) by someone with direct database access. **Fix:** needs a
+backend session to trace `update_business`'s handling of the two boolean
+fields — likely a truthy/falsy check treating `False` as "not provided" and
+then hitting a code path that assumes the field is always set.
+Status: OPEN (🔴, confirmed 2026-07-16, blocks cleanup + reopens #6 below).
+
+### 🔴 Homepage search box (`app.tetapi.dev`) routes to a nonexistent `/search` page — step 4(a) fails for a human, not just for `GET /search`'s query bug
+Confirmed live with the Claude Browser tool (unavailable in the original
+6.2 run, now working): typing a query into the homepage's "Search verified
+entities…" box and pressing Enter fires `GET
+https://app.tetapi.dev/search?q=...`, which the app itself returns as a
+**404** (`/search`, `/explore`, `/entities`, `/browse`, `/discover` were all
+probed — none exist as a page route in the Next.js app). No error is shown
+to the user; the input box just goes quietly blank and nothing happens. So
+step 4(a) doesn't merely inherit the already-tracked `/search` API bug above
+— there is no working search page in the frontend for a human to land on at
+all, even once the API bug is fixed. **Fix:** needs a frontend session —
+either the search box should call the API directly (client-side fetch to
+`/api/v1/search`) and render results inline/in a modal, or a real
+`/search` (or similarly-named) page route needs to exist in `web/src/app/`.
+Status: OPEN (🔴, confirmed 2026-07-16, blocks 6.2 step 4(a) independently of
+the `/search` API bug).
+
 ## System-wide bug audit — 2026-07-12 (session 6.1, read-only)
 Numbered so they can become individual roadmap tasks. All verified in code
 (file:line); nothing here has been fixed yet.
