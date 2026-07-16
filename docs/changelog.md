@@ -6,6 +6,37 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-16 · manager · 6.2 pre-GTM core flow QA — GATE FAILED (RED)
+Done: ran the 6.2 live E2E QA sweep against prod (`api.tetapi.dev`,
+`app.tetapi.dev`, `mcp.tetapi.dev`) per the owner's gate. Verdict is **RED**,
+not green. Confirmed step 1 (create-without-registry, 1.3's decoupling) still
+holds via a pre-existing test entity. Confirmed step 5's `/e/[slug]` route
+renders (shell only — no blocks on the probed entity). Found two new 🔴
+blockers that fail step 4 outright: `GET /search` returns the identical
+result set regardless of the `query` param (tested empty/exact-match/slug/
+nonsense strings, all identical); `POST /resolve-intent`/`teta_resolve_intent`
+(tested both raw curl and a real MCP client session against
+`mcp.tetapi.dev/mcp`) returns empty results for every query, including
+exact-name matches on entities that exist. Also confirmed a **fix**: the
+2.5-era `/businesses/{id}/preview` 500 (blocked `teta_verify_entity`/
+`teta_get_profile`/`teta_verify_claim`) is now resolved — clean 200s on both
+the raw endpoint and both dependent MCP tools. Steps 2/3 (add a block, upload
+a file/image) were **not tested** — they need an authenticated owner session,
+and reading a login OTP out of the owner's real inbox on his behalf is out of
+scope for an agent (coordinator confirmed this explicitly mid-session); do
+not read this as pass or fail, it's simply unverified.
+Changed: `docs/known-issues.md` (two new 🔴 entries with exact repro
+queries/responses, one 2.5-era entry marked FIXED, an untested-steps note);
+`docs/roadmap.md` row 6.2 marked GATE FAILED with the same summary.
+Risk: GTM Phase 0 stays blocked until (a) a backend session root-causes and
+fixes `/search` + `/resolve-intent`, and (b) someone who can complete an
+owner login re-runs steps 2/3 and the media half of step 5. No code was
+touched this session (read-only QA, docs-only diff).
+Next: spin up a backend session against `/search`'s query-building logic and
+`/resolve-intent`'s keyword-fallback path (both look like the same class of
+bug — query text not reaching the filter/match step at all); once fixed,
+re-run 6.2 with a real login to close steps 2/3/5(media).
+
 ## 2026-07-14 · manager · registration flow is still registry-gated in the UI → 3.7 + 1.16
 Done: owner reported they couldn't find how to register a business without a
 registry. Traced it: backend 1.3 decoupled `create_business` from registry
@@ -23,12 +54,6 @@ Changed: `docs/roadmap.md` (new 3.7, 1.16).
 Risk: none — docs only.
 Next: boot 3.7 (frontend, `teta-pi/web`) + 1.16 (backend, `teta-pi/api`)
 together; they're the fix for the owner's blocker.
-
-## PENDING BOOTS (not yet launched as of 2026-07-14, for the next manager session)
-- **6.2 core-flow QA** (worktree `ttpi-wt/6.2-core-flow-qa`, repo teta-pi/infra) — GATE before GTM Phase 0. Full boot text is in the 2026-07-14 chat; entity→block→file→search(human+MCP)→/e/[slug], read-only, log to known-issues.
-- **14.2 camera QA** (worktree `ttpi-wt/14.2-camera-qa`, repo teta-pi/pi-cam) — parallel to 6.2, device flow QR→capture→C2PA→device-upload→proof.
-- **3.7 + 1.16 registration flow** (this entry) — worktrees not yet created.
-- GTM Phase 0 (owner-executed): registry listings + self-verification — unblocked, waits on 6.2 green.
 
 ## 2026-07-14 · manager · pre-GTM QA gate — 6.2 (core flow) + 14.2 (camera)
 Done: owner asked for a full live E2E QA pass before starting GTM Phase 0 —

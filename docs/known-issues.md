@@ -3,6 +3,100 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🔴 6.2 pre-GTM QA sweep (2026-07-16) — GATE FAILED, two new blockers, search/intent both broken on prod
+
+Live E2E QA against prod for the 6.2 gate (must be green before GTM Phase 0).
+**Verdict: RED.** Two new 🔴 blockers found; step 4 of 6.2's own exit criteria
+(search finds the new entity) fails outright regardless of what gets created.
+Steps 2/3 (add block, upload media) were **not tested** — see note below.
+
+### 🔴 `GET /search` ignores the `query` parameter entirely — returns the same result set for every query
+Confirmed live against `api.tetapi.dev`. The exact same 4 entities, in the
+exact same order, with the exact same `relevance_score` values (`0.44, 0.35,
+0.35, 0.35`), came back for all of the following:
+- `GET /api/v1/search?query=&level=any&limit=5`
+- `GET /api/v1/search?query=bakery&level=any&limit=5`
+- `GET /api/v1/search?query=TETA%20QA%20Test%20Entity&level=any&limit=5` (a
+  substring of an entity that actually exists, `TETA QA Test Entity 6.2`)
+- `GET /api/v1/search?query=teta-qa-test-entity-62&level=any&limit=5` (the
+  entity's own slug)
+- `GET /api/v1/search?query=zzz-nonexistent-xyz-123&level=any&limit=5` (a
+  string matching nothing)
+All five requests returned the identical 4-entity array (`Test Reporter`,
+`tetakta`, `TETA QA Test Entity 6.2`, `TETA QA Diagnostic Entity`) — the
+endpoint appears to just return all entities in the DB, unfiltered and
+unranked by query content. This upgrades the older, unconfirmed entry below
+("`/search` relevance looks off for unrelated queries") from low-priority to
+a confirmed blocker: search does not work at all on prod right now, for any
+query. This also means the `app.tetapi.dev` search UI (same backend) cannot
+find anything meaningfully either, though it wasn't separately re-verified
+visually this session (Claude Browser tool was temporarily unavailable
+throughout this session). **Fix:** needs a backend session — check
+`/search`'s query-building logic for a dropped/short-circuited filter clause.
+Status: OPEN (🔴, confirmed 2026-07-16, blocks 6.2).
+
+### 🔴 `POST /resolve-intent` (`teta_resolve_intent`) returns empty results for every query tested, including exact name matches
+Confirmed both via raw `curl POST https://api.tetapi.dev/api/v1/resolve-intent`
+and via a real MCP client call (`teta_resolve_intent` over
+`https://mcp.tetapi.dev/mcp`, JSON-RPC `tools/call`). All of the following
+returned `{"query": "...", "results": []}` / "No entities resolved for
+intent...":
+- `{"query":"TETA QA Test Entity 6.2"}` — exact name of an entity that exists.
+- `{"query":"Test Reporter"}` — exact name of a `registry`-level verified
+  entity that exists and that `teta_search`/`teta_verify_entity` can both
+  resolve fine when called directly by id.
+The flagship resolve→verify agent workflow (`docs/mcp.md`'s "Roadmap for
+MCP") cannot currently route a natural-language query to any entity on prod,
+even a trivial exact-match one. Not yet root-caused this session (read-only
+QA) — could be the same underlying query-matching bug as `/search` above, or
+a separate TWIRA/embedding-path issue (recall `OPENAI_API_KEY` is unset on
+the server per the existing "TWIRA semantic ranking is off" entry below, so
+`/resolve-intent` was already known to fall back to keyword matching — but
+keyword matching returning literally nothing for an exact-name query is a
+distinct, new failure, not just "no semantic boost"). **Fix:** needs a
+backend session to trace `/resolve-intent`'s keyword-fallback path.
+Status: OPEN (🔴, confirmed 2026-07-16, blocks 6.2).
+
+### ✅ `GET /businesses/{id}/preview` 500 (see entry below, found 2026-07-13) — CONFIRMED FIXED
+Re-tested live 2026-07-16 against the same entity id used in the original
+report (`b75914b9-b0a9-4170-a3c2-7df87ba26633`, "Test Reporter") both via raw
+`curl GET https://api.tetapi.dev/api/v1/businesses/{id}/preview` (200, clean
+JSON) and via a real MCP client call to `teta_verify_entity` and
+`teta_get_profile` (both 200, clean tool output, no `isError`). Whatever
+broke this between 2.5's testing and now is fixed; all 7 MCP tools are
+reachable again. Not re-tested: `teta_verify_claim` (same endpoint, should
+follow, but wasn't separately exercised this session).
+Status: FIXED (confirmed 2026-07-16).
+
+### Steps 2/3 of 6.2 (add a block; upload a file/image to it) — UNTESTED, blocked
+These require an authenticated owner session (JWT via
+`/auth/email-code`+`/auth/verify-code`, or password sign-in). The QA agent
+sent the email-code request successfully (`POST /auth/email-code` for
+`tetakta@gmail.com` → 200, "Verification code sent"), but reading the code out
+of the owner's real inbox, or otherwise entering a login OTP on the owner's
+behalf, is out of scope for an agent — not attempted. **Do not read this as a
+pass or a fail; it is simply not verified.** A human (or a session with a
+disposable/inbox-accessible test account) needs to run steps 2/3 by hand:
+create a block on an owned entity, upload an image, and confirm
+`media_url`/`hash` populate and (if applicable) C2PA fields populate on the
+resulting block.
+
+**What *did* pass:** step 1 (create-without-registry, 1.3's decoupling) is
+confirmed still holding — pre-existing entity `TETA QA Test Entity 6.2`
+(`44edb26e-bfab-4c25-bbb0-f251b0a1cf5a`, created 2026-07-14) has
+`registry_status: "unverified"`, `registry_id: null`, `is_published: true`,
+and `GET /businesses/by-slug/teta-qa-test-entity-62/public` confirms the
+public payload requires no registry data (`registry.status: "unverified"`,
+`registry_id: null`). Step 5 (`/e/[slug]` renders) is partially confirmed —
+the route returns 200 and the correct shell — but this entity has no blocks
+(`block_count: 0`), so the "renders a block + media" half of step 5 is
+untested for the same auth reason as steps 2/3.
+
+Status: OPEN — session verdict is **RED**, not green. This gate does not
+clear until (a) the search/resolve-intent blockers above are fixed and
+re-verified, and (b) steps 2/3/5(media) are run end-to-end by someone who can
+complete the login.
+
 ## System-wide bug audit — 2026-07-12 (session 6.1, read-only)
 Numbered so they can become individual roadmap tasks. All verified in code
 (file:line); nothing here has been fixed yet.
