@@ -6,6 +6,22 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-17 · 1.19 backend · verified sender + email-code failures surfaced — email fully live
+Done: `FROM_ADDRESS` switched to `TETA+PI <verify@tetapi.dev>` (domain verified
+yesterday); `POST /auth/email-code` no longer fire-and-forgets — it awaits the
+Resend send and returns 502 with a human detail on failure, clearing the
+cooldown + stored code so the user can retry immediately. Manager merged
+(api PR #5), deploy green, live-verified on prod: email-code to a NON-owner
+address (guesslook@gmail.com) → 200 with no Resend error in logs — with the
+new await-semantics that 200 is proof of acceptance, not a silent maybe.
+Registration is now testable with any email address.
+Changed: api `app/services/email.py` (FROM_ADDRESS, `send_verification_code`
+→ bool), `app/api/routes/auth.py` (email-code awaits send; magic-link and
+change-email paths untouched).
+Risk: email-code response now blocks on Resend (~1s added latency) — intended.
+Next: 1.18 (blocks-create + PATCH 500s) and 3.6 report are the remaining
+open work; then frontend /search page; then full 6.2 re-run for GREEN.
+
 ## 2026-07-17 · manager+owner · Resend incident closed: key rotated, domain verified
 Done: (1) **key rotation** — a Resend API key was exposed in a session
 transcript during 3.7 diagnostics (2026-07-16); owner created a Full-access
