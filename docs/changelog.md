@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-17 · 3.6 frontend · auth store unified, publish/privacy controls shipped
+Done: audit #10 FIXED — `/profile` (EditView, BlockCard, PiCamSection) now
+reads `useAuthStore` first with fallback to `useProfileStore`/`auth_token`
+for /claim users; plus a businessId bootstrap via `businessApi.list` so
+/login-only users (who never had the claim flow's localStorage) get their
+entity resolved instead of silently no-oping on Save/Publish/Verify.
+Live-verified on prod with a real /login session: full profile renders, no
+duplicate Pi CAM sign-in modal (closes the 14.2 QA finding too). Audit #11
+ALREADY-RESOLVED — the fake domain-email step was removed by 3.7's claim
+rework, grep confirms no stub remains. Audit #12 FIXED — new "Publish &
+Privacy" section wiring `businessApi.publish`/`setPrivacy`; publish verified
+live; setPrivacy is frontend-correct but hits the 1.18 PATCH-500 backend bug
+(MissingGreenlet) — unblocks automatically when 1.18 lands. Also closed
+duplicate web PR #5 (stale re-open of the already-merged 3.7 branch).
+Changed: web `src/app/profile/page.tsx` only (PR #6); merged + deployed,
+/profile 200 on prod.
+Risk: low — token resolution order changed (shared store first); claim-flow
+fallback preserved and SignInModal now syncs both stores on success.
+Next: 1.18 backend fixes (blocks-create + PATCH 500) — the last backend
+blocker; then the frontend /search page; then full 6.2 re-run for GREEN.
+
 ## 2026-07-17 · 1.19 backend · verified sender + email-code failures surfaced — email fully live
 Done: `FROM_ADDRESS` switched to `TETA+PI <verify@tetapi.dev>` (domain verified
 yesterday); `POST /auth/email-code` no longer fire-and-forgets — it awaits the
