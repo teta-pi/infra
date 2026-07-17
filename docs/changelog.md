@@ -6,6 +6,29 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-18 · manager · owner QA report (23 items) decomposed; 14.3 camera release queued
+Done: decomposed the owner's 2026-07-17 QA bug report (5 Critical / 5 High /
+8 Medium / 5 Low) into session tasks — full mapping table in
+`docs/known-issues.md`. New roadmap rows: **3.9** (session/auth integrity —
+#1/#2/#4), **3.10** (verifier UX per entity type — #3/#6/#13/#14), **3.11**
+(🔴 entity state isolation / data leakage — #18), **3.12** (app chrome —
+#8/#10/#11/#12/#17), **3.13** (profile redesign — #15, design-first),
+**1.20** (blocks become real: media attach + permalink + indexing —
+#7/#16/#20, ties to 1.9/5.1), **10.6** (landing polish — #9/#21/#22/#23 +
+banner/favicon), **14.4** (🔴 Pi CAM app won't launch — #19, blocks
+14.2/14.3), plus a proper **1.15** row (proof_url dead link + update_block
+embed guard, was only in the retired platform repo docs). Also added **14.3**
+(TestFlight + free Android release; owner prereq: Apple Developer Program).
+Context noted: the QA ran before the 17th's fixes, so #2's 500-half and the
+Resend half of #4 are already fixed; #20 is partly by-design (search covers
+entities, embeddings blocked on OpenAI billing).
+Changed: `docs/roadmap.md` (9 new/updated rows), `docs/known-issues.md`
+(mapping table), this entry.
+Risk: none — docs only.
+Next: owner's priority boots: **1.15** (backend small bundle), **1.18c**
+(/search page, last gate blocker), **15.1** (security, parallel). Then 3.9 →
+3.11 as the next frontend chain.
+
 ## 2026-07-17 · 10.5 landing + 3.8 frontend · Landing Update v3 executed
 Done: **10.5** — landing PR #3 merged + deployed: "Prove the claim. Not just
 the identity." section (3 example cards: sushi chef/artist/journalist,
