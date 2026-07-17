@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-17 · 10.5 landing + 3.8 frontend · Landing Update v3 executed
+Done: **10.5** — landing PR #3 merged + deployed: "Prove the claim. Not just
+the identity." section (3 example cards: sushi chef/artist/journalist,
+"Two checks, one block" diagram, no-legal-entity footer line, single
+AI-disclosure sentence with manual-review/appeals wording) AND the P2
+"Universal Tag" section (honest two-part disclosure, "Part A alone is a
+partial signal"). Verified live on tetapi.dev. **3.8** — closed as a no-op:
+all three P0 items from the master prompt were verified ALREADY fixed on live
+prod (title/meta "Digital Entities", About → tetapi.dev/about.html, zero
+localhost refs on every page) — the prompt's status check was stale; manager
+re-verified independently before closing. Also closed stale PR #56 on the
+retired platform repo (1.16 docs note, already recorded here).
+Changed: landing `index.html` (PR #3); `docs/roadmap.md` (3.8 ✅ no-op,
+10.5 ✅).
+Risk: none — static HTML only; Universal Tag section shows an illustrative
+snippet, 12.5a–c infra not deployed yet, section discloses this honestly.
+Re-check its copy when 12.5 ships (noted in the 10.5 row).
+Next: 1.18c (/search page) is the ONLY remaining piece before the full 6.2
+re-run — corrected boot issued (the first 3.8/1.18c attempt cloned the
+retired platform repo by mistake; boots now embed the exact git clone URL).
+
 ## 2026-07-17 · 1.18 backend · blocks-create + PATCH 500s fixed and prod-verified; test entities cleaned
 Done: api PR #6 merged + deployed. Root causes: (a) `add_block` called
 `generate_embedding` unguarded — the server's OpenAI key has unpaid billing, so
