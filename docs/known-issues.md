@@ -3,6 +3,39 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## Owner QA Bug Report — 2026-07-17 (23 items, decomposed 2026-07-18)
+
+Full report: owner's `TETAPI_QA_Bug_Report_2026-07-17.docx` (5 Critical / 5
+High / 8 Medium / 5 Low; 18 APP, 6 LANDING, 1 CAMERA). **QA ran BEFORE the
+2026-07-17 evening fixes** (1.18 blocks/PATCH 500s, 3.6 auth stores), so some
+items are already addressed. Mapping to sessions:
+
+| QA# | Sev | Item | Where it went |
+|---|---|---|---|
+| 1 | 🔴 | expired session still shows editable profile | **3.9** |
+| 2 | 🟠 | Make private → "invalid token" | **3.9** (stale-token family; PATCH-500 part already fixed in 1.18) |
+| 3 | 🟠 | persona sees business verifier set | **3.10** |
+| 4 | 🟠 | Business Email "Send Code" dead | **3.9** re-test (Resend was also broken during QA — key rotation + sandbox; may already work) |
+| 5 | 🟡 | Domain Ownership untested | folded into **6.2 re-run** checklist |
+| 6 | 🟡 | "Legal Entity" link unclear/inert | **3.10** |
+| 7 | 🔴 | blocks: files don't attach, timestamps are UI-only | **1.20** (with 1.9) |
+| 8 | 🟡 | Under-construction banner overlaps UI | **3.12** (app) + **10.6** (landing) |
+| 9 | 🟢 | landing menu not sticky | **10.6** |
+| 10 | 🟡 | app has no real header/menu bar | **3.12** |
+| 11 | 🟠 | onboarding Camera step: dead QR/pairing stub | **3.12** |
+| 12 | 🟡 | Share page shows internal link | **3.12** |
+| 13 | 🟡 | Registry Match auto-verifies with no UX feedback | **3.10** |
+| 14 | 🟡 | persona search card shows registry handle | **3.10** |
+| 15 | 🟠 | profile needs full visual redesign | **3.13** (design-first) |
+| 16 | 🟡 | no per-block permalink/view | **1.20** |
+| 17 | 🟢 | favicon missing everywhere | **3.12** (app) + **10.6** (landing+email) |
+| 18 | 🔴 | data leakage between entities of one account | **3.11** (prime suspect: `useProfileStore` localStorage reuse; backend must be ruled out too) |
+| 19 | 🔴 | Pi CAM app won't launch | **14.4** (blocks 14.2/14.3) |
+| 20 | 🔴 | blocks not indexed/findable | **1.20**; partly explained: `/search` covers entities only, block embeddings blocked on OpenAI billing (5.1) |
+| 21 | 🟢 | marketing numbers not clickable/sourced | **10.6** |
+| 22 | 🟢 | references block lost its article links | **10.6** |
+| 23 | 🟢 | Academic Evidence lacks arXiv links | **10.6** |
+
 ## 🟡 `resolve-intent` `verified_only` defaults to `true` — L0 entities invisible to default agent calls (2026-07-16)
 Found while verifying the 1.17 fix on prod. `POST /resolve-intent` with only a
 `query` returns empty for any L0 (`verification_level="none"`) entity even on
