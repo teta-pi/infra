@@ -6,6 +6,24 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-17 · 1.18 backend · blocks-create + PATCH 500s fixed and prod-verified; test entities cleaned
+Done: api PR #6 merged + deployed. Root causes: (a) `add_block` called
+`generate_embedding` unguarded — the server's OpenAI key has unpaid billing, so
+every create raised RateLimitError → 500; now try/except + warning log,
+embedding is best-effort. (b) `update_business` returned the ORM object
+without `db.refresh` after flush (unlike `create_business`) → MissingGreenlet
+on `updated_at` serialization → 500 on any PATCH touching the booleans.
+Prod-verified with the owner's test `pk_live_` key (stored in a local file,
+never in chat): POST block → 201, PATCH `is_public/is_published=false` → 200.
+Both leftover QA test entities hidden via the fixed PATCH — `/search` returns
+0 for them, public endpoints 404. No direct DB cleanup needed.
+Changed: api `routes/blocks.py`, `routes/businesses.py`; infra roadmap 1.18 →
+(a)+(b) done, (c) search page in flight.
+Risk: low (additive fixes). 🟡 latent duplicate filed in the 1.18 row:
+`update_block` has the same unguarded embedding call — small follow-up.
+Next: merge 1.18c (/search page PR) when it lands → full 6.2 re-run (now
+fully unblocked: email works, key available, all known 500s fixed).
+
 ## 2026-07-17 · manager · two new owner tasks: Landing Update v3 + Universal Tag spec
 Done: owner delivered (1) the **Landing Update master prompt v3** — pricing
 already correct per its own status check, remaining work mapped to **3.8**
