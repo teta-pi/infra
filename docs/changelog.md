@@ -6,6 +6,28 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-17 · manager · two new owner tasks: Landing Update v3 + Universal Tag spec
+Done: owner delivered (1) the **Landing Update master prompt v3** — pricing
+already correct per its own status check, remaining work mapped to **3.8**
+(web P0: About→localhost link, stale "Agent Economy" title/meta, doc-upload
+"Coming soon" confirm-only) and **10.5** (landing P1: "Prove the claim, not
+just identity" section with example cards + two-checks diagram + AI-disclosure
+guardrail; P2 optional: Universal Tag section); (2) the **Universal Tag spec
+PDF** — transcribed to new `docs/universal-tag.md` (two-part model: tag.js
+JSON-LD+beacon; DNS+redirect → wk-proxy via new `verify.tetapi.dev`),
+filed as **12.5** with a 4-phase build breakdown (12.5a landing ∥ 12.5b api →
+12.5c devops → 12.5d docs). gtm.md §07 row updated (spec no longer "not
+transcribed"). Noted in both roadmap rows: landing is static HTML, not the
+Next.js the master prompt assumes; and 12.5b tag-ping is a new public
+sustained-write endpoint — droplet-load flag + storage-shape owner decision
+(file-log vs DB, same as 2.4).
+Changed: `docs/universal-tag.md` (new), `docs/roadmap.md` (3.8, 10.5, 12.5),
+`docs/gtm.md` (§07 12.5 row), this entry.
+Risk: none — docs only.
+Next: boot 3.8 + 10.5 (independent, parallel-safe); owner picks 12.5b storage
+shape before 12.5 phases boot. 1.18 prod verification still pending owner's
+three curl checks.
+
 ## 2026-07-17 · 3.6 frontend · auth store unified, publish/privacy controls shipped
 Done: audit #10 FIXED — `/profile` (EditView, BlockCard, PiCamSection) now
 reads `useAuthStore` first with fallback to `useProfileStore`/`auth_token`

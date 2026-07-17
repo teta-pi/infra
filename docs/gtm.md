@@ -232,7 +232,7 @@ with no detectable CMS.
 | WordPress plugin (free + $25 pack) | `12.1` (in progress), `12.2` (publish) | Session builds, Bob approves the wordpress.org publish (owner-gated) |
 | Shopify app | New — **`12.3 wordpress · Shopify app`** (misnamed direction, keep numbering; or split into a new direction if scope is large — Bob to decide) | Read companion PDF first |
 | Wix app | New — **`12.4`** | Read companion PDF first |
-| Universal snippet (non-CMS sites) | New — **`12.5`** | Read companion PDF first |
+| Universal snippet (non-CMS sites) | **`12.5`** — spec transcribed 2026-07-17 → `docs/universal-tag.md` (phases 12.5a–d) | Spec ready; build phased per that doc |
 
 Combined Month-3 target (verbatim): **250+ organic MCP calls/week AND 300+
 Tier-0 platform installs** — two independent, non-correlated traction
