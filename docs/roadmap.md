@@ -74,6 +74,26 @@ File ownership is disjoint so sessions never collide in git.
 | 15.1 | `15 security · 15.1 threat model + red-team harness` | STANDING direction, first task: (1) write `docs/security.md` — threat model (assets: entity data, `pk_live_` keys, admin routes, append-only tables, C2PA/OTS proofs, media store; trust boundaries: agent↔MCP, browser↔API, device↔`/media/device-upload`, WP plugin↔API), attacker classes, per-surface checklist (authn/authz, IDOR, SSRF, path traversal, injection, rate-limit, secrets exposure); (2) triage the 6.1 audit's security findings (🔴 #1 path traversal, 🟠 #7 SSRF, #11 fake client verify) as the seed backlog, mapped to the backend fix tasks (1.6-1.9); (3) design the RECURRING loop — a read-only authorized audit re-run cadence + CI security scanning (CodeQL / `npm audit` / `bandit` — runs on the GitHub runner, ZERO server load) to add in 15.2. **Authorized, our-own-infra only; no destructive/DoS/exfil tests against prod; findings reported, not exploited.** | 🟢 ready · design+audit, zero deploy | `docs/security.md` (new), `docs/known-issues.md` (append) |
 | 15.2 | `15 security · 15.2 CI security scanning` | implement the 15.1 loop: add CodeQL (JS+Python) + dependency-audit workflows to `.github/workflows/` (runner-side, no server load); wire results into `docs/security.md` tracking. Recurring after that | ⚪ after 15.1 | `.github/workflows/*`, `docs/security.md` |
 
+## Repo routing — which repo each direction lives in (READ BEFORE BOOTING A SESSION)
+Post-5.3 split, code lives in **6 active repos**. The old mono `teta-pi/platform`
+is **ARCHIVED (read-only, 2026-07-17)** — GitHub rejects pushes to it, so a
+session that clones it by mistake simply cannot land work. `protocol`,
+`mcp-server`, `pi-camera` are also archived placeholders — never use them.
+
+| Direction | Repo | Clone URL |
+|---|---|---|
+| 1 backend · 4 db | `teta-pi/api` | `https://github.com/teta-pi/api.git` |
+| 2 mcp | `teta-pi/mcp` | `https://github.com/teta-pi/mcp.git` |
+| 3 frontend · 8 analytics · 11 backoffice | `teta-pi/web` | `https://github.com/teta-pi/web.git` |
+| 10 landing | `teta-pi/landing` | `https://github.com/teta-pi/landing.git` |
+| 12 wordpress | `teta-pi/wordpress-plugin` | `https://github.com/teta-pi/wordpress-plugin.git` |
+| 14 camera | `teta-pi/pi-cam` | `https://github.com/teta-pi/pi-cam.git` |
+| 5 devops · 6 manager · 7 github · 13 gtm · 15 security · all docs | `teta-pi/infra` | `https://github.com/teta-pi/infra.git` |
+
+**Every boot MUST open with the exact `git clone <url> <path>` for the right repo
+and a `git remote -v` sanity check.** 12.5 spans repos — each phase (a landing /
+b api / c server) is its own session in its own repo.
+
 ## Coordination rules (so parallel sessions don't break each other)
 - Each session touches **only its own files** (table above). Never edit another
   session's file.
