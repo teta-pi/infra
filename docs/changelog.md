@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-18 · wave 2 · 3.9, 15.2, 1.10 (+hotfix), 12.5a, 10.6 — six PRs merged
+Done: **3.9** (web PR #10) — centralized 401 handling in `lib/api.ts`, `/profile`
+now gates its whole edit surface behind a signed-out panel instead of leaving
+a dead session editable; deployed, closes QA #1 (Critical)/#2/#4. **15.2**
+(4 repos: api PR #9, web PR #9, mcp PR #4, landing PR #6) — CodeQL +
+dependency-audit + secret-scan workflows live, all non-blocking (push+weekly).
+**1.10** (api PR #10) — badge SVG endpoint shipped, but PR #10 itself had a
+bug: `Business.id.cast("text")` — SQLAlchemy `cast()` needs a type object, not
+a string — 500'd on every request. **Caught live within minutes of deploy**
+(manager verifies every merge on prod before moving on), hotfixed same-day in
+PR #11 (`cast(Business.id, String)`). Re-verified: 200 real entity
+(`image/svg+xml`, Cache-Control, ETag), 404 unknown entity. **12.5a** (landing
+PR #5) — `tag.js` + `generate.html` shipped; tag-ping beacon is a no-op until
+12.5b exists (by design). **10.6** (landing PR #4) — 6 QA items across 11
+pages: sticky nav (fixed a real CSS bug along the way), banner z-index/offset,
+favicon, clickable sources for stats/citations.
+Changed: web `lib/api.ts`/`profile/page.tsx`/`useProfileStore.ts`; 4×
+`.github/workflows/*`; api `routes/badge.py` (+hotfix); landing `tag.js`,
+`generate.html`, 11 `*.html` pages + favicon assets. `docs/roadmap.md` (1.10
+new row, 3.9/15.2/12.5a/10.6 updated), `docs/security.md` §6.
+Risk: the badge hotfix is the one real miss this wave — a syntax-valid but
+runtime-broken SQLAlchemy call that only surfaces when hit. Everything else
+prod-verified clean. Owner follow-ups queued (non-blocking): confirm the MCP
+server count stat, arXiv IDs for 2 citations, email-template favicon.
+Next: 3.11 (entity-state-leak, Critical, same web files as 3.9 — boot after
+this) → 3.10 → 3.12 → 3.13. 12.5b needs the owner's storage-shape call.
+
+---
+
 ## 2026-07-18 · 1.21 + S-9 backend · fallback proof_url + domain-check SSRF hardening
 Done: api PR #8 merged + deployed (wave 2). **1.21** — the keyword-fallback in
 `intent_graph/resolver.py` (the only branch running while OpenAI billing is
