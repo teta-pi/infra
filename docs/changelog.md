@@ -6,6 +6,24 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-18 · 1.15 backend · proof_url fixed + update_block guarded; 1.21 spawned
+Done: api PR #7 merged + deployed (wave 1 of the parallel plan). `resolve_intent`
+proof_url now points at the live public page `app.tetapi.dev/e/{slug}` (session
+live-verified: old URL 422 → new 200); `update_block`'s embedding call wrapped
+in the same try/except as `add_block` (closes the 1.18 latent duplicate).
+Manager prod checks after deploy: health 200; found "Test Reporter" now has
+`verification_level: none` (was registry-verified in the 1.13-era tests —
+something reset it during QA; explains default resolve-intent returning empty
+for it, `verified_only:false` returns it fine — data change, not a regression).
+Prod-confirmed the session's own caveat: the keyword fallback (the ONLY branch
+running while OpenAI billing is unpaid) returns `proof_url: null` → spawned
+**1.21** (tiny: populate proof_url in `intent_graph/resolver.py`).
+Changed: api `routes/intent.py`, `routes/blocks.py`; infra roadmap (1.15 ✅,
+new 1.21).
+Risk: none — minimal fixes, success paths unchanged.
+Next: wave 1 still in flight: 1.18c, 3.9 (web), 15.1 (infra), 10.6 (landing),
+14.4 (pi-cam). 1.21 slots into the next api session (can bundle with 1.20).
+
 ## 2026-07-18 · manager · owner QA report (23 items) decomposed; 14.3 camera release queued
 Done: decomposed the owner's 2026-07-17 QA bug report (5 Critical / 5 High /
 8 Medium / 5 Low) into session tasks — full mapping table in
