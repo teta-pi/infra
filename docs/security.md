@@ -171,7 +171,7 @@ items are tracked here; functional-only bugs stay in `known-issues.md`.
 | S-6 | Data leakage between entities of one account | 🔴 | QA #18 | 3.11 | OPEN — FE `useProfileStore` reuse suspected; **backend owner-scoping must also be ruled out** |
 | S-7 | `PATCH /businesses/{id}` keeps `agent_endpoint_verified=true` after endpoint change | 🟠 | 6.1 #6 | 1.5/1.x | OPEN |
 | S-8 | `GET /businesses/{id}/blocks` leaks private blocks | 🟡 | known-issues | 1.x (block read authz) | OPEN |
-| S-9 | `/verify/domain/check` mild SSRF (boolean fetch to caller-influenced host) | 🟡 | 6.1 #7 sibling | 1.7 follow-up / audit | OPEN |
+| S-9 | `/verify/domain/check` mild SSRF (boolean fetch to caller-influenced host) | 🟡 | 6.1 #7 sibling | api PR #8 (1.21 bundle) | ✅ CLOSED 2026-07-18 — `domain_ownership._check_file` now resolves the host and rejects private/loopback/link-local/reserved IPs (incl. 169.254.169.254) + `follow_redirects=False`; prod-verified rejecting a private-resolving domain. DNS-TXT path was already safe (DoH only) |
 | S-10 | In-memory rate limiters → single-worker-only; `/v1/tag-ping` needs limits before launch | 🟠 | architecture / 12.5b | devops (Redis) + 12.5b | OPEN (design) |
 
 **Closed-item provenance:** S-1 and S-2 both landed in

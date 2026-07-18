@@ -6,6 +6,25 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-18 · 1.21 + S-9 backend · fallback proof_url + domain-check SSRF hardening
+Done: api PR #8 merged + deployed (wave 2). **1.21** — the keyword-fallback in
+`intent_graph/resolver.py` (the only branch running while OpenAI billing is
+unpaid) now sets `proof_url=app.tetapi.dev/e/{slug}` on every result;
+prod-verified: `resolve-intent` fallback returns a non-empty proof_url that
+opens 200. **S-9** (security seed backlog) — `domain_ownership._check_file`
+now resolves the host and rejects private/loopback/link-local/reserved IPs
+(incl. the 169.254.169.254 metadata endpoint) and uses `follow_redirects=False`;
+prod-verified rejecting a private-resolving domain. Closes the sibling SSRF
+that api PR #3 left open (#3 only covered `/verify-endpoint`).
+Changed: api `intent_graph/resolver.py`, `services/verification/domain_ownership.py`;
+infra roadmap (1.21 ✅), security.md (S-9 CLOSED).
+Risk: legit domains behind a CDN edge that resolves to a private range would
+be rejected — unlikely for public verification domains. DNS-TXT path untouched
+(DoH only, already safe).
+Next: wave 2 still in flight — 1.10 badge (api), 12.5a tag.js (landing), 15.2
+CI scanning (4 repos); 3.9/10.6 from wave 1. Owner decisions still open:
+tag-ping storage (file vs DB), resolve-intent `verified_only` default.
+
 ## 2026-07-18 · 14.4 camera · boot failure diagnosed — Expo Go limitation, deps fixed; owner builds dev-client
 Done: pi-cam PR #2 merged. `npm install`/Metro/`tsc`/full iOS prod bundle all
 clean — the app "not launching" (QA #19) is NOT this repo's code: reanimated 4
