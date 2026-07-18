@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-18 · 15.1 · security threat model + finding triage + 15.2 loop design
+Done: wrote `docs/security.md` — the canonical security reference. Threat model:
+9 ranked assets (entity data, `pk_live_` keys, admin routes, append-only tables,
+C2PA/OTS proofs, media store, `.env` secrets, PII, sessions); 5 trust boundaries
+incl. the **new** tag.js↔`/v1/tag-ping` anonymous sustained-write beacon (B5, from
+`docs/universal-tag.md`); 7 attacker classes; a per-surface checklist (authn,
+authz/IDOR, SSRF, path traversal, injection, rate-limit, secrets). Triaged the
+security-relevant findings into a seed backlog (S-1..S-10) mapped to tasks: 6.1
+#1 traversal (S-1) + #7 SSRF (S-2) marked **CLOSED** against api PR #3 (verified
+via `gh` — merged 2026-07-14; the changelog "PR #3 TWIRA" line is a different
+repo); 6.1 #11 fake client verify → 3.9; QA #1 session-not-invalidated → 3.9;
+QA #18 cross-entity leak → 3.11. Designed the recurring loop for 15.2 (CodeQL
+JS+Python, npm audit, bandit, secret-scan — all runner-side, zero server load —
+plus a monthly read-only re-audit cadence).
+Changed: `docs/security.md` (new); `docs/roadmap.md` (15.1 ✅); `docs/known-issues.md`
+(6.1 #1 + #7 marked CLOSED with api PR #3 ref).
+Risk: none — pure docs/design, zero code, zero deploy, no prod contact. Closed-status
+of S-1/S-2 depends on api PR #3 being the actual fix (confirmed against the api repo).
+Next: **15.2** — implement the CI security workflows (`.github/workflows/*`) and
+wire results back into `docs/security.md` §5.
+
 ## 2026-07-18 · 1.15 backend · proof_url fixed + update_block guarded; 1.21 spawned
 Done: api PR #7 merged + deployed (wave 1 of the parallel plan). `resolve_intent`
 proof_url now points at the live public page `app.tetapi.dev/e/{slug}` (session
