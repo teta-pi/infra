@@ -183,32 +183,44 @@ verified against the api repo's PR list on 2026-07-18.)
 
 ---
 
-## 6. Recurring loop — design for 15.2 (implementation deferred)
+## 6. Recurring loop — 15.2 landed (2026-07-19)
 
 Goal: a **standing** security posture that runs itself with **zero server load** —
 all heavy analysis on the GitHub runner — plus a light read-only re-audit cadence.
-15.1 designs it; **15.2 implements** (`.github/workflows/*`).
+15.1 designed it; **15.2 implemented it** (`.github/workflows/*` in each of the
+4 code repos).
 
-### 6.1 CI static analysis (runner-side, no prod impact)
+### 6.1 CI static analysis (runner-side, no prod impact) — ✅ implemented
 
-| Tool | Targets | Trigger | Notes |
+| Tool | Repo / targets | Trigger | Workflow / PR |
 |------|---------|---------|-------|
-| **CodeQL (JavaScript/TypeScript)** | `web/`, `mcp/`, `landing/*.js`, `tag.js` | PR + push to `main` + weekly schedule | GitHub's default `security-extended` query pack; results → Security tab |
-| **CodeQL (Python)** | `api/` | same | catches SQLi/SSRF/path-traversal patterns statically |
-| **`npm audit`** | `web/`, `mcp/` (per-lockfile) | PR + weekly | fail on `high`+; `--omit=dev` for the runtime picture |
-| **`bandit`** | `api/app/` | PR + weekly | Python security linter; baseline-file to suppress accepted findings |
-| **secret scan** | whole repo | PR + push | e.g. `gitleaks` or GitHub secret scanning; guards A7 |
+| **CodeQL (Python)** | `api/` (`security-extended` pack) | push to `main` + weekly (Mon 03:00 UTC) | `api/.github/workflows/codeql.yml` — [api PR #9](https://github.com/teta-pi/api/pull/9) |
+| **`pip-audit`** | `api/` (installed env, no lockfile → `pip install .` then audit) | same | `api/.github/workflows/pip-audit.yml` — [api PR #9](https://github.com/teta-pi/api/pull/9) |
+| **`bandit`** | `api/app/` (`-ll`, medium+ severity) | same | `api/.github/workflows/bandit.yml` — [api PR #9](https://github.com/teta-pi/api/pull/9) |
+| **CodeQL (JavaScript/TypeScript)** | `web/` (`security-extended` pack) | same | `web/.github/workflows/codeql.yml` — [web PR #9](https://github.com/teta-pi/web/pull/9) |
+| **`npm audit`** | `web/` (`--omit=dev --audit-level=high`, no lockfile → `npm install` then audit) | same | `web/.github/workflows/npm-audit.yml` — [web PR #9](https://github.com/teta-pi/web/pull/9) |
+| **CodeQL (JavaScript/TypeScript)** | `mcp/` (`security-extended` pack) | same | `mcp/.github/workflows/codeql.yml` — [mcp PR #4](https://github.com/teta-pi/mcp/pull/4) |
+| **`npm audit`** | `mcp/` (`--omit=dev --audit-level=high`) | same | `mcp/.github/workflows/npm-audit.yml` — [mcp PR #4](https://github.com/teta-pi/mcp/pull/4) |
+| **secret scan (`gitleaks`)** | `landing/` whole repo, full history | same | `landing/.github/workflows/secret-scan.yml` — [landing PR #6](https://github.com/teta-pi/landing/pull/6); guards A7. No CodeQL for `landing` — static HTML/JS, not enough app code to warrant it |
 
-Design constraints:
+Design constraints (all held in the implementation):
 - Runs **only on GitHub-hosted runners** — the maxed prod droplet
   (server-capacity) is never touched.
-- One workflow file per concern under `.github/workflows/`; matrix over the two
-  CodeQL languages.
-- **Non-blocking to start** (report to Security tab), then tighten to
-  **fail-the-PR on new `high`/`critical`** once the baseline is clean, so the
-  backlog (§5) doesn't wedge merges on day one.
-- Findings feed back into §5 of this doc (the tracking table is the single source
-  of truth).
+- One workflow file per concern under each repo's `.github/workflows/`.
+- **Non-blocking to start**: `push`-to-`main` + weekly schedule only, no
+  `pull_request` trigger, no required status checks — findings surface in the
+  Security tab / Actions logs without wedging any merge. Tighten to
+  **fail-the-PR on new `high`/`critical`** once the §5 backlog is clean (future
+  15.x task).
+- `gitleaks` is invoked as the raw open-source CLI binary (downloaded from
+  GitHub Releases), not the `gitleaks-action` wrapper — that wrapper requires a
+  paid license for org-owned repos (`teta-pi`), the CLI itself doesn't.
+- `web`/`mcp` have no committed lockfile, so `npm audit` runs after a fresh
+  `npm install`; `api` has no `requirements.txt`/lockfile either, so
+  `pip-audit` audits the environment after `pip install .`. Revisit if a
+  lockfile is later committed (more deterministic audits).
+- Findings feed back into §5 of this doc (the tracking table is the single
+  source of truth).
 
 ### 6.2 Read-only authorized re-audit cadence
 

@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-19 · 15.2 security · CI security scanning landed (4 repos)
+Done: implemented the 15.1-designed recurring CI loop — CodeQL(python) +
+pip-audit + bandit in `api` ([PR #9](https://github.com/teta-pi/api/pull/9));
+CodeQL(javascript-typescript) + npm audit in `web`
+([PR #9](https://github.com/teta-pi/web/pull/9)) and `mcp`
+([PR #4](https://github.com/teta-pi/mcp/pull/4)); gitleaks secret-scan (raw
+CLI binary, not the org-licensed Action wrapper) in `landing`
+([PR #6](https://github.com/teta-pi/landing/pull/6)).
+Changed: new `.github/workflows/*` in each of the 4 code repos; `docs/security.md`
+§6 rewritten from "design, deferred" to "landed" with links; `docs/roadmap.md`
+15.2 marked done.
+Risk: `web`/`mcp` have no committed lockfile so `npm audit` runs post-`npm
+install` (less deterministic); `api` has no `requirements.txt` so `pip-audit`
+audits the post-`pip install .` environment. All 4 workflows are non-blocking
+(push-to-main + weekly schedule only, no PR trigger, no required checks) —
+findings won't wedge merges but also won't get eyes until someone checks the
+Security tab or Actions logs.
+Next: once the §5 backlog is clean, add `pull_request` triggers + required
+checks (tighten per §6.1 design note); consider committing lockfiles for
+deterministic dependency audits.
+
 ## 2026-07-18 · 14.4 camera · boot failure diagnosed — Expo Go limitation, deps fixed; owner builds dev-client
 Done: pi-cam PR #2 merged. `npm install`/Metro/`tsc`/full iOS prod bundle all
 clean — the app "not launching" (QA #19) is NOT this repo's code: reanimated 4
