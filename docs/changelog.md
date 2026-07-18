@@ -6,6 +6,30 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-18 · manager · 6.2 GATE RE-RUN — GREEN (3 caveats); /search page live after a deploy-manifest fix
+Done: merged 1.18c (`/search` page, web PR #7) — prod 404'd it despite a green
+deploy because `deploy.yml` **overwrites `app-paths-manifest.json` with a
+hardcoded route list**; added `/search/page` (web PR #8) — page live (200).
+Then ran the FULL 6.2 gate authenticated (owner's test key from the local
+key file): create registry-free 201 → block 201 → media upload 200 → search
+finds it via API + `/search` page + real MCP `teta_search` session (correct
+UUID, working proof link) → `/e/[slug]` 200 with the block → cleanup PATCH
+200, entity hidden. **Verdict: 🟢 GREEN — GTM Phase 0 unblocked.** Caveats
+filed, non-blocking: (i) block media serialization: empty `media_url`, null
+`content_hash` → 1.20(a); (ii) NEW **2.7** — MCP `teta_resolve_intent`
+ignores `verified_only:false` (raw API returns the entity, tool returns
+empty); (iii) `proof_url: null` in keyword fallback → 1.21 (already filed).
+Also note: media upload requires an undocumented `type` form field (422
+without) — minor, noted for docs/api.md.
+Changed: web `.github/workflows/deploy.yml` (PR #8), `docs/roadmap.md`
+(6.2 → GREEN, new 2.7), this entry.
+Risk: deploy-manifest hardcoding remains a footgun — every new top-level
+route needs a manifest line; consider generating it at build time (small
+devops follow-up, not filed as a numbered task yet).
+Next: owner decides GTM Phase 0 go (registry submissions are his manual
+step) and whether caveats (i)–(iii) ship first; wave-2 boots: 1.20+1.21
+(api), 1.10 badge (api), 2.7 (mcp), 3.11 after 3.9 lands (web).
+
 ## 2026-07-18 · 15.1 · security threat model + finding triage + 15.2 loop design
 Done: wrote `docs/security.md` — the canonical security reference. Threat model:
 9 ranked assets (entity data, `pk_live_` keys, admin routes, append-only tables,
