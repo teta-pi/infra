@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-18 · 14.4 camera · boot failure diagnosed — Expo Go limitation, deps fixed; owner builds dev-client
+Done: pi-cam PR #2 merged. `npm install`/Metro/`tsc`/full iOS prod bundle all
+clean — the app "not launching" (QA #19) is NOT this repo's code: reanimated 4
++ worklets require the New Architecture, which the Expo Go client crashes on
+at startup (known upstream reanimated#8235; `app.json` already enables New
+Arch correctly). Fixed the two real version drifts expo-doctor found (expo
+54.0.36, react-native-view-shot 4.0.3 → 18/18 checks). README now documents
+why Expo Go can't run this app + both dev-client paths (local `expo run:ios`
+with full Xcode, or cloud `eas build --profile development` with just an Expo
+account). Repo-routing audit: all active session clones push to the correct
+repos (3.9→web, 10.6→landing, 14.4→pi-cam); the "platform" label owners see
+above chats is the project-folder name, and `teta-pi/platform` is archived
+(read-only) so a stray push there fails loudly.
+Changed: pi-cam `package.json`/lockfile/README (PR #2); roadmap 14.4 → 🔄
+owner-step.
+Risk: none to app behavior — no functional code touched. Device boot still
+UNVERIFIED (no simulator/Xcode in the session env).
+Next: **owner:** `eas build --profile development --platform ios` → confirm
+boot on a real device → re-run 14.2 (full capture→upload→proof QA). Then
+14.3 (TestFlight needs the Apple Developer account; Android APK is free).
+
 ## 2026-07-18 · manager · 6.2 GATE RE-RUN — GREEN (3 caveats); /search page live after a deploy-manifest fix
 Done: merged 1.18c (`/search` page, web PR #7) — prod 404'd it despite a green
 deploy because `deploy.yml` **overwrites `app-paths-manifest.json` with a
