@@ -6,6 +6,36 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-19 · manager · 3.10 shipped; session cleanup before /clear
+Done: **3.10** (web PR #12) — verifier UX scoped to entity type (persona sees
+Email+Domain only, business keeps the full set incl. Legal Entity link and
+Registry Match), Registry Match now shows a resuming/processing state instead
+of silently flipping, homepage search cards hide business-only fields for
+non-business entities. Deployed, live-verified for the search-card fix (#14)
+against real prod data across 4 entity types; #3/#6/#13 verified via code
+review only (no test-account credentials in session to click through
+`/profile` live) — flagged for a manual pass.
+Cleanup: merged two docs-only stragglers found while auditing open PRs across
+all repos before a context clear — `pi-cam#1` (the original 14.2 QA report,
+opened 2026-07-14, never actually merged despite being referenced as done)
+and closed `infra#26` (a duplicate 15.2 docs PR, superseded by the wave-2
+batch that had already merged the same content against a newer main).
+Changed: web `profile/page.tsx`, `page.tsx`; roadmap 3.10 row.
+Risk: none new. 3.10's #3/#6/#13 need a manual browser pass with real
+persona/business credentials to fully close (code-review-only verification).
+Next: **3.12** (app chrome: header, banner, share-link, favicon, camera-step
+stub) → **3.13** (profile redesign, large, design-first) is the rest of the
+web QA chain. **12.5c** (verify.tetapi.dev nginx + DNS checker) is
+prod-affecting devops — do not auto-boot, needs explicit owner go-ahead.
+**14.2** camera device QA and **14.3** release are waiting on the owner
+(dev-client build + Apple Developer account respectively). Two open owner
+decisions still outstanding: `verified_only` default in resolve-intent
+(trust-first vs show-L0), and whether to act on the GTM Phase 0
+unblocked-since-6.2-GREEN status (registry submissions are owner-executed,
+see `docs/gtm.md`).
+
+---
+
 ## 2026-07-19 · 1 backend · 12.5b tag-ping + wk-generator
 Done: `POST /v1/tag-ping` (anonymous beacon for `tag.js`, always 204, never
 discloses entity existence, in-memory per-IP rate limit same pattern as the
