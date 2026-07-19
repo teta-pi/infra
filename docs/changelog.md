@@ -6,6 +6,29 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-19 · 3 frontend · 3.11 entity state isolation
+Done: fixed QA #18 (critical) — creating a second entity under the same account,
+in the same browser session, showed the previous entity's name/description/blocks
+and a false "Verified in registry" badge for a few moments (or indefinitely, for
+fields the new entity left empty). Root cause: `useProfileStore` (zustand) is a
+module-level singleton, not scoped to a `businessId` — it was never reset when
+`store.businessId` changed to a new entity, and `companyName`/`description` were
+only overwritten `if (biz.x)` was truthy, so an empty field on the new entity left
+the old entity's value in place. Verified isolation is clean at the API layer first
+(two entities created via `pk_live_` key, `GET /businesses/{id}` on each — no
+cross-contamination server-side) before touching frontend code, confirming this
+was 100% a frontend store bug, not backend data leakage.
+Changed: `web/src/app/profile/page.tsx` — the entity-load effect now resets
+`companyName`/`description`/`blocks`/`nameStatus`/`registryData` to blank the
+moment `businessId` changes (before the fetch, not after), and assigns the
+fetched `name`/`description` unconditionally instead of only when truthy;
+`EditView` is now keyed on `businessId` so `VerificationSection`/`PublishSection`/
+`BlockCard`'s own local `useState` (registry status, email/domain verify progress,
+publish state) also resets on entity switch instead of leaking.
+Risk: none identified — reset-then-fetch only adds a blank frame while the new
+entity's data loads, which is strictly more correct than showing stale data.
+Next: none from this task.
+
 ## 2026-07-18 · wave 2 · 3.9, 15.2, 1.10 (+hotfix), 12.5a, 10.6 — six PRs merged
 Done: **3.9** (web PR #10) — centralized 401 handling in `lib/api.ts`, `/profile`
 now gates its whole edit surface behind a signed-out panel instead of leaving
