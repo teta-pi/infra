@@ -452,3 +452,30 @@ position (5.3 🔴 "deferred: needs 9.1 server upgrade"). Even post-resize, run
 the cutover deploys **sequentially** (§6 step 7), not in parallel, and inside a
 declared merge freeze. This plan is the input to 5.3; it does not authorize any
 server or deploy action itself.
+
+## 2026-07-19 — 12.5b `/v1/tag-ping` storage shape: Redis, not a new table
+
+`docs/universal-tag.md` flagged the 12.5b storage shape as an owner call —
+file-log (a) vs DB table (b), same choice deferred on 2.4. `/v1/tag-ping` is a
+new **anonymous, unauthenticated, sustained-write** endpoint (one hit per page
+load on every installed site) hitting a droplet already at capacity
+(`server-capacity`), so a per-hit Postgres row (even one) was ruled out —
+same reasoning as the 1.10 badge endpoint's Redis impression counter.
+
+**Decision:** neither (a) nor (b) as originally framed — a **bounded Redis
+sorted set** per entity (`tag_pages:{business_id}`, member = page_url [+
+title], score = last-seen timestamp), trimmed to the most recent 200 members
+via `ZREMRANGEBYRANK` on every write, plus a plain `INCR` counter
+(`tag_impressions:{business_id}`) for total hits. No new Alembic migration, no
+new table. Same in-memory per-IP rate limiter pattern as `routes/badge.py`
+(Redis migration for multi-worker correctness stays tracked as S-10,
+unchanged by this).
+
+Trade-off: the indexed-pages list is **not durable** — a Redis flush loses it,
+and it's capped at 200 pages/entity (oldest evicted first). Acceptable because
+`tag-ping` is a best-effort discovery signal (like the badge counter), not a
+source of truth; nothing else in the system reads or depends on it yet. If
+that changes (e.g. the list needs to survive a Redis restart or exceed 200
+entries), revisit as a real backlog item — don't silently grow the cap.
+
+Implemented in `teta-pi/api` PR #12 (`app/api/routes/tag.py`).

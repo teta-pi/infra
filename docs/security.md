@@ -64,7 +64,7 @@ component. Untrusted input must be validated/authorized at every crossing.
 | **B2** | browser ↔ API | anonymous/JWT user → CRUD | IDOR on `/businesses/{id}` & `/blocks`, session non-invalidation (A9), CSRF-style state, XSS via block content rendered in `/e/[slug]` | `get_current_user`, owner checks, Next.js escaping |
 | **B3** | device ↔ `/media/device-upload` | camera holding a `pk_live_` key → filesystem write + media row | key theft = write as owner, path/content-type abuse on upload, unbounded file size, missing OTS anchoring | `routes/media.py` (`_save_local` sanitizes), api_key auth |
 | **B4** | WP plugin ↔ API | site admin's `pk_live_` key → entity read + domain verify | key stored in WP options (site DB) — leak surface outside our control; over-scoped key | public API + `pk_live_`; key is bearer-equivalent (A2) |
-| **B5** | tag.js ↔ `/v1/tag-ping` (**new**, `docs/universal-tag.md`) | *fully anonymous, unauthenticated, sustained-write* beacon, one hit per page load on every installed site | spoofed `entity_id` inflating another entity's indexed-pages list, volumetric write abuse (DoS-by-cost), reflected/stored data in `page_url`/`page_title`/`referrer` | **not yet built** — see §4 surface rules; must rate-limit + cheap append + validate/escape reflected fields |
+| **B5** | tag.js ↔ `/v1/tag-ping` (`docs/universal-tag.md`) | *fully anonymous, unauthenticated, sustained-write* beacon, one hit per page load on every installed site | spoofed `entity_id` inflating another entity's indexed-pages list, volumetric write abuse (DoS-by-cost), reflected/stored data in `page_url`/`page_title`/`referrer` | ✅ **built 2026-07-19, api PR #12** — in-memory IP rate limit (same pattern as badge, S-10 tracks Redis migration), bounded Redis sorted set (200-page cap, `docs/decisions.md`) instead of a DB row, response always `204` regardless of `entity_id` validity (no existence oracle). Entity-id spoofing (inflating another entity's page list) is **not** prevented — anonymous by design, accepted risk, no auth possible without breaking the zero-friction install; capped list size bounds the blast radius. `page_title`/`referrer`/`page_url` length-capped in the request schema (300/2048/2048 chars); only `page_url` (+ `page_title`) is persisted (in the Redis sorted-set member) — `referrer` is validated but never stored. Persisted fields are not escaped server-side — rendering safety still depends on frontend escaping wherever the indexed-pages list is displayed (see injection checklist below, unchanged) |
 
 ---
 
@@ -137,9 +137,9 @@ Standing checklist re-run each audit cycle. `✅ = verified good`, `⚠️ = kno
 - ⚠️ Rate limiters are **in-memory**, correct only under `uvicorn --workers 1`
   (architecture note) — a scaling hazard, and prod droplet is already maxed
   (memory: server-capacity). Move to Redis before multi-worker.
-- ⚠️ **`/v1/tag-ping` (B5)** — new anonymous sustained-write endpoint; needs
-  rate-limit + cheap append (counter, not a heavy row per hit) *before* launch.
-  Same design concern as the 1.10 badge endpoint.
+- ✅ **`/v1/tag-ping` (B5)** — anonymous sustained-write endpoint; in-memory
+  rate limit + bounded Redis sorted set (200-page cap), no per-hit DB row —
+  same design as the 1.10 badge endpoint. Still single-worker-only (S-10).
 - ✅ `/claim` rate-limited 5/min/IP.
 - ☐ `resolve-intent` / `search`: confirm per-IP/key limits on expensive ranking.
 
@@ -172,7 +172,7 @@ items are tracked here; functional-only bugs stay in `known-issues.md`.
 | S-7 | `PATCH /businesses/{id}` keeps `agent_endpoint_verified=true` after endpoint change | 🟠 | 6.1 #6 | 1.5/1.x | OPEN |
 | S-8 | `GET /businesses/{id}/blocks` leaks private blocks | 🟡 | known-issues | 1.x (block read authz) | OPEN |
 | S-9 | `/verify/domain/check` mild SSRF (boolean fetch to caller-influenced host) | 🟡 | 6.1 #7 sibling | api PR #8 (1.21 bundle) | ✅ CLOSED 2026-07-18 — `domain_ownership._check_file` now resolves the host and rejects private/loopback/link-local/reserved IPs (incl. 169.254.169.254) + `follow_redirects=False`; prod-verified rejecting a private-resolving domain. DNS-TXT path was already safe (DoH only) |
-| S-10 | In-memory rate limiters → single-worker-only; `/v1/tag-ping` needs limits before launch | 🟠 | architecture / 12.5b | devops (Redis) + 12.5b | OPEN (design) |
+| S-10 | In-memory rate limiters → single-worker-only; `/v1/tag-ping` now has a limiter (api PR #12) but it's the same in-memory pattern, still not multi-worker-safe | 🟠 | architecture / 12.5b | devops (Redis) | OPEN (design) — rate limiting exists, Redis migration still pending |
 
 **Closed-item provenance:** S-1 and S-2 both landed in
 [`teta-pi/api` PR #3](https://github.com/teta-pi/api/pull/3) —
