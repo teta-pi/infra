@@ -6,6 +6,36 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-19 · manager · QA report session 2 (10 items, #24–#33) decomposed
+Done: decomposed the owner's second QA pass (`TETAPI_QA_Bug_Report_2026-07-19_session2.docx`,
+continues numbering from session 1) into roadmap tasks — full mapping table
+in `docs/known-issues.md`. #24 folded into the existing **3.12** (app chrome)
+scope. #26/#27/#28/#29/#30/#31 folded into **3.13** (profile redesign),
+substantially expanding its spec: blocks-first layout, verifiers+Registry
+Match+Document Upload+Legal Entity+Publish&Privacy all collapse into one
+compact icon-based menu, explicit Edit/Save toggle, Connect Camera placed
+next to blocks. New **3.14** (🔴 top priority) for #25 — flagged explicitly
+as NOT necessarily the same bug as the already-fixed #18/3.11: that fix was
+scoped to switching between two *existing* entities, while this report is
+about artifacts appearing on a user's *first* business creation, no prior
+entity to switch from. Don't assume 3.11's fix covers it; investigate the
+claim-flow's draft/preview state as a distinct possible leak path. New **6.3**
+(manager-executed, not a dev session) for #32 — seed/test entities polluting
+real search, needs an investigate-then-hide pass, not blanket deletion (some
+test entities like `Test Reporter`/`tetakta` are reused across QA sessions).
+New **14.5** for #33 — new Pi CAM build + camera sync reachable from both
+onboarding and the block-creation step, blocked on the owner confirming
+14.4's dev-client boots on a real device.
+Changed: `docs/roadmap.md` (3.12/3.13 extended, new 3.14/6.3/14.5),
+`docs/known-issues.md` (session-2 mapping table), this entry.
+Risk: none — docs only.
+Next: **3.14 is the priority** — it's a trust-critical bug shape (fake
+verification status) and needs root-cause investigation before 3.13's larger
+redesign builds on top of the same file. 3.12/3.13 should incorporate the
+session-2 additions when booted (they haven't started yet as of this entry).
+
+---
+
 ## 2026-07-19 · manager · 3.10 shipped; session cleanup before /clear
 Done: **3.10** (web PR #12) — verifier UX scoped to entity type (persona sees
 Email+Domain only, business keeps the full set incl. Legal Entity link and
