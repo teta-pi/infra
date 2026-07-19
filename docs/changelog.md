@@ -6,6 +6,38 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-19 · 1 backend · 12.5b tag-ping + wk-generator
+Done: `POST /v1/tag-ping` (anonymous beacon for `tag.js`, always 204, never
+discloses entity existence, in-memory per-IP rate limit same pattern as the
+1.10 badge endpoint) + `GET /wk/{entity_id}/agent.json`\|`agent-card.json`\|
+`llms.txt` (public+published entities only, 404 otherwise, 5-min cache) —
+Universal Tag Part A/B backend (`docs/universal-tag.md`, security B5). Storage
+shape decided: bounded Redis sorted set per entity (`tag_pages:{business_id}`,
+200-page cap via `ZREMRANGEBYRANK`) + a plain `INCR` counter, not a new
+Postgres table — see `docs/decisions.md` 2026-07-19 for the reasoning
+(droplet already at capacity, per-hit DB row ruled out, same call as 1.10).
+Changed: `teta-pi/api` — new `app/api/routes/tag.py`, registered in
+`app/main.py` without the `/api/v1` prefix (same as `badge.router`, since
+`docs/universal-tag.md` spells the beacon URL as `api.tetapi.dev/v1/tag-ping`,
+not `/api/v1/tag-ping`); `docs/api.md` (api repo) documents the new routes;
+this repo's `docs/universal-tag.md`, `docs/security.md` (B5 built, S-10
+refreshed), `docs/roadmap.md`, `docs/decisions.md` updated. PR:
+`teta-pi/api#12`.
+Risk: entity-id spoofing on `/v1/tag-ping` (inflating another entity's
+indexed-pages list) is not prevented — anonymous by design, can't gate without
+breaking the zero-friction install; blast radius bounded by the 200-page cap.
+The indexed-pages list is not durable (lives only in Redis, capped) — fine for
+a best-effort discovery signal, but don't build anything load-bearing on it
+without revisiting. `/wk/*` routes exist but aren't reachable from a real
+domain yet — needs 12.5c's `verify.tetapi.dev` nginx vhost + redirect rule.
+Rate limiter is the same single-worker-only in-memory pattern as elsewhere
+(S-10, unchanged, still open).
+Next: 12.5c (`verify.tetapi.dev` subdomain + nginx + scheduled DNS-record
+checker, devops/prod-affecting) can now build against real `/wk/*` routes;
+12.5d (per-host install docs + landing section) after that. JSON-LD from
+`agent.json` should get a Google Rich Results Test pass once a real entity is
+wired end-to-end.
+
 ## 2026-07-19 · 3 frontend · 3.11 entity state isolation
 Done: fixed QA #18 (critical) — creating a second entity under the same account,
 in the same browser session, showed the previous entity's name/description/blocks

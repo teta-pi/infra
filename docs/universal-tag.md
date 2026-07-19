@@ -85,7 +85,7 @@ Multi-repo — one session each, in dependency order:
 | Phase | Task | Repo / owns | Notes |
 |---|---|---|---|
 | 12.5a | `tag.js` static file + `/generate` snippet page | `teta-pi/landing` | pure static; JSON-LD needs a public entity-profile fetch (existing public API) |
-| 12.5b | `POST /v1/tag-ping` + dynamic wk-file generator (`/wk/{entity_id}/agent.json`, `agent-card.json`, `llms.txt`) | `teta-pi/api` | 🟡 **droplet-load flag**: tag-ping is a new public, unauthenticated, sustained-write endpoint (one hit per page load on every installed site). Needs rate-limiting + a cheap write (counter/append, not a heavy row per hit) — same design concern as the 1.10 badge endpoint. Storage shape = owner decision (file-log vs DB table), same (a)/(b) choice as 2.4 |
+| 12.5b | `POST /v1/tag-ping` + dynamic wk-file generator (`/wk/{entity_id}/agent.json`, `agent-card.json`, `llms.txt`) | `teta-pi/api` | ✅ **done 2026-07-19, api PR #12**. Storage shape decided: bounded Redis sorted set per entity (200-page cap), not a new Postgres table — see `docs/decisions.md` 2026-07-19. Rate-limited (in-memory, same pattern as 1.10 badge; S-10 tracks the Redis-migration-for-multi-worker follow-up, unchanged). Not yet live-reachable at `verify.tetapi.dev` — needs 12.5c's nginx vhost |
 | 12.5c | `verify.tetapi.dev` subdomain + nginx routes + scheduled DNS-record checker | server/devops | **prod-affecting** (new nginx vhost + cert + a periodic job); DNS checker can reuse the WP plugin's domain-check pattern |
 | 12.5d | per-host install docs + landing "Universal Tag" section | `teta-pi/landing` | folds into/after 10.5's P2 section |
 
