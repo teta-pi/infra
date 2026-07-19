@@ -18,7 +18,7 @@ Continues the numbering from the session-1 report below. 2 Critical / 2 High /
 | 29 | 🟠 | blocks (content) should be the primary object on the page, not verifiers | **3.13** |
 | 30 | 🟡 | "Connect Camera" should live next to blocks, not in the general verify menu | **3.13** (+ ties to **14.5**) |
 | 31 | 🟢 | Publish & Privacy should fold into the compact icon menu too | **3.13** |
-| 32 | 🟡 | seed/test entities ("Меридіан", "Haiku", "Ant", "Claude Code", "Ant Norvind", "Vega", "Foundry") pollute real search | **6.3** — manager-executed cleanup, not a dev session |
+| 32 | 🔴 | ~~seed/test entities pollute real search~~ → **NOT real data**, manager confirmed via direct psql: 0 rows in `businesses` for any of those names — frontend fabricates fake entity cards | **3.14** (merged — same bug family as #25/#18, not a cleanup task) |
 | 33 | 🔴 | Pi CAM needs a new build + camera sync reachable from BOTH onboarding AND the block-creation step | **14.5** — blocked on owner confirming 14.4's dev-client boots on a real device |
 
 ## Owner QA Bug Report — 2026-07-17 (23 items, decomposed 2026-07-18)

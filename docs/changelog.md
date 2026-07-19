@@ -6,6 +6,30 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-19 · manager · 6.3 investigated — reclassified as part of 3.14, not real data to clean up
+Done: investigated QA #32 (phantom seed entities polluting search: "Меридіан",
+"Haiku", "Ant", "Claude Code", "Ant Norvind", "Vega", "Foundry") before
+booting a cleanup session. `GET /search` for each name returns zero results;
+a direct read-only `psql` query against prod (`SELECT ... FROM businesses
+WHERE name ILIKE ANY(...)`) confirms **0 rows** for all of them — none exist
+in the database, published or not. Only 5 real entities exist on prod right
+now (`bob`, `tetakta`, `shosho`, `Test Reporter`, `HELLFIRE Solutions`).
+Reclassified: this is the same bug family as #18/#25 (3.11/3.14) — the
+frontend is fabricating entire fake entity names client-side (several read
+like AI-model codenames, same garbled texture as #18's "Bronnows Sonnet
+Sonnet Sonnet"), not real leftover seed rows. Merged 6.3's scope into 3.14
+rather than booting a separate no-op cleanup session.
+Changed: `docs/roadmap.md` (6.3 reclassified, 3.14 scope widened to include
+search-result rendering, not just `/profile`), `docs/known-issues.md` (#32
+mapping updated).
+Risk: none — read-only investigation, no code touched.
+Next: 3.14 is now the single highest-priority frontend investigation —
+covers #18-family artifacts on both `/profile` (first creation) and search
+results. Should be booted before 3.12/3.13 since they touch overlapping
+`profile/page.tsx` state.
+
+---
+
 ## 2026-07-19 · manager · QA report session 2 (10 items, #24–#33) decomposed
 Done: decomposed the owner's second QA pass (`TETAPI_QA_Bug_Report_2026-07-19_session2.docx`,
 continues numbering from session 1) into roadmap tasks — full mapping table
