@@ -592,3 +592,22 @@ Status: OPEN (needs licence key).
 - Append-only triggers verified live (DELETE/illegal UPDATE rejected).
 - Admin endpoints gated by `require_admin` and audited.
 - Registry search stable (WumWam 5/5, ranking by similarity correct).
+
+### 🔴 `/profile` leaked one entity's state onto another, same account/session
+Found 2026-07-17 (QA #18). Creating a second entity under the same account —
+without a full re-login — immediately showed the *previous* entity's name,
+description, and blocks on the new entity's edit page, plus a false "Verified in
+registry" badge. `web/src/stores/useProfileStore.ts` is a module-level zustand
+singleton with no `businessId` scoping; `web/src/app/profile/page.tsx`'s
+entity-load effect (~line 202) never reset it when `store.businessId` changed,
+and only overwrote `companyName`/`description` `if (biz.x)` was truthy — an
+empty field on the new entity silently kept the old entity's value.
+`VerificationSection`/`PublishSection`/`BlockCard` (same file) compounded it with
+their own `useState` (registry/email/domain verify progress, publish state) that
+also had no reset trigger on entity switch. Verified server-side isolation was
+clean first (two entities created via API key, fetched independently, no
+cross-contamination) before concluding this was frontend-only.
+Status: **FIXED 2026-07-19** (roadmap 3.11, `teta-pi/web` PR #11) — entity-load
+effect now resets the store's entity-scoped fields before fetching and assigns
+fetched values unconditionally; `EditView` is keyed on `businessId` so the child
+components' local state resets too.
