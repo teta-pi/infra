@@ -3,6 +3,24 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## Owner QA Bug Report — Session 2, 2026-07-19 (10 items, #24–#33, decomposed same day)
+
+Continues the numbering from the session-1 report below. 2 Critical / 2 High /
+5 Medium / 1 Low; 10 APP, 0 LANDING, 1 CAMERA.
+
+| QA# | Sev | Item | Where it went |
+|---|---|---|---|
+| 24 | 🟡 | `/profile` has no fixed iOS-style header | **3.12** (extends the existing app-chrome scope) |
+| 25 | 🔴 | fake "Verified in registry" + garbage text/wrong registry number appear on FIRST business creation, no user action | **3.14** — ⚠️ **do not assume this is 3.11 re-occurring; 3.11 was scoped to switching between two EXISTING entities, this is on first creation** — investigate as a possibly-uncovered code path (claim-flow draft/preview state leaking into the persisted store), don't just re-apply the same fix blind |
+| 26 | 🟡 | company description has no visible Edit button | **3.13** |
+| 27 | 🟡 | top button defaults to "Save", should default to "Edit" | **3.13** |
+| 28 | 🟠 | verifiers take up too much space — need a compact icon menu | **3.13** |
+| 29 | 🟠 | blocks (content) should be the primary object on the page, not verifiers | **3.13** |
+| 30 | 🟡 | "Connect Camera" should live next to blocks, not in the general verify menu | **3.13** (+ ties to **14.5**) |
+| 31 | 🟢 | Publish & Privacy should fold into the compact icon menu too | **3.13** |
+| 32 | 🟡 | seed/test entities ("Меридіан", "Haiku", "Ant", "Claude Code", "Ant Norvind", "Vega", "Foundry") pollute real search | **6.3** — manager-executed cleanup, not a dev session |
+| 33 | 🔴 | Pi CAM needs a new build + camera sync reachable from BOTH onboarding AND the block-creation step | **14.5** — blocked on owner confirming 14.4's dev-client boots on a real device |
+
 ## Owner QA Bug Report — 2026-07-17 (23 items, decomposed 2026-07-18)
 
 Full report: owner's `TETAPI_QA_Bug_Report_2026-07-17.docx` (5 Critical / 5
