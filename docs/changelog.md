@@ -6,6 +6,27 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-20 · 3 frontend · 3.14 first-creation artifacts (QA #25 + #32)
+Done: fixed two 🔴 trust-critical bugs confirmed by manager's psql investigation (6.3).
+**QA #25 — false "✓ Verified in registry" on first business creation:** removed
+`useRegistryCheck` from `profile/page.tsx`; the hook called
+`searchApi.searchRegistry(name)` on every name change and took the first result from
+any matching external registry company — setting `nameStatus="verified"` + populating
+`registryData` with that company's authority/registryId. Added `registryStatus:
+string | null` to `useProfileStore`; entity-load `useEffect` now reads
+`biz.registry_status` + (when "verified") `biz.registry_data` from `businessApi.get()`.
+EditView/VisitorView/AgentView all derive trust state from `store.registryStatus`
+(DB truth only).
+**QA #32 — phantom seed entities (Vega, Foundry, Meridian…) in home search:**
+`pool = apiResults ?? SEED_RESULTS` fell back to 7 hardcoded dev-mode entities from
+`seedData.ts` when API returned 0 or failed. Fixed: `setApiResults([])` on empty/fail;
+`pool = submitted ? (apiResults ?? []) : SEED_RESULTS` — seed data only in pre-search
+hero, never for submitted queries.
+Changed: `src/app/page.tsx`, `src/app/profile/page.tsx`, `src/stores/useProfileStore.ts`.
+Risk: VisitorView/AgentView trust level loaded from DB on page-open; stays at load-time
+value until next reload after "Verify now" — same limitation as before, not a regression.
+Next: 3.12 (app chrome), 3.13 (profile redesign).
+
 ## 2026-07-19 · manager · 6.3 investigated — reclassified as part of 3.14, not real data to clean up
 Done: investigated QA #32 (phantom seed entities polluting search: "Меридіан",
 "Haiku", "Ant", "Claude Code", "Ant Norvind", "Vega", "Foundry") before

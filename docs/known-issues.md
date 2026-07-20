@@ -11,14 +11,14 @@ Continues the numbering from the session-1 report below. 2 Critical / 2 High /
 | QA# | Sev | Item | Where it went |
 |---|---|---|---|
 | 24 | 🟡 | `/profile` has no fixed iOS-style header | **3.12** (extends the existing app-chrome scope) |
-| 25 | 🔴 | fake "Verified in registry" + garbage text/wrong registry number appear on FIRST business creation, no user action | **3.14** — ⚠️ **do not assume this is 3.11 re-occurring; 3.11 was scoped to switching between two EXISTING entities, this is on first creation** — investigate as a possibly-uncovered code path (claim-flow draft/preview state leaking into the persisted store), don't just re-apply the same fix blind |
+| 25 | 🔴 | fake "Verified in registry" + garbage text/wrong registry number appear on FIRST business creation, no user action | ✅ **FIXED 2026-07-20** (`teta-pi/web` PR #13 · **3.14**): `useRegistryCheck` hit external registry on every name change and took the first result from any matching company — populating `registryData` with foreign authority/registryId and setting `nameStatus="verified"`. Removed hook; profile page loads `business.registry_status`+`registry_data` from DB via `businessApi.get()`; all trust display driven from new `store.registryStatus`. |
 | 26 | 🟡 | company description has no visible Edit button | **3.13** |
 | 27 | 🟡 | top button defaults to "Save", should default to "Edit" | **3.13** |
 | 28 | 🟠 | verifiers take up too much space — need a compact icon menu | **3.13** |
 | 29 | 🟠 | blocks (content) should be the primary object on the page, not verifiers | **3.13** |
 | 30 | 🟡 | "Connect Camera" should live next to blocks, not in the general verify menu | **3.13** (+ ties to **14.5**) |
 | 31 | 🟢 | Publish & Privacy should fold into the compact icon menu too | **3.13** |
-| 32 | 🔴 | ~~seed/test entities pollute real search~~ → **NOT real data**, manager confirmed via direct psql: 0 rows in `businesses` for any of those names — frontend fabricates fake entity cards | **3.14** (merged — same bug family as #25/#18, not a cleanup task) |
+| 32 | 🔴 | ~~seed/test entities pollute real search~~ → **NOT real data**, manager confirmed via direct psql: 0 rows in `businesses` for any of those names — frontend fabricates fake entity cards | ✅ **FIXED 2026-07-20** (`teta-pi/web` PR #13 · **3.14**): `pool = apiResults ?? SEED_RESULTS` fell back to 7 dev-mode seed entities when search returned 0 or failed. Fixed: `setApiResults([])` on empty/fail; `pool = submitted ? (apiResults ?? []) : SEED_RESULTS`. |
 | 33 | 🔴 | Pi CAM needs a new build + camera sync reachable from BOTH onboarding AND the block-creation step | **14.5** — blocked on owner confirming 14.4's dev-client boots on a real device |
 
 ## Owner QA Bug Report — 2026-07-17 (23 items, decomposed 2026-07-18)
