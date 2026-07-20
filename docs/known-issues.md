@@ -3,6 +3,30 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## Infra incident — 2026-07-20, deploy broken by a droplet user-account reset
+
+**🔴 found + fixed same session, manager-executed, no dev session needed.**
+While merging/deploying 3.14's web PR #13, the deploy failed with `Permission
+denied (publickey)` on the rsync-as-root step. Root cause: `bob` (UID 1000)
+and `hellfire` (UID 1001) were both created at the **exact same second**
+(2026-07-19 17:39:01, per `auth.log`) — evidence the droplet's user accounts
+were reset/reprovisioned (DigitalOcean rebuild or similar), while `/opt/tetapi/*`
+data on the persistent disk survived from before the reset. Two side effects:
+(1) `/opt/tetapi/api` and `/opt/tetapi/web` appeared owned by the newly-created
+`hellfire` user — not because HELLFIRE's processes touched them, but because
+the pre-reset owner UID (1001) got reassigned to the new `hellfire` account by
+coincidence; (2) a `00-hellfire-hardening.conf` sshd drop-in set `PermitRootLogin
+no`, overriding the base `sshd_config`'s `PermitRootLogin yes` — likely
+provisioning-script debris from the same event, not a deliberate HELLFIRE
+security decision. Fixed: `chown -R root:root /opt/tetapi/api /opt/tetapi/web`
++ removed `00-hellfire-hardening.conf` + `sshd` reload (not restart, to avoid
+dropping live sessions). Confirmed HELLFIRE's own services (`btc-robot`,
+`btc-funding`, `btc-telegram`) unaffected throughout. Re-ran the failed deploy
+— green, prod verified (`/profile`, `/`, `/search` all 200). **Watch for**: if
+the droplet gets reset again, this exact failure mode (root SSH denied,
+`/opt/tetapi/*` ownership drifting to whatever UID 1001 becomes) will recur —
+worth a periodic check rather than assuming it's permanent.
+
 ## Owner QA Bug Report — Session 2, 2026-07-19 (10 items, #24–#33, decomposed same day)
 
 Continues the numbering from the session-1 report below. 2 Critical / 2 High /
@@ -11,14 +35,14 @@ Continues the numbering from the session-1 report below. 2 Critical / 2 High /
 | QA# | Sev | Item | Where it went |
 |---|---|---|---|
 | 24 | 🟡 | `/profile` has no fixed iOS-style header | **3.12** (extends the existing app-chrome scope) |
-| 25 | 🔴 | fake "Verified in registry" + garbage text/wrong registry number appear on FIRST business creation, no user action | **3.14** — ⚠️ **do not assume this is 3.11 re-occurring; 3.11 was scoped to switching between two EXISTING entities, this is on first creation** — investigate as a possibly-uncovered code path (claim-flow draft/preview state leaking into the persisted store), don't just re-apply the same fix blind |
+| 25 | 🔴 | fake "Verified in registry" + garbage text/wrong registry number appear on FIRST business creation, no user action | **3.14 ✅ fixed 2026-07-20, web PR #13** — root cause was `useRegistryCheck` firing a live external-registry name-search on every keystroke and treating a name match as verification; removed the hook, `registryStatus` now loads from DB (`business.registry_status`/`registry_data`) instead |
 | 26 | 🟡 | company description has no visible Edit button | **3.13** |
 | 27 | 🟡 | top button defaults to "Save", should default to "Edit" | **3.13** |
 | 28 | 🟠 | verifiers take up too much space — need a compact icon menu | **3.13** |
 | 29 | 🟠 | blocks (content) should be the primary object on the page, not verifiers | **3.13** |
 | 30 | 🟡 | "Connect Camera" should live next to blocks, not in the general verify menu | **3.13** (+ ties to **14.5**) |
 | 31 | 🟢 | Publish & Privacy should fold into the compact icon menu too | **3.13** |
-| 32 | 🔴 | ~~seed/test entities pollute real search~~ → **NOT real data**, manager confirmed via direct psql: 0 rows in `businesses` for any of those names — frontend fabricates fake entity cards | **3.14** (merged — same bug family as #25/#18, not a cleanup task) |
+| 32 | 🔴 | ~~seed/test entities pollute real search~~ → **NOT real data**, manager confirmed via direct psql: 0 rows in `businesses` for any of those names — frontend fabricates fake entity cards | **3.14 ✅ fixed 2026-07-20, web PR #13** — home `page.tsx` fell back to hardcoded `SEED_RESULTS` on any empty/failed API search and rendered them as real results; now returns `[]` on empty/failed search, seed pool shown only in the pre-search hero |
 | 33 | 🔴 | Pi CAM needs a new build + camera sync reachable from BOTH onboarding AND the block-creation step | **14.5** — blocked on owner confirming 14.4's dev-client boots on a real device |
 
 ## Owner QA Bug Report — 2026-07-17 (23 items, decomposed 2026-07-18)
