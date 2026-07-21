@@ -6,6 +6,51 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-21 · 3.12 · app chrome — fixed header/banner, favicon, camera step removed, share link investigated
+Done (`teta-pi/web` PR #14, merged): shared `AppHeader` component (Wordmark + `AccountMenu`, translucent
+blurred bar) added to `/`, `/search`, `/profile`, `/settings`, `/e/[slug]`,
+replacing each page's separately-fixed logo + account menu that had no
+shared backdrop (QA #10) — `/profile` gets it directly per #24, not only via
+a shared shell. Under-construction banner (QA #8) is now genuinely
+`position:fixed`, height in CSS var `--banner-h`, wrapping to 2 lines on
+narrow mobile (the sentence doesn't fit on one line even unreadably small);
+every page offsets below it via `calc(var(--banner-h) + …)`. Favicon (QA
+#17-app): copied 10.6's `favicon.svg`/`apple-touch-icon.png` into Next's
+`src/app/icon.svg` + `apple-icon.png` (auto-wired, no manual `<link>` tags).
+Camera-pairing step (QA #11) deleted outright from the claim wizard — fake
+QR/pairing-code UI removed, not hidden-in-place; wizard is now
+Identify → Verify → Publish (3 steps, was 4). Real device-link wiring stays
+14.5's job once 14.4's dev-client is confirmed on a real device.
+Investigated #12 (Share page shows internal link) — **could not reproduce**:
+`SharePageButton` has built `https://app.tetapi.dev/e/{slug}` since
+`aef2e4f` (2026-07-11), and live slugs are confirmed human-readable via
+direct psql (`hellfire-solutions`, `shosho`…), not UUIDs. No code change;
+documented as already-correct in known-issues.md in case it resurfaces.
+Bonus bug found while verifying #11 live in-browser (not from the QA
+report): the three `minHeight:100vh` + `overflow:"hidden"` page shells
+(home, profile, claim's `PageShell`) — `overflow:hidden` is there only to
+clip two decorative blurred circles, but it also makes the element a real,
+invisible scroll container once its content briefly exceeds 100vh (e.g. the
+claim wizard's sub-kind picker); a focus/layout-shift event scrolled it
+~180px internally and permanently hid the fixed chrome above the fold after
+a step change, independent of `window.scrollY` (stayed 0 throughout — the
+wrapper's own `scrollTop` was the actual culprit, which is what made this
+one hard to find). Fixed via `overflow:"clip"` on those three; also reset
+scroll to top on claim step change as a general step-wizard habit.
+Changed: `web/src/components/AppHeader.tsx` (new), `layout.tsx`,
+`globals.css`, `page.tsx`, `search/page.tsx`, `profile/page.tsx`,
+`settings/page.tsx`, `login/page.tsx`, `claim/page.tsx`, `e/[slug]/page.tsx`,
+`AccountMenu.tsx`.
+Risk: banner height now lives in a CSS var rather than a shared JS constant
+— if a future page adds its own fixed top-of-viewport element without
+referencing `var(--banner-h)`, it'll collide with the banner again on
+mobile's 2-line height. `overflow:"clip"` has slightly less legacy browser
+support than `"hidden"` (fine for this project's target browsers, flagging
+for awareness).
+Next: 3.13 (profile redesign, blocks-first + compact icon menu) is next in
+queue; 14.5 will need to re-wire the camera step for real once 14.4's
+dev-client is confirmed, at the onboarding step this session removed.
+
 ## 2026-07-20 · manager · 3.14 shipped + prod deploy pipeline recovered from droplet user-reset
 Done: **3.14** (web PR #13) merged — #25 root cause was `useRegistryCheck`
 firing a live external-registry name-search on every company-name keystroke
