@@ -41,6 +41,14 @@ Changed: `web/src/components/AppHeader.tsx` (new), `layout.tsx`,
 `globals.css`, `page.tsx`, `search/page.tsx`, `profile/page.tsx`,
 `settings/page.tsx`, `login/page.tsx`, `claim/page.tsx`, `e/[slug]/page.tsx`,
 `AccountMenu.tsx`.
+**Follow-up caught on prod verification (web PR #15, merged):** the new
+`icon.svg`/`apple-icon.png` 404'd live even though the build was clean —
+this repo's deploy workflow hand-maintains `app-paths-manifest.json` on the
+server (a standalone-output quirk from the 5.3 monorepo split) and the two
+new icon route handlers weren't in that manually-written list. Added them;
+both routes confirmed 200 on `app.tetapi.dev` after redeploy. Any *future*
+top-level route/page in this repo needs the same manual manifest update —
+the workflow file has an inline `⚠` comment marking where.
 Risk: banner height now lives in a CSS var rather than a shared JS constant
 — if a future page adds its own fixed top-of-viewport element without
 referencing `var(--banner-h)`, it'll collide with the banner again on
