@@ -3,6 +3,29 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## Found + fixed 2026-07-21 (3.12) — `overflow:hidden` page shells become invisible scroll containers
+
+**🟡 found while manually verifying the 3.12 app-chrome fix in-browser, not from a QA
+report.** Three page wrappers (`web/src/app/page.tsx` home, `profile/page.tsx`,
+and claim's `PageShell`) use `minHeight:"100vh"` + `overflow:"hidden"` purely
+to clip two decorative blurred circles that extend past their own bounds.
+`overflow:hidden` still makes an element scrollable *by script or focus*, it
+just hides the scrollbar — so once actual content briefly exceeds 100vh (e.g.
+the claim wizard's Step-0 sub-kind picker expanding the page past the
+viewport height), a focus/layout-shift event scrolled that wrapper ~180px
+**internally**, independent of `window.scrollY` (which stayed 0 — this is
+what made it confusing to diagnose: `getBoundingClientRect()` on the rail
+showed a negative Y with no scroll to explain it, and `element.scrollTop` on
+the wrapper itself was the actual culprit). The offset then persisted across
+the wizard's client-side step transitions, permanently hiding the fixed
+banner/header's neighboring content above the fold with no visible
+scrollbar to reveal why. Fixed: `overflow:"hidden"` → `overflow:"clip"` on
+those three wrappers (clips visually, never becomes a scroll container);
+also added `window.scrollTo(0, 0)` on claim step change as a defensive habit
+for step wizards in general. **Watch for**: any other `overflow:hidden` +
+`minHeight:100vh` combo added later for the same decorative-clipping reason
+should default to `overflow:"clip"` instead.
+
 ## Infra incident — 2026-07-20, deploy broken by a droplet user-account reset
 
 **🔴 found + fixed same session, manager-executed, no dev session needed.**
@@ -34,7 +57,7 @@ Continues the numbering from the session-1 report below. 2 Critical / 2 High /
 
 | QA# | Sev | Item | Where it went |
 |---|---|---|---|
-| 24 | 🟡 | `/profile` has no fixed iOS-style header | **3.12** (extends the existing app-chrome scope) |
+| 24 | 🟡 | `/profile` has no fixed iOS-style header | **3.12 ✅ fixed 2026-07-21** — `/profile` renders `<AppHeader/>` directly (not only inherited from a shared shell), same translucent fixed bar as the rest of the app |
 | 25 | 🔴 | fake "Verified in registry" + garbage text/wrong registry number appear on FIRST business creation, no user action | **3.14 ✅ fixed 2026-07-20, web PR #13** — root cause was `useRegistryCheck` firing a live external-registry name-search on every keystroke and treating a name match as verification; removed the hook, `registryStatus` now loads from DB (`business.registry_status`/`registry_data`) instead |
 | 26 | 🟡 | company description has no visible Edit button | **3.13** |
 | 27 | 🟡 | top button defaults to "Save", should default to "Edit" | **3.13** |
@@ -61,16 +84,16 @@ items are already addressed. Mapping to sessions:
 | 5 | 🟡 | Domain Ownership untested | folded into **6.2 re-run** checklist |
 | 6 | 🟡 | "Legal Entity" link unclear/inert | **3.10** |
 | 7 | 🔴 | blocks: files don't attach, timestamps are UI-only | **1.20** (with 1.9) |
-| 8 | 🟡 | Under-construction banner overlaps UI | **3.12** (app) + **10.6** (landing) |
+| 8 | 🟡 | Under-construction banner overlaps UI | **3.12 ✅ fixed 2026-07-21 (app)** + **10.6** (landing) — banner is `position:fixed` with height in CSS var `--banner-h`, wraps to 2 lines on mobile instead of clipping; every page offsets below it via that var |
 | 9 | 🟢 | landing menu not sticky | **10.6** |
-| 10 | 🟡 | app has no real header/menu bar | **3.12** |
-| 11 | 🟠 | onboarding Camera step: dead QR/pairing stub | **3.12** |
-| 12 | 🟡 | Share page shows internal link | **3.12** |
+| 10 | 🟡 | app has no real header/menu bar | **3.12 ✅ fixed 2026-07-21** — new shared `AppHeader` (Wordmark + AccountMenu, translucent/blurred bar) on `/`, `/search`, `/profile`, `/settings`, `/e/[slug]`, replacing each page's separately-fixed logo + menu |
+| 11 | 🟠 | onboarding Camera step: dead QR/pairing stub | **3.12 ✅ fixed 2026-07-21** — step deleted outright (not hidden-in-place): wizard is now Identify → Verify → Publish (3 steps); real device-link wiring is 14.5's job once 14.4's dev-client is confirmed |
+| 12 | 🟡 | Share page shows internal link | **3.12 investigated 2026-07-21 — could not reproduce, already correct since `aef2e4f` (2026-07-11)**: `SharePageButton` has always built `https://app.tetapi.dev/e/{slug}`; live slugs confirmed human-readable via psql (`hellfire-solutions`, `shosho`…), not UUIDs. No other share surface found with an internal-link bug — likely a stale observation from before that commit, or a surface not yet identified |
 | 13 | 🟡 | Registry Match auto-verifies with no UX feedback | **3.10** |
 | 14 | 🟡 | persona search card shows registry handle | **3.10** |
 | 15 | 🟠 | profile needs full visual redesign | **3.13** (design-first) |
 | 16 | 🟡 | no per-block permalink/view | **1.20** |
-| 17 | 🟢 | favicon missing everywhere | **3.12** (app) + **10.6** (landing+email) |
+| 17 | 🟢 | favicon missing everywhere | **3.12 ✅ fixed 2026-07-21 (app)** + **10.6** (landing+email) — reused 10.6's `favicon.svg`/`apple-touch-icon.png` as Next's `src/app/icon.svg` + `apple-icon.png` (auto-wired) |
 | 18 | 🔴 | data leakage between entities of one account | **3.11** (prime suspect: `useProfileStore` localStorage reuse; backend must be ruled out too) |
 | 19 | 🔴 | Pi CAM app won't launch | **14.4** (blocks 14.2/14.3) |
 | 20 | 🔴 | blocks not indexed/findable | **1.20**; partly explained: `/search` covers entities only, block embeddings blocked on OpenAI billing (5.1) |
