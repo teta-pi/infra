@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-24 · 3.13 · profile redesign shipped (QA #26/#27/#28/#29/#30/#31)
+Done: web PR #16 merged + deployed. Blocks-first layout — name/description →
+blocks grid (primary object, #29) → verify menu, in that order. Registry
+Match/Email/Domain/Document Upload/Legal Entity/Publish&Privacy merged from
+two full-width-strip components (`VerificationSection`+`PublishSection`)
+into one `VerifyMenu`: a row of small icon buttons (Registry/Email/Domain/
+Document/Legal/Publish), each with a status dot, accordion-opening one
+`MethodCard` panel below the row (#28/#31). Name+description default to
+read-only with a single Edit→Save toggle (`fieldsEditing` state, seeded
+`true` for new/empty profiles) instead of always-editable fields (#26/#27).
+`PiCamSection` slimmed to `PiCamButton`, relocated from a bottom section
+into the "Your blocks" header row (#30) — identical QR/pairing logic, just
+moved, so 14.5 can reuse it as the block-creation-step sync entry point.
+Avatar needed no change — already in the standard header position from
+3.12's `AppHeader`/`AccountMenu`. Added `BuildingIcon`/`GlobeIcon`/
+`LinkIcon`/`ShieldIcon` to `VerificationIcon.tsx` for the menu row.
+Changed: `teta-pi/web` `src/app/profile/page.tsx`,
+`src/components/ui/VerificationIcon.tsx`. Docs: `roadmap.md` (3.13 row),
+`known-issues.md` (#26-31 mapping), this entry.
+Risk: `VerifyMenu` merges two previously-independent components' state
+(registry/email/domain/legal polling + publish/privacy) into one — if a
+future session needs to split verification from publishing again, the
+useEffects/handlers are interleaved and would need re-separating.
+Next: 14.5 (Pi CAM new build + dual sync points) can now wire its
+block-creation-step entry point directly to the relocated `PiCamButton`
+instead of adding a new UI surface.
+
+---
+
 ## 2026-07-21 · 3.12 · app chrome — fixed header/banner, favicon, camera step removed, share link investigated
 Done (`teta-pi/web` PR #14, merged): shared `AppHeader` component (Wordmark + `AccountMenu`, translucent
 blurred bar) added to `/`, `/search`, `/profile`, `/settings`, `/e/[slug]`,
@@ -58,6 +87,8 @@ for awareness).
 Next: 3.13 (profile redesign, blocks-first + compact icon menu) is next in
 queue; 14.5 will need to re-wire the camera step for real once 14.4's
 dev-client is confirmed, at the onboarding step this session removed.
+
+---
 
 ## 2026-07-20 · manager · 3.14 shipped + prod deploy pipeline recovered from droplet user-reset
 Done: **3.14** (web PR #13) merged — #25 root cause was `useRegistryCheck`
