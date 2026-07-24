@@ -170,7 +170,7 @@ items are tracked here; functional-only bugs stay in `known-issues.md`.
 | S-5 | "Make private → invalid token" (stale-token family) | 🟠 | QA #2 | 3.9 | OPEN (PATCH-500 part already fixed in 1.18) |
 | S-6 | Data leakage between entities of one account | 🔴 | QA #18 | 3.11 | OPEN — FE `useProfileStore` reuse suspected; **backend owner-scoping must also be ruled out** |
 | S-7 | `PATCH /businesses/{id}` keeps `agent_endpoint_verified=true` after endpoint change | 🟠 | 6.1 #6 | 1.5/1.x | OPEN |
-| S-8 | `GET /businesses/{id}/blocks` leaks private blocks | 🟡 | known-issues | 1.x (block read authz) | OPEN |
+| S-8 | `GET /businesses/{id}/blocks` leaks private blocks | 🟡 | known-issues | 1.x (block read authz) | OPEN — note: new `GET /blocks/{block_id}` permalink added 2026-07-24 (1.20, api PR #13) does NOT share this bug — it correctly 404s a private block to non-owners; only the list endpoint is affected |
 | S-9 | `/verify/domain/check` mild SSRF (boolean fetch to caller-influenced host) | 🟡 | 6.1 #7 sibling | api PR #8 (1.21 bundle) | ✅ CLOSED 2026-07-18 — `domain_ownership._check_file` now resolves the host and rejects private/loopback/link-local/reserved IPs (incl. 169.254.169.254) + `follow_redirects=False`; prod-verified rejecting a private-resolving domain. DNS-TXT path was already safe (DoH only) |
 | S-10 | In-memory rate limiters → single-worker-only; `/v1/tag-ping` now has a limiter (api PR #12) but it's the same in-memory pattern, still not multi-worker-safe | 🟠 | architecture / 12.5b | devops (Redis) | OPEN (design) — rate limiting exists, Redis migration still pending |
 

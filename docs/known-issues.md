@@ -3,6 +3,60 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 1.20 backend scoping session (2026-07-24) — traced QA #7/#16/#20, fixed 3 of 4 root causes
+
+**Repo:** `teta-pi/api` PR #13 (merged, deployed). Read-only trace into `teta-pi/web`
+for (a) — no React changes made.
+
+**Fixed:**
+- **(b)/1.9** Bitcoin timestamping was wired to a no-op stub, plus a double-hash
+  bug in the confirm-check (`sha256("")` instead of the real digest) — both
+  fixed. See known-issues entry "🟠 9" below for the full writeup, including
+  the **still-open** part: no celery worker/beat process runs on prod at all
+  (confirmed via `docker ps`/`systemctl` right after this deploy), so the fix
+  is necessary-but-not-sufficient until a worker ships (devops, likely 5.x).
+- **(4)/caveat (i) from 6.2** `MediaOut` schema was missing `original_hash`
+  entirely, and `public_profile_by_slug`/`agent_preview` (`businesses.py`)
+  hand-built media dicts that omitted the file URL and hash outright. Verified
+  via prod psql that the underlying DB rows were always correct
+  (`storage_url`/`original_hash` populated) — this was a pure serialization
+  gap on every public read path, not a data problem. Fixed: both now emit
+  `media_url`/`content_hash` (public shape) or `original_hash` (authenticated
+  `BlockOut`/`MediaOut` shape). Verified live post-deploy on
+  `hellfire-solutions`'s public profile.
+- **(c)** New public `GET /api/v1/blocks/{block_id}` permalink, independent of
+  parent entity, respects `is_public`/ownership (404s a private block to
+  non-owners, same information-leak posture as the rest of the API). Verified
+  live.
+
+**(a) — traced, NOT fixed here; scoped precisely for 1.20-web:**
+The backend chain already works correctly end-to-end: `BlockCard.handleFileUpload`
+(`teta-pi/web` `src/app/profile/page.tsx:1310-1336`) calls
+`mediaApi.upload(block.id, file, ...)` with the real block id, and the backend
+writes the `Media` row with the correct `block_id`/`storage_url`/`original_hash`
+(confirmed via prod psql — e.g. `media_id ac5f455a-...` from this session's own
+test upload landed correctly). The break is entirely client-side:
+  - `ProfileBlock`/`BlockMedia` (`src/stores/useProfileStore.ts:9-18`) only
+    stores `{source, phase}` — no id, url, or hash field exists on the type at
+    all, so there is nowhere to put the server's response even if it were read.
+  - `handleFileUpload` calls `mediaApi.upload(...)` but discards its return
+    value entirely, then fakes "done" via a bare `setTimeout` (`page.tsx:1330-1333`).
+  - `mapServerBlock` (`page.tsx:42-52`), used when loading a business's
+    existing blocks, reads only `b.media[0].c2pa_verified` to guess a `source`
+    — the real media id/url/hash from the server response is thrown away here
+    too.
+  - `MediaDisplay` (`page.tsx:1461-1477`) never renders the actual file: it
+    draws a static striped placeholder `<div>` and a **hardcoded fake hash
+    string** (`"#c2pa:verified · btc:ts:confirmed"` / `"#btc:ts:confirmed"`),
+    regardless of what really happened.
+
+  **Fix for 1.20-web:** extend `BlockMedia` to carry `{id, media_url,
+  content_hash, c2pa_verified, bitcoin_confirmed}` (or just embed the server's
+  `MediaItem` directly), populate it from `mediaApi.upload`'s response and from
+  `mapServerBlock`, and make `MediaDisplay` render the real `media_url` (proxy
+  through `/media/local/...` same-origin) and the real hash instead of the
+  fake string.
+
 ## Found + fixed 2026-07-21 (3.12) — `overflow:hidden` page shells become invisible scroll containers
 
 **🟡 found while manually verifying the 3.12 app-chrome fix in-browser, not from a QA
@@ -83,7 +137,7 @@ items are already addressed. Mapping to sessions:
 | 4 | 🟠 | Business Email "Send Code" dead | **3.9** re-test (Resend was also broken during QA — key rotation + sandbox; may already work) |
 | 5 | 🟡 | Domain Ownership untested | folded into **6.2 re-run** checklist |
 | 6 | 🟡 | "Legal Entity" link unclear/inert | **3.10** |
-| 7 | 🔴 | blocks: files don't attach, timestamps are UI-only | **1.20** (with 1.9) |
+| 7 | 🔴 | blocks: files don't attach, timestamps are UI-only | **1.20 ✅ backend fixed 2026-07-24 (api PR #13, with 1.9), web part OPEN** — backend was already correct end-to-end (block_id, hash, storage_url all write correctly; verified via prod psql + live upload); the actual break is `teta-pi/web`'s `ProfileBlock`/`BlockMedia` client state, which never persists the server's media_id/url/hash — see full writeup below. Timestamps: bitcoin wiring now real (was a no-op stub), see known-issues #9 |
 | 8 | 🟡 | Under-construction banner overlaps UI | **3.12 ✅ fixed 2026-07-21 (app)** + **10.6** (landing) — banner is `position:fixed` with height in CSS var `--banner-h`, wraps to 2 lines on mobile instead of clipping; every page offsets below it via that var |
 | 9 | 🟢 | landing menu not sticky | **10.6** |
 | 10 | 🟡 | app has no real header/menu bar | **3.12 ✅ fixed 2026-07-21** — new shared `AppHeader` (Wordmark + AccountMenu, translucent/blurred bar) on `/`, `/search`, `/profile`, `/settings`, `/e/[slug]`, replacing each page's separately-fixed logo + menu |
@@ -92,7 +146,7 @@ items are already addressed. Mapping to sessions:
 | 13 | 🟡 | Registry Match auto-verifies with no UX feedback | **3.10** |
 | 14 | 🟡 | persona search card shows registry handle | **3.10** |
 | 15 | 🟠 | profile needs full visual redesign | **3.13** (design-first) |
-| 16 | 🟡 | no per-block permalink/view | **1.20** |
+| 16 | 🟡 | no per-block permalink/view | **1.20 ✅ backend fixed 2026-07-24** — public `GET /api/v1/blocks/{block_id}` (api PR #13), respects `is_public`/ownership, 404s for private blocks to non-owners. Web route to it still needed (1.20-web) |
 | 17 | 🟢 | favicon missing everywhere | **3.12 ✅ fixed 2026-07-21 (app)** + **10.6** (landing+email) — reused 10.6's `favicon.svg`/`apple-touch-icon.png` as Next's `src/app/icon.svg` + `apple-icon.png` (auto-wired) |
 | 18 | 🔴 | data leakage between entities of one account | **3.11** (prime suspect: `useProfileStore` localStorage reuse; backend must be ruled out too) |
 | 19 | 🔴 | Pi CAM app won't launch | **14.4** (blocks 14.2/14.3) |
@@ -391,25 +445,27 @@ that change it) instead of on read, or don't assign it onto the tracked ORM
 instance in a read-only endpoint (compute into the response schema instead).
 Status: OPEN.
 
-### 🟠 9. Bitcoin timestamping is wired to a no-op stub — proofs are never actually submitted
-Both media upload routes (`api/app/api/routes/media.py:130,188`) schedule
-`_bitcoin_timestamp_bg` (media.py:38-40), which only logs
-`"no-op until OTS integration"`. The real Celery task
-`submit_bitcoin_timestamp` (`api/app/workers/tasks/bitcoin.py:10-33`), which
-would set `Media.bitcoin_proof`, has zero call sites anywhere in `api/app`. The
-hourly beat task `check_bitcoin_confirmations` (`bitcoin.py:36-69`) filters on
-`Media.bitcoin_proof != None`, which can never match — so `bitcoin_confirmed`
-can never become true through the normal upload flow, and no business can ever
-reach `verification_level` `"partial"`/`"full"` via media provenance
-(`businesses.py:88-96`). This looks like a believed-live feature (it has a beat
-schedule and a real task) that's silently disconnected, not a documented gap.
-Separately, even if wired up, `check_bitcoin_confirmations` passes the wrong
-digest to verification — `verify_proof(media.bitcoin_proof, b"")`
-(`bitcoin.py:58`) always checks against `sha256("")` instead of
-`media.original_hash`, so it would always fail (silently, via the broad
-`except Exception` at bitcoin.py:91-93). **Fix:** call
-`submit_bitcoin_timestamp.delay(...)` from the upload routes instead of the
-stub, and fix the digest argument.
+### 🟠 9. Bitcoin timestamping wired to a no-op stub — proofs never actually submitted
+**Fixed in code 2026-07-24 (1.20/1.9, api PR #13, merged+deployed).** Both
+upload routes now call `submit_bitcoin_timestamp.delay(media_id, original_hash)`
+directly (`api/app/api/routes/media.py`) instead of the old `_bitcoin_timestamp_bg`
+no-op stub (removed). Also fixed a double-hash bug: `submit_hash`/`verify_proof`
+(`api/app/services/bitcoin.py`) were re-hashing an already-computed digest on
+submit, and `check_bitcoin_confirmations` (`bitcoin.py`) checked
+`verify_proof(media.bitcoin_proof, b"")` — always `sha256("")` — instead of
+`media.original_hash`. Both now pass the real digest through.
+
+**Still open — worker/beat aren't deployed.** `docker ps` / `systemctl` on prod
+(checked 2026-07-24, right after this PR deployed) show no celery worker or
+beat process at all — only `tetapi-api`, `tetapi-mcp`, `tetapi-web` systemd
+units, matching `docs/deployment.md`'s note that "no celery worker/beat is
+running (not built yet — matches roadmap, not a gap)". So `.delay()` now
+enqueues correctly into Redis, but nothing consumes the queue: verified live by
+uploading a real test file (`media_id ac5f455a-...`) — the row lands with the
+correct `storage_url`/`original_hash`, `bitcoin_proof` stays `NULL`. The code
+fix is real and necessary but not sufficient on its own; a worker+beat process
+(devops, likely 5.x) still needs to ship before any proof is ever actually
+submitted or confirmed. Status: code OPEN→FIXED, infra deployment OPEN.
 Status: OPEN.
 
 ### 🟠 10. `/profile` never reads the session created by `/login` or `/settings` — those flows leave the editor unauthenticated

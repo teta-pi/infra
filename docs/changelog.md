@@ -6,6 +6,39 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-24 · 1.20 · blocks become real — backend half (QA #7/#16/#20, with 1.9)
+Done: `teta-pi/api` PR #13 merged+deployed. (b)/1.9 — bitcoin timestamping was
+wired to a no-op stub with zero real call sites; now both upload routes
+dispatch the real `submit_bitcoin_timestamp` celery task, and a double-hash
+digest bug in confirm-check (`sha256("")` instead of the real hash) is fixed.
+(4)/caveat-(i) from 6.2 — `MediaOut` was missing `original_hash`, and
+`public_profile_by_slug`/`agent_preview` hand-built media dicts that omitted
+the file URL and hash outright; both public read paths now emit
+`media_url`/`content_hash`, verified live on `hellfire-solutions`'s profile.
+(c) — new public `GET /api/v1/blocks/{block_id}` permalink shipped, respects
+`is_public`/ownership, verified live. (a) — traced the full web
+BlockCard→mediaApi→block chain: backend was already correct end-to-end
+(confirmed via prod psql + a real test upload this session); the break is
+entirely `teta-pi/web`'s client-side block/media state, which never persists
+the server's media id/url/hash and renders a static placeholder + hardcoded
+fake hash string instead of the real upload. No React changes made — scoped
+precisely in `known-issues.md` for a `1.20-web` follow-up session.
+Changed: `teta-pi/api` `routes/media.py`, `routes/blocks.py`,
+`routes/businesses.py`, `workers/tasks/bitcoin.py`, `services/bitcoin.py`,
+`schemas/block.py`. Docs: `roadmap.md` (1.9 + 1.20 rows), `known-issues.md`
+(new 1.20 section + entries #7/#9/#16), `security.md` (S-8 note).
+Risk: bitcoin wiring is code-correct but inert on prod — `docker ps`/`systemctl`
+checks right after deploy show no celery worker or beat process running at
+all, so `.delay()` calls enqueue into Redis with nothing ever consuming them.
+Not a regression (pre-existing, documented in `deployment.md`), but means
+"timestamps are UI-only" (QA #7) won't be truly fixed end-to-end until a
+worker ships.
+Next: 1.20-web (frontend block/media state + MediaDisplay + permalink route);
+separately, a devops session to actually deploy a celery worker+beat process
+is a prerequisite for 1.9/1.20's bitcoin half to have any real effect.
+
+---
+
 ## 2026-07-24 · 3.13 · profile redesign shipped (QA #26/#27/#28/#29/#30/#31)
 Done: web PR #16 merged + deployed. Blocks-first layout — name/description →
 blocks grid (primary object, #29) → verify menu, in that order. Registry
