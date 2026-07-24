@@ -59,12 +59,12 @@ Continues the numbering from the session-1 report below. 2 Critical / 2 High /
 |---|---|---|---|
 | 24 | 🟡 | `/profile` has no fixed iOS-style header | **3.12 ✅ fixed 2026-07-21** — `/profile` renders `<AppHeader/>` directly (not only inherited from a shared shell), same translucent fixed bar as the rest of the app |
 | 25 | 🔴 | fake "Verified in registry" + garbage text/wrong registry number appear on FIRST business creation, no user action | **3.14 ✅ fixed 2026-07-20, web PR #13** — root cause was `useRegistryCheck` firing a live external-registry name-search on every keystroke and treating a name match as verification; removed the hook, `registryStatus` now loads from DB (`business.registry_status`/`registry_data`) instead |
-| 26 | 🟡 | company description has no visible Edit button | **3.13** |
-| 27 | 🟡 | top button defaults to "Save", should default to "Edit" | **3.13** |
-| 28 | 🟠 | verifiers take up too much space — need a compact icon menu | **3.13** |
-| 29 | 🟠 | blocks (content) should be the primary object on the page, not verifiers | **3.13** |
-| 30 | 🟡 | "Connect Camera" should live next to blocks, not in the general verify menu | **3.13** (+ ties to **14.5**) |
-| 31 | 🟢 | Publish & Privacy should fold into the compact icon menu too | **3.13** |
+| 26 | 🟡 | company description has no visible Edit button | **3.13 ✅ fixed 2026-07-24, web PR #16** — name+description now default read-only with an explicit Edit button (`fieldsEditing` state) |
+| 27 | 🟡 | top button defaults to "Save", should default to "Edit" | **3.13 ✅ fixed 2026-07-24, web PR #16** — same toggle; button reads "Edit" until entered, "Save" only while editing |
+| 28 | 🟠 | verifiers take up too much space — need a compact icon menu | **3.13 ✅ fixed 2026-07-24, web PR #16** — `VerificationSection`+`PublishSection` merged into `VerifyMenu`, an icon-row accordion (one `MethodCard` panel open at a time) |
+| 29 | 🟠 | blocks (content) should be the primary object on the page, not verifiers | **3.13 ✅ fixed 2026-07-24, web PR #16** — blocks render right after name/description, `VerifyMenu` moved below |
+| 30 | 🟡 | "Connect Camera" should live next to blocks, not in the general verify menu | **3.13 ✅ fixed 2026-07-24, web PR #16** — `PiCamButton` (slimmed from `PiCamSection`) sits in the "Your blocks" header row (+ ties to **14.5**) |
+| 31 | 🟢 | Publish & Privacy should fold into the compact icon menu too | **3.13 ✅ fixed 2026-07-24, web PR #16** — "Publish" is the sixth icon in `VerifyMenu` |
 | 32 | 🔴 | ~~seed/test entities pollute real search~~ → **NOT real data**, manager confirmed via direct psql: 0 rows in `businesses` for any of those names — frontend fabricates fake entity cards | **3.14 ✅ fixed 2026-07-20, web PR #13** — home `page.tsx` fell back to hardcoded `SEED_RESULTS` on any empty/failed API search and rendered them as real results; now returns `[]` on empty/failed search, seed pool shown only in the pre-search hero |
 | 33 | 🔴 | Pi CAM needs a new build + camera sync reachable from BOTH onboarding AND the block-creation step | **14.5** — blocked on owner confirming 14.4's dev-client boots on a real device |
 
