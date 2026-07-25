@@ -455,18 +455,29 @@ submit, and `check_bitcoin_confirmations` (`bitcoin.py`) checked
 `verify_proof(media.bitcoin_proof, b"")` — always `sha256("")` — instead of
 `media.original_hash`. Both now pass the real digest through.
 
-**Still open — worker/beat aren't deployed.** `docker ps` / `systemctl` on prod
-(checked 2026-07-24, right after this PR deployed) show no celery worker or
-beat process at all — only `tetapi-api`, `tetapi-mcp`, `tetapi-web` systemd
-units, matching `docs/deployment.md`'s note that "no celery worker/beat is
-running (not built yet — matches roadmap, not a gap)". So `.delay()` now
-enqueues correctly into Redis, but nothing consumes the queue: verified live by
-uploading a real test file (`media_id ac5f455a-...`) — the row lands with the
-correct `storage_url`/`original_hash`, `bitcoin_proof` stays `NULL`. The code
-fix is real and necessary but not sufficient on its own; a worker+beat process
-(devops, likely 5.x) still needs to ship before any proof is ever actually
-submitted or confirmed. Status: code OPEN→FIXED, infra deployment OPEN.
-Status: OPEN.
+**Worker/beat deployed 2026-07-25 (session 5.4).** `tetapi-celery-worker` +
+`tetapi-celery-beat` systemd units now run on prod (same venv/`.env`/
+`WorkingDirectory` as `tetapi-api`, `--concurrency=1`). Verified live: a fresh
+test upload's `submit_bitcoin_timestamp` task is picked up and run within
+~10s (previously stuck in Redis indefinitely), and all 4 beat tasks fire on
+schedule. Plan was shared with the owner and confirmed before touching prod
+systemd, per the working agreement.
+
+**New finding, surfaced only now that the code path is actually reachable:**
+the task runs but the real OTS submission still fails —
+`app/services/bitcoin.py`'s `submit_hash()` calls `cal.submit(ts)` (passing a
+`Timestamp` object) where the installed `opentimestamps-client`'s
+`RemoteCalendar.submit(self, digest, timeout=None)` expects the raw digest
+bytes and *returns* a `Timestamp` to merge in. Confirmed via
+`journalctl -u tetapi-celery-worker`: all 3 calendar URLs reject the call with
+`message_body should be a bytes-like object..., got <class
+'opentimestamps.core.timestamp.Timestamp'>`, then serialization fails with
+"An empty timestamp can't be serialized" (caught by the broad `except
+Exception`, so it fails silently as `{"status": "failed"}` rather than
+crashing). `media.bitcoin_proof` will stay `NULL` until this is fixed —
+flagged as its own follow-up task, not fixed in this devops session (wrong
+repo/scope: this was `teta-pi/infra`, the fix belongs in `teta-pi/api`).
+Status: worker/beat deployment FIXED; OTS calendar submission bug OPEN (new).
 
 ### 🟠 10. `/profile` never reads the session created by `/login` or `/settings` — those flows leave the editor unauthenticated
 `web/src/app/login/page.tsx:54` and `web/src/app/settings/page.tsx:216` (plus
