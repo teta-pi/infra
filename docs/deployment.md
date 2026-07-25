@@ -28,7 +28,18 @@ alias in `~/.ssh/config` → just `ssh tetapi`).
 
 - **Docker**: `tetapi-postgres` (pgvector/pgvector:pg16), `tetapi-redis`.
 - **systemd**: `tetapi-api` (uvicorn `--workers 1`, port 8000),
-  `tetapi-web` (Next.js standalone), `tetapi-mcp` (node, port 3002).
+  `tetapi-web` (Next.js standalone), `tetapi-mcp` (node, port 3002),
+  `tetapi-celery-worker` + `tetapi-celery-beat` (added 2026-07-25, session 5.4)
+  — `celery -A app.workers.celery_app:celery_app worker/beat --concurrency=1`,
+  same `WorkingDirectory=/opt/tetapi/api` + `EnvironmentFile=/opt/tetapi/api/.env`
+  + `/opt/tetapi/venv` as `tetapi-api`, talks to the same `tetapi-redis` broker.
+  Not deployed by `deploy.yml` — the unit files live only at
+  `/etc/systemd/system/*.service` on the server (not in this repo); a code
+  change to `app/workers/tasks/*.py` still deploys via the normal rsync+restart
+  flow, but the worker process itself needs a manual `systemctl restart
+  tetapi-celery-worker` after — **not currently wired into CI**, unlike
+  `tetapi-api`. `--concurrency=1` on the worker matches the single-uvicorn-worker
+  RAM-budget philosophy (droplet is still 1 vCPU / 2 GB).
 - **nginx**: serves landing from `/var/www/teta-pi/`, reverse-proxies the subdomains.
 - **Python venv**: `/opt/tetapi/venv`. API code at `/opt/tetapi/api`, web at
   `/opt/tetapi/web`, mcp at `/opt/tetapi/mcp`.
@@ -91,7 +102,9 @@ Per-service RAM (RSS / cgroup, whichever is more accurate for that process):
 | **Non-TETA+PI baseline** | **~170 MB** |
 
 No celery worker/beat is running (not built yet — matches roadmap, not a gap in
-this audit). Redis is present but currently only used ad hoc.
+this audit). Redis is present but currently only used ad hoc. **Superseded
+2026-07-25 (session 5.4): both now run** — see the systemd section above;
+~44 MB RSS each, well within the headroom this audit measured.
 
 **Conclusion: the TETA+PI stack itself is small (~116 MB). The box swaps because
 ~170 MB of fixed OS/tooling/unrelated-service overhead plus the stack leaves

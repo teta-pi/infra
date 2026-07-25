@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-25 · 5.4 · celery worker/beat deployed to prod
+Done: two new systemd units, `tetapi-celery-worker` and `tetapi-celery-beat`
+(`celery -A app.workers.celery_app:celery_app worker/beat --concurrency=1`),
+same `WorkingDirectory`/`EnvironmentFile`/venv as `tetapi-api`, talking to the
+existing `tetapi-redis`. Plan (unit contents + exact commands) shared with the
+owner and explicitly confirmed before touching prod systemd, per the working
+agreement's prod-config rule. Verified live: a fresh test upload's
+`submit_bitcoin_timestamp` task is picked up within ~10s (was stuck
+indefinitely in Redis since 1.20-api shipped it yesterday with no consumer),
+and all 4 beat tasks (`ots_lifecycle`/`probe_endpoints`/
+`twira_recompute_scores`/`check_bitcoin_confirmations`) fire on schedule
+without error.
+Changed: `/etc/systemd/system/tetapi-celery-worker.service` +
+`tetapi-celery-beat.service` (server-only, documented in `deployment.md`, not
+tracked in any repo). Docs: `roadmap.md` (new 5.4 row), `deployment.md`
+(systemd list + superseded-audit note), `known-issues.md` (entry #9 updated).
+Risk: worker is not wired into CI (`deploy.yml` only restarts `tetapi-api`) —
+a future change to `app/workers/tasks/*.py` deploys via the normal rsync but
+needs a manual `systemctl restart tetapi-celery-worker` on top, easy to
+forget. `--concurrency=1` keeps RAM low (~44 MB each) but means task
+throughput is strictly serial — fine for current volume, revisit if 5.1
+(embeddings) or Pi CAM traffic (14.x) adds real task volume.
+Next: while verifying, found the actual OTS calendar submission still fails
+(`services/bitcoin.py` passes the wrong argument type to the calendar
+library's `submit()`) — flagged as a separate follow-up task in `teta-pi/api`
+(out of scope here), not fixed in this session.
+
+---
+
 ## 2026-07-24 · 1.20 · blocks become real — backend half (QA #7/#16/#20, with 1.9)
 Done: `teta-pi/api` PR #13 merged+deployed. (b)/1.9 — bitcoin timestamping was
 wired to a no-op stub with zero real call sites; now both upload routes
