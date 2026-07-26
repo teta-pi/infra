@@ -477,7 +477,33 @@ Exception`, so it fails silently as `{"status": "failed"}` rather than
 crashing). `media.bitcoin_proof` will stay `NULL` until this is fixed —
 flagged as its own follow-up task, not fixed in this devops session (wrong
 repo/scope: this was `teta-pi/infra`, the fix belongs in `teta-pi/api`).
-Status: worker/beat deployment FIXED; OTS calendar submission bug OPEN (new).
+
+**Fixed 2026-07-26 (1.9, api PR #14, merged+deployed).** `submit_hash()` now
+calls `cal.submit(content_hash)` (the raw digest) and merges the returned
+`Timestamp` into the local one (`ts.merge(remote_ts)`) before serializing,
+instead of passing the local `Timestamp` object into `submit()`. Verified
+against the real `alice.btc.calendar.opentimestamps.org` endpoint directly
+(submit+merge+serialize succeeded, 137 bytes) and live via
+`journalctl -u tetapi-celery-worker`: the 20:32 UTC `ots_lifecycle` run
+stamped 1 pending event with zero calendar warnings, vs. every run before it
+failing with the `message_body should be a bytes-like object` /
+`An empty timestamp can't be serialized` pair.
+
+**Gotcha found during verification: the deploy pipeline doesn't restart the
+celery worker.** The fix was live on disk and CI was green right after
+merge, but `tetapi-celery-worker` kept failing with the *exact same* old
+error for two more beat cycles (19:46 deploy → still broken at 20:02).
+Cause: `tetapi-api`'s systemd unit gets restarted on deploy, but
+`tetapi-celery-worker`/`tetapi-celery-beat` don't — and since Python caches
+imported modules for the lifetime of the process, the long-running worker
+(up since 2026-07-25, session 5.4) kept executing the old in-memory
+`app.services.bitcoin` code regardless of what was on disk. Fixed by
+`sudo systemctl restart tetapi-celery-worker`; confirmed clean on the next
+cycle. **Any change to worker/task code needs a manual
+`systemctl restart tetapi-celery-worker` (and `tetapi-celery-beat` if the
+schedule itself changed) after deploy** until the pipeline restarts them
+automatically — see `docs/deployment.md`.
+Status: CLOSED — worker/beat deployment FIXED, OTS calendar submission bug FIXED.
 
 ### 🟠 10. `/profile` never reads the session created by `/login` or `/settings` — those flows leave the editor unauthenticated
 `web/src/app/login/page.tsx:54` and `web/src/app/settings/page.tsx:216` (plus

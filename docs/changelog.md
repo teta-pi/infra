@@ -6,6 +6,39 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-26 · 1.9 · OTS calendar submission bug fixed
+Done: `app/services/bitcoin.py`'s `submit_hash()` called
+`RemoteCalendar.submit(ts)` with the local `Timestamp` object; the installed
+`opentimestamps-client`'s `submit(digest, timeout=None)` actually expects the
+raw digest bytes and *returns* a `Timestamp` to merge in. Every calendar
+(alice/bob/finney) rejected the call with `message_body should be a
+bytes-like object...`, then serialization failed with "An empty timestamp
+can't be serialized" (caught by a broad except, so it failed silently).
+Fixed: pass `content_hash` into `submit()`, `ts.merge()` the result. Verified
+directly against `alice.btc.calendar.opentimestamps.org` in prod's venv
+(submit+merge+serialize → 137 bytes), then live via
+`journalctl -u tetapi-celery-worker`: the 20:32 UTC `ots_lifecycle` run
+stamped 1 pending event with zero calendar warnings.
+**Gotcha found during verification:** the fix was merged to `main` and
+deployed (CI green, file on disk updated) at 19:46 UTC, but
+`tetapi-celery-worker` kept failing with the identical old error through the
+20:02 beat cycle — `deploy.yml` only restarts `tetapi-api`, not the celery
+worker/beat services, and Python caches imported modules for the life of a
+process, so the long-running worker (up since 2026-07-25) kept executing the
+stale in-memory code. Fixed by `sudo systemctl restart
+tetapi-celery-worker`; confirmed clean on the next cycle. This gap was
+already flagged as a risk in the 5.4 entry below and in `deployment.md`
+(lines ~36-41) — this session is the first time it actually bit.
+Changed: `api/app/services/bitcoin.py`. Docs: `known-issues.md` (entry #9
+closed), `roadmap.md` (1.9 + 5.4 rows updated).
+Risk: none new — the worker-restart gap is pre-existing and documented; this
+just confirms it's a real, not theoretical, footgun. Any future change to
+`app/workers/tasks/*.py` or its imports needs the same manual restart until
+`deploy.yml` is taught to restart celery services too.
+Next: consider wiring `tetapi-celery-worker`/`tetapi-celery-beat` restarts
+into `deploy.yml` (devops, likely a 5.x task) so this stops being a manual
+step someone has to remember.
+
 ## 2026-07-25 · 5.4 · celery worker/beat deployed to prod
 Done: two new systemd units, `tetapi-celery-worker` and `tetapi-celery-beat`
 (`celery -A app.workers.celery_app:celery_app worker/beat --concurrency=1`),
