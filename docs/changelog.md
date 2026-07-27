@@ -6,6 +6,31 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-27 · 5.1 · TWIRA embeddings turned on (backfill + live verification)
+Done: OpenAI billing paid + key live in server `.env` (verified by owner). Ran the
+`twira_backfill_block_embeddings` Celery task via the already-running
+`tetapi-celery-worker` (`celery … call`, enqueued to redis, worker executed). Backfill
+result: **6/10 public blocks embedded, 4 correctly skipped** (media-only blocks with no
+title/description → `block_embedding_text` empty → task skips, as designed; idempotent,
+`embedding IS NULL` only). Verified embed-on-write live via the API (`pk_live_` test key):
+block **create** → 1536-dim vector populated immediately; block **update** → vector
+re-generated (md5 changed). Verified semantic discovery live: `POST /resolve-intent`
+query "artificial intelligence consulting services" resolves **HELLFIRE Solutions**
+through the **TWIRA vector branch** (response carries the `twira` T/I/P breakdown, I=0.315
+from its "AI solutions for everyone" block — semantic, no literal token overlap with the
+name), `proof_url=https://app.tetapi.dev/e/hellfire-solutions` (**non-null**). Same result
+live via MCP `teta_resolve_intent`.
+Changed: **no code** (embed-on-write + backfill task already merged, infra PR #3,
+2026-07-11). Docs only: `roadmap.md` (5.1 → ✅, blocked-items + next-actions updated,
+1.21 caveat note), `known-issues.md` ("TWIRA semantic ranking is off" → FIXED).
+Risk: low — verification/backfill, no code path changed. Only public+published businesses
+surface in TWIRA results (`_CANDIDATES_SQL` filter); the QA sourdough-bakery blocks stay
+out because that entity is unpublished (by design, not a regression). Left one labelled
+test block (`5.1 embed-on-write probe`) on the unpublished QA bakery — invisible to search.
+Next: front-end `/search` UI was explicitly out of scope — if a follow-up shows it needs
+wiring to the now-live TWIRA path, file it as its own frontend task. Also open: 2.7 (MCP
+`teta_resolve_intent` ignoring `verified_only:false`) is unrelated and still tracked.
+
 ## 2026-07-26 · 1.9 · OTS calendar submission bug fixed
 Done: `app/services/bitcoin.py`'s `submit_hash()` called
 `RemoteCalendar.submit(ts)` with the local `Timestamp` object; the installed
@@ -98,7 +123,6 @@ worker ships.
 Next: 1.20-web (frontend block/media state + MediaDisplay + permalink route);
 separately, a devops session to actually deploy a celery worker+beat process
 is a prerequisite for 1.9/1.20's bitcoin half to have any real effect.
-
 ---
 
 ## 2026-07-24 · 3.13 · profile redesign shipped (QA #26/#27/#28/#29/#30/#31)
