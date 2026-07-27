@@ -712,7 +712,17 @@ Status: OPEN (documented constraint).
 `/resolve-intent` + the I-component fall back to keyword matching. Blocks also get
 no embeddings, so pgvector search is empty. **Fix:** set `OPENAI_API_KEY`, backfill
 embeddings for existing public blocks, then TWIRA I turns on automatically.
-Status: OPEN (waiting on key).
+Status: **FIXED (2026-07-27, 5.1).** OpenAI billing paid, key live in server `.env`.
+`twira_backfill_block_embeddings` run via the Celery worker — 6/10 public blocks
+embedded (4 skipped: media-only, no title/description). Embed-on-write verified
+(create → 1536-dim vector immediately; update → re-embeds). Semantic `/resolve-intent`
+confirmed running through the TWIRA vector branch (query "artificial intelligence
+consulting services" → HELLFIRE Solutions via its "AI solutions for everyone" block,
+I=0.315), `proof_url` non-null (`app.tetapi.dev/e/{slug}`), REST + MCP. This also
+closes the 1.21 keyword-fallback `proof_url: null` caveat — prod no longer defaults
+to the fallback path. NOTE: block-level findability (1.20c) still needs public blocks
+on a public+published business; the QA test bakery holding sourdough blocks is
+unpublished, so those blocks stay out of results by design.
 
 ## 🟡 `GET /businesses/{id}/blocks` leaks private blocks
 `routes/blocks.py::list_blocks` is unauthenticated and returns **all** blocks for
