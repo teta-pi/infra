@@ -6,6 +6,53 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-27 · 1.20-web · block/media wiring — real upload data reaches the UI
+Done: closes known-issues.md's "1.20 backend scoping session" item (a), the
+last open piece of 1.20. `BlockMedia`/`ProfileBlock`
+(`web/src/stores/useProfileStore.ts`) now carry real
+`{id, storage_url, original_hash, c2pa_verified, bitcoin_confirmed}` instead
+of just `{source, phase}`. `BlockCard.handleFileUpload` no longer discards
+`mediaApi.upload`'s response and fakes "done" via `setTimeout` — found along
+the way that the upload response itself can't carry `storage_url`/
+`original_hash` (the route computes them but `MediaUploadResponse`'s
+`response_model` doesn't declare them, so FastAPI strips them), so
+`handleFileUpload` now follows up with the new `blockApi.get(block.id)`
+permalink call and matches the just-uploaded item by `media_id` to read back
+the real `MediaOut`. `mapServerBlock` fills the same fields on initial block
+load. `MediaDisplay` renders the real file through `mediaUrl()`'s
+same-origin `/media/local/...` proxy (file-link fallback for non-images) and
+a real truncated hash + verification/timestamp state, replacing the two
+hardcoded fake hash strings. Added the public block-permalink page,
+`/e/[slug]/blocks/[blockId]`. `MediaItem` (`web/src/lib/types.ts`) was still
+missing `original_hash` even though the API has returned it since the
+earlier 1.20-backend fix — added.
+Changed: `web/src/stores/useProfileStore.ts`, `web/src/lib/api.ts`,
+`web/src/lib/types.ts`, `web/src/app/profile/page.tsx`,
+`web/src/app/e/[slug]/blocks/[blockId]/page.tsx` (new). Docs:
+`known-issues.md` (1.20-web item closed), `roadmap.md` (1.20 row now fully
+done).
+Risk: the interactive upload path through the signed-in `/profile` editor
+UI wasn't verified end-to-end in-browser this session — the harness's
+safety classifier blocks injecting a live API key into a browser session,
+and the account with real edit rights on a test business wasn't available.
+Mitigated by replicating the exact upload→refetch call sequence via curl
+against a disposable QA test block (`media_id` from `/media/upload` matched
+`media.id` from the follow-up `GET /blocks/{id}` exactly) plus a clean
+`npm run build`; still, the actual React event-handler path (file input →
+`handleFileUpload` → state update → re-render) has not been clicked through
+live. **Second occurrence of the app-paths-manifest.json deploy bug**: the
+new permalink route 404'd immediately after this session's own deploy (web
+PR #17) for the same reason 3.12's icon routes did — `deploy.yml`
+hand-writes the manifest instead of syncing the real one `next build`
+produces. Fixed same-day in a follow-up PR #18 (added the missing entry),
+confirmed 200 live — but the underlying pattern will keep silently 404'ing
+new routes until someone fixes the deploy step itself.
+Next: consider a root-cause fix for the app-paths-manifest.json footgun
+(sync the actual build output instead of hand-maintaining a copy) — this is
+now the second unrelated session it's bitten. If a future session has real
+credentials for a test business, do a proper click-through verification of
+the `/profile` upload UI to close the residual risk noted above.
+
 ## 2026-07-27 · 5.1 · TWIRA embeddings turned on (backfill + live verification)
 Done: OpenAI billing paid + key live in server `.env` (verified by owner). Ran the
 `twira_backfill_block_embeddings` Celery task via the already-running

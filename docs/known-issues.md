@@ -57,6 +57,45 @@ test upload landed correctly). The break is entirely client-side:
   through `/media/local/...` same-origin) and the real hash instead of the
   fake string.
 
+**(a) fixed 2026-07-27, session 1.20-web (`teta-pi/web` PR #17, merged+deployed).**
+`BlockMedia` now carries `{id, storage_url, original_hash, c2pa_verified,
+bitcoin_confirmed}`. One wrinkle found while wiring it up: `mediaApi.upload`'s
+own response doesn't actually carry `storage_url`/`original_hash` — the route
+computes them but `MediaUploadResponse` (the `response_model`) only declares
+`media_id`/`c2pa_verified`/`c2pa_signer`/`bitcoin_status`, so FastAPI strips
+the rest before it reaches the client. `handleFileUpload` now follows the
+upload with `blockApi.get(block.id)` (the new `/blocks/{id}` permalink) and
+matches the freshly uploaded item by `media_id` to read back the real
+`MediaOut`. `mapServerBlock` fills the same fields on initial load.
+`MediaDisplay` renders the real file via `mediaUrl()` (same-origin
+`/media/local/...` proxy, file-link fallback for non-images) and a real
+truncated hash + verification state, replacing the two hardcoded fake hash
+strings. Also added the public block-permalink page,
+`/e/[slug]/blocks/[blockId]`, and found `MediaItem` (`web/src/lib/types.ts`)
+was still missing `original_hash` even though the API's public/authenticated
+payloads have carried it since the earlier fix above — added.
+Verified: full upload→refetch chain replicated via curl against a disposable
+QA test block (`media_id` from `/media/upload` == `media.id` from the
+follow-up `GET /blocks/{id}`); new permalink page checked in-browser against
+`hellfire-solutions`'s live 3-media block (real image + hashes render, 404
+case handled) both locally and on prod post-deploy. **Not verified**: a full
+interactive upload through the signed-in `/profile` editor UI — the harness's
+safety classifier blocks injecting a live API key into a browser session, and
+the account holding real edit rights wasn't available; covered instead by the
+curl-replicated chain above plus a clean `npm run build`.
+**New deploy-pipeline bug caught immediately after this PR's own deploy**: the
+new `/e/[slug]/blocks/[blockId]` route 404'd live even though the build was
+clean — `deploy.yml` hand-writes `.next/server/app-paths-manifest.json` on
+the server (same root cause as the 3.12 icon-routes bug) instead of syncing
+the manifest `next build` actually produces, so it silently drops any route
+not in its hardcoded list. Fixed in a same-day follow-up, PR #18 — added the
+missing entry, redeployed, confirmed 200 live. **This is now the second time
+this exact mechanism has caused a silent prod 404 after a clean deploy**
+(3.12 icon routes, now this) — worth fixing at the root (sync the real
+manifest instead of hand-maintaining a copy) rather than patching entry by
+entry each time a new route ships; flagged as a roadmap follow-up.
+Status: CLOSED.
+
 ## Found + fixed 2026-07-21 (3.12) — `overflow:hidden` page shells become invisible scroll containers
 
 **🟡 found while manually verifying the 3.12 app-chrome fix in-browser, not from a QA
