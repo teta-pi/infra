@@ -6,6 +6,23 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-27 · 2.7-mcp · resolve_intent verified_only mapping fixed
+Done: `teta_resolve_intent`'s zod schema never declared `verified_only` at
+all — any value a caller passed was silently stripped, so the REST call
+always used the API's default (`true`). Now exposes `verified_only` (default
+`true`, same semantics as `teta_search`) and threads it into `resolveIntent()`.
+Verified live via a real MCP client (raw JSON-RPC/curl against
+`mcp.tetapi.dev`): `verified_only:false` on "artificial intelligence
+consulting services" returns HELLFIRE Solutions, matching direct REST.
+Changed: `mcp/src/index.ts` (`teta_resolve_intent` schema + handler),
+`mcp/package.json`, `mcp/server.json` (1.5.0 → 1.5.1), `docs/mcp.md`.
+Risk: none — additive optional param with the same default as before,
+existing callers unaffected.
+Next: 2.8 filed — `app/twira/resolver.py::twira_resolve` (`teta-pi/api`)
+doesn't filter by `verified_only` at all, so the flag has no effect on the
+TWIRA-ranked path (the common case since 5.1); only the keyword-fallback
+path honours it.
+
 ## 2026-07-27 · 1.20-web · block/media wiring — real upload data reaches the UI
 Done: closes known-issues.md's "1.20 backend scoping session" item (a), the
 last open piece of 1.20. `BlockMedia`/`ProfileBlock`
