@@ -448,7 +448,12 @@ routes exist. Real routes are `/search`, `/businesses/{id}`,
 `/businesses/{id}/proof`, `/verify-endpoint` (`api/app/api/routes/*.py`). The
 `curl` example at line 235 uses the same wrong base+paths. Every copy-pasted
 example 404s. **Fix:** rewrite the section against the actual routers.
-Status: OPEN.
+Status: **CLOSED** — fixed 2026-07-27 (10.3, landing PR). Base URL corrected
+to `.../api/v1`; endpoint table + curl example rewritten against the real
+`/search`, `/businesses/{id}`, `/businesses/{id}/proof` routes (verified live:
+both example requests return 200). Also refreshed developers.html's own
+MCP-tools grid (was missing `teta_resolve_intent`/`teta_get_profile`, same gap
+as #15 below).
 
 ### 🔴 4. `landing/onboarding.html` "Apply for early access" form posts to a placeholder Formspree ID
 `onboarding.html:180-181`: `<!-- TODO: replace YOUR_FORM_ID -->` /
@@ -458,7 +463,10 @@ submission fails; the JS catches the error and shows a generic "Something went
 wrong" alert, so the whole page's funnel is silently dead. **Fix:** wire a real
 Formspree ID (or point it at `/claim`, which is the app's actual working
 onboarding endpoint).
-Status: OPEN.
+Status: **CLOSED** — fixed 2026-07-27 (10.3, landing PR). Dropped the dead
+Formspree form entirely; the page now sends people straight to
+`app.tetapi.dev/claim` (verified live, 200), the app's real self-serve claim
+flow. Removed the now-unused multi-field form CSS/JS along with it.
 
 ### 🟠 5. MCP `teta_search`'s `verified_only` filter is a no-op
 `mcp/src/index.ts:324` passes `level: verified_only ? undefined : "any"` to
@@ -638,7 +646,10 @@ Four places (`onboarding.html:236,240,272,277`) use `hello@teta-pi.io`, while
 every other page (`privacy.html`, `terms.html`, `index.html`,
 `developers.html`, `registries.html`, `llms.txt:49`) consistently uses
 `hello@tetapi.dev`. Misdirected contact address on an error-path CTA.
-Status: OPEN.
+Status: **CLOSED** — fixed 2026-07-27 (10.3, landing PR). All 4 occurrences in
+`onboarding.html` corrected to `hello@tetapi.dev`. **Note:** the same wrong
+address also exists in `generate.html` (×2) — out of scope for 10.3's file
+list, flagged separately as a follow-up task.
 
 ### 🟡 15. `landing/llms.txt` points the agent manifest at the wrong subdomain and understates the MCP tool count
 `llms.txt:22` links `https://app.tetapi.dev/.well-known/agent.json`, but
@@ -651,7 +662,11 @@ server actually exposes 7 (`mcp/src/index.ts`), missing
 `teta_resolve_intent`, `teta_get_profile`, `teta_verify_claim` from the
 agent-facing docs (`landing/.well-known/agent.json` itself is correct and
 lists all 7). **Fix:** correct the manifest link and refresh the tool list/count.
-Status: OPEN.
+Status: **CLOSED** — fixed 2026-07-27 (10.3, landing PR). `llms.txt` manifest
+link corrected to `https://tetapi.dev/.well-known/agent.json`; tool list
+expanded from 4 to all 7 (`teta_resolve_intent`, `teta_get_profile`,
+`teta_verify_claim` added), matching `agent.json`. `for-agents.html`'s "4 MCP
+tools" header and tool grid updated to 7 as well.
 
 ### 🟡 16. MCP `teta_get_profile` renders `undefined` for every media item
 `mcp/src/index.ts:465-471` reads `m.media_type ?? "media"` and `m.url ?? m.id`,
