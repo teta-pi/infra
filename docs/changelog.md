@@ -6,6 +6,36 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-27 · 10.1+10.3-landing · verification-methods copy pass + landing truth pass
+Done: 10.1 — `index.html`'s "How it works" step 1 and "Verification levels"
+section now mention the real proof methods (registry match, business email,
+domain ownership; document upload flagged "coming soon" per
+`verification-rework.md`, not yet backed). 10.3 — fixed all 4 QA findings:
+🔴#3 `developers.html` REST docs rewritten against the real
+`api.tetapi.dev/api/v1` routes (`/search`, `/businesses/{id}`,
+`/businesses/{id}/proof`) — both example curls verified live, 200 not 404;
+🔴#4 `onboarding.html`'s dead Formspree form replaced with a direct link to
+`app.tetapi.dev/claim` (verified live, 200), dead form CSS/JS removed; 🟡#14
+wrong support email `hello@teta-pi.io` → `hello@tetapi.dev`, all 4
+occurrences in `onboarding.html`; 🟡#15 `llms.txt`'s agent.json link fixed to
+`tetapi.dev` (not `app.` subdomain) and MCP tool list expanded 4→7
+(`teta_resolve_intent`/`teta_get_profile`/`teta_verify_claim` added, matching
+`.well-known/agent.json`). While in these files, also closed the same
+"4 MCP tools" gap in `developers.html`'s own tools grid and `for-agents.html`
+(both listed only 4; header + grid now say/show 7), and fixed
+`for-agents.html`'s fabricated `verified=true` query param to the real
+`level=full`.
+Changed: `landing/index.html`, `developers.html`, `onboarding.html`,
+`llms.txt`, `for-agents.html`; `docs/roadmap.md` (10.1/10.3 → ✅),
+`docs/known-issues.md` (#3, #4, #14, #15 → CLOSED).
+Risk: none functionally — copy/docs/dead-code removal only, no API or app
+changes. `onboarding.html`'s Formspree form was already 100% dead (posted to
+a literal placeholder ID, every submission failed), so nothing was actually
+being captured there before this fix; it's unrelated to index.html's separate
+hero claim form that feeds `claim_stats` (10.2, untouched here).
+Next: `generate.html` has the same wrong `hello@teta-pi.io` email (×2),
+out of scope for 10.3's file list — flagged as a standalone follow-up task.
+
 ## 2026-07-27 · 2.7-mcp · resolve_intent verified_only mapping fixed
 Done: `teta_resolve_intent`'s zod schema never declared `verified_only` at
 all — any value a caller passed was silently stripped, so the REST call
