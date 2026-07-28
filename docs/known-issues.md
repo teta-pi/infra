@@ -29,6 +29,18 @@ consulting services"` + `verified_only:true` now returns an empty result set
 `verified_only:false` on the same query still returns it, unchanged from
 before the fix.
 
+## 🟡 `teta-pi/web` CI: `npm audit` job red (found 2026-07-28, while in the repo for 3.5)
+
+Not a runtime bug — deploy still succeeds (separate job), just a CI signal
+nobody's acted on. `Dependency audit (npm audit)` reports 3 vulnerabilities (2
+high, 1 critical) rooted in the pinned `next` version: unbounded Server Action
+payload in Edge runtime, SSRF via rewrites, unauthenticated Server Function
+endpoint disclosure, plus transitive `postcss`/`sharp` CVEs. `npm audit fix
+--force` resolves it but bumps `next` to `15.5.22`, outside the current stated
+range — needs a deliberate upgrade + regression pass, not a blind `--force` in
+an unrelated session. Not fixed here (out of scope for 3.5); flagging for
+whoever owns dependency upgrades.
+
 ## 2.7 fix — MCP `teta_resolve_intent` `verified_only` (2026-07-27), 🟡 2.8 caveat now fixed (see above)
 
 **Repo:** `teta-pi/mcp` PR #5 (merged, deployed, v1.5.1).

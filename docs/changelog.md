@@ -54,6 +54,30 @@ hero claim form that feeds `claim_stats` (10.2, untouched here).
 Next: `generate.html` has the same wrong `hello@teta-pi.io` email (×2),
 out of scope for 10.3's file list — flagged as a standalone follow-up task.
 
+## 2026-07-28 · 3.5-web · claim page: money mention removed, reframed to early access
+Done: `/claim` step 2 (email verification, shared by both Business/Organization and
+Person paths — turned out not to be duplicated per entity kind, so one edit covered
+both) no longer shows the "I'm ready to pay $25 when billing launches — lock my
+founding price" checkbox. Replaced with a plain line: "Join early access — be first
+on the registry." — same tone as 10.2's landing copy. `claimApi.create()` in
+`lib/api.ts` dropped the `readyToPay` parameter entirely and no longer sends
+`ready_to_pay` in the `POST /claim` body. Verified live against `api.tetapi.dev`:
+`curl -X POST /api/v1/claim` without `ready_to_pay` → `201` then `409` on repeat
+(idempotent), no 422/500 — backend already treats the field as optional, so no
+backend change was needed. Live-verified both entity-kind paths on
+`app.tetapi.dev/claim` post-deploy (Business/Organization and Person both render
+the new copy, no checkbox).
+Changed: `web/src/app/claim/page.tsx`, `web/src/lib/api.ts` (web PR #19, merged to
+main, auto-deployed). `docs/roadmap.md` (3.5 row → done).
+Risk: none — pure copy/UI removal + one unused request field dropped from the
+frontend payload; backend untouched. `admin/page.tsx`'s "FOUNDING LOCKED" badge for
+historical `ready_to_pay=true` claims (pre-3.1/pre-3.5 signups) still renders
+correctly, just will never be set `true` again going forward.
+Next: nothing further on 3.5. Unrelated finding while in the repo: `web`'s CI
+"Dependency audit (npm audit)" job is red (Next.js/postcss/sharp advisories,
+pre-existing, `npm audit fix --force` would bump Next outside the stated range) —
+not touched this session, flagging for whoever owns dependency upgrades.
+
 ## 2026-07-27 · 2.7-mcp · resolve_intent verified_only mapping fixed
 Done: `teta_resolve_intent`'s zod schema never declared `verified_only` at
 all — any value a caller passed was silently stripped, so the REST call
