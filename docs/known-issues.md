@@ -3,7 +3,33 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
-## 2.7 fix — MCP `teta_resolve_intent` `verified_only` (2026-07-27), new 🟡 2.8 caveat found
+## 2.8 fix — TWIRA path now enforces `verified_only` (2026-07-28)
+
+**Repo:** `teta-pi/api` PR #15 (merged, deployed).
+
+**Fixed:** `app/twira/resolver.py::twira_resolve` never filtered candidates by
+`verification_level` — `verified_only` had zero effect whenever the
+TWIRA-ranked path ran (almost always since 5.1 made embeddings live), and only
+took effect on the keyword-fallback path (`IntentResolver.resolve`). Added a
+`verified_only: bool = True` parameter to `twira_resolve`, threaded from
+`payload.verified_only` in `app/api/routes/intent.py::resolve_intent`, and
+filters `Business.verification_level != "none"` when set.
+
+**Semantics decision:** "verified" = any level above `"none"`, matching
+`IntentResolver.resolve`'s existing filter (`LEVEL_WEIGHTS` in
+`intent_graph/resolver.py` treats `registry`/`partial`/`full`/`live` all as
+non-zero) — not a `registry`+ threshold. This keeps `teta_search` and
+`teta_resolve_intent` consistent, per the 2.7/2.8 requirement. (Note: audit
+finding 🟠 5 below, about `teta_search`'s `level` mapping in `mcp/index.ts`,
+is a separate, still-open bug in a different repo/layer — not touched here.)
+
+Verified live: `POST /api/v1/resolve-intent` with `"artificial intelligence
+consulting services"` + `verified_only:true` now returns an empty result set
+(HELLFIRE Solutions, `verification_level: "none"`, no longer appears);
+`verified_only:false` on the same query still returns it, unchanged from
+before the fix.
+
+## 2.7 fix — MCP `teta_resolve_intent` `verified_only` (2026-07-27), 🟡 2.8 caveat now fixed (see above)
 
 **Repo:** `teta-pi/mcp` PR #5 (merged, deployed, v1.5.1).
 
@@ -227,8 +253,10 @@ items are already addressed. Mapping to sessions:
 > `verified_only` as a tool parameter at all until 2.7, so an agent had no
 > way to pass `false` through MCP regardless of this default. That's now
 > fixed (see the 2.7 section at the top of this file), which also surfaced a
-> new caveat: the TWIRA path ignores `verified_only` entirely, so this
-> default is currently moot for TWIRA-live queries — see roadmap 2.8.
+> new caveat: the TWIRA path ignored `verified_only` entirely, making this
+> default moot for TWIRA-live queries. **UPDATE 2026-07-28 (2.8):** fixed —
+> see the 2.8 section at the top of this file — the TWIRA path now enforces
+> `verified_only` with the same semantics as this default.
 
 Found while verifying the 1.17 fix on prod. `POST /resolve-intent` with only a
 `query` returns empty for any L0 (`verification_level="none"`) entity even on

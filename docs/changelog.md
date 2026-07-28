@@ -6,6 +6,24 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-28 · 2.8-api · TWIRA path now enforces verified_only
+Done: `app/twira/resolver.py::twira_resolve` (`teta-pi/api`) was ignoring
+verification level entirely — `verified_only` had no effect on the TWIRA-ranked
+path, which is almost always the active path since 5.1 made embeddings live
+(only the keyword-fallback `IntentResolver.resolve` honoured it). Added
+`verified_only: bool = True` param to `twira_resolve`, threaded from
+`payload.verified_only` in `resolve_intent`, filters
+`verification_level != "none"` — same semantics as the keyword-fallback path,
+chosen to keep `teta_search`/`teta_resolve_intent` consistent (product call
+made this session, not a "registry+" threshold).
+Changed: `teta-pi/api` `app/twira/resolver.py`, `app/api/routes/intent.py`
+(PR #15, merged, deployed).
+Risk: none identified — pure additive filter, default `True` preserves prior
+opt-in behaviour for callers that already relied on it working (they didn't,
+since it never worked on this path).
+Next: none — this closes roadmap 2.8. Audit finding 🟠 5 (`teta_search`'s
+`level` mapping no-op in `mcp/index.ts`) is unrelated, separate, still open.
+
 ## 2026-07-27 · 10.1+10.3-landing · verification-methods copy pass + landing truth pass
 Done: 10.1 — `index.html`'s "How it works" step 1 and "Verification levels"
 section now mention the real proof methods (registry match, business email,
