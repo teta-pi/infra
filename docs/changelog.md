@@ -6,6 +6,50 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-29 · 3.15a-web · "Grid of Record" foundation — attestation bar, identity, facts strip
+Done: first of 6 sequential sessions redesigning `/profile` per the owner's
+high-fidelity handoff (`docs/design/profile-grid-of-record/`). Built the 3
+regions the spec calls shared chrome across all modes: `AttestationBar`
+(NEW — full-width bar above identity, 3 seals registry/c2pa/btc + a
+pulsing-dot re-check status cell), `ProfileIdentity` (avatar tile, editable
+name/description relocated from the old `EditView`, handle chip, the new
+inline Edit/Visitor/Agent mode switch), `FactsStrip` (4 stats: signed blocks,
+trust level, registered year, agent lookups). All rendered once in
+`ProfilePage()` above the existing Edit/Visitor/Agent switch, since spec has
+regions 1-4 identical in every mode — only what's below differs. Attestation
+seals and facts are derived from real data (`store.registryStatus`/
+`registryData`, per-block `media.c2pa_verified`/`bitcoin_confirmed`/
+`bitcoin_block` — added `bitcoin_block` to `ProfileBlock.media` and
+`mapServerBlock` to carry it through — plus `Business.verification_level`/
+`created_at`/`updated_at`, fetched into new local `entityMeta` state since
+nothing else needed them in the shared store); "agent lookups / 30d" has no
+backend source and renders "—" (logged in known-issues, not faked). Removed
+the now-redundant inline "✓ Verified in registry"/"✓ Email verified" status
+row from `EditView` and the duplicate name/badges/description header from
+`VisitorView` — both superseded by the shared regions. Removed the old fixed
+floating bottom mode-switch pill; `useProfileStore`'s `view` field already
+matched the spec's 3-way mode state exactly, so no store changes were needed
+for that part. Page content width widened 880→1180px to match the spec's
+board, with the still-unconverted regions 5+ (blocks, `VerifyMenu`) kept in
+their own 880px-centered wrapper in the old glass style below.
+`AppHeader` (region 1/nav) reviewed against the spec's `12px 26px`/`#E2DCF0`
+values and deliberately left unchanged — it's shared fixed-blur chrome across
+5 pages (home/search/settings/profile/public entity), and re-skinning it for
+one page's redesign risked the other 4. Added `tp-pulse` keyframe to
+`globals.css` (existing `prefers-reduced-motion` rule already disables it).
+Changed: `teta-pi/web` `src/app/profile/page.tsx` (regions 1-4 + `EditView`/
+`VisitorView` trims), `src/stores/useProfileStore.ts` (`BlockMedia.bitcoin_block`),
+`src/app/globals.css` (`tp-pulse`). `docs/roadmap.md` (3.15 row),
+`docs/known-issues.md` (new 🟡 agent-lookups-analytics finding).
+Risk: mobile viewport only got a minimal wrap-not-clip fix for the attestation
+cells (3.15f owns the real 390px layout per spec) — verified nothing overflows
+or breaks at 390px, not pixel-matched. "registry" attestation cell shows
+`registry:n/a` for person-kind entities (journalist/creator/actor/other) since
+they never run a registry check — a product-level call, not explicitly
+specified by the design (which only mocks a business).
+Next: 3.15b (square ledger — statement tile grid, drag-reorder, filter chips,
+hover overlay, add-block tile), same file, must land after this one merges.
+
 ## 2026-07-28 · 2.8-api · TWIRA path now enforces verified_only
 Done: `app/twira/resolver.py::twira_resolve` (`teta-pi/api`) was ignoring
 verification level entirely — `verified_only` had no effect on the TWIRA-ranked
