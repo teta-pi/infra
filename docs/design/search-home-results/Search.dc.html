@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin:0; padding:0; background:#F4F2F8; }
+    body { -webkit-font-smoothing:antialiased; }
+    *, *::before, *::after { box-sizing:border-box; }
+    ::selection { background:rgba(107,63,160,0.16); }
+    a { color:#6B3FA0; text-decoration:none; }
+    a:hover { color:#5A3488; }
+    @keyframes tp-pulse { 0%,100% { opacity:.35; } 50% { opacity:1; } }
+    @keyframes tp-caret { 0%,49% { opacity:1; } 50%,100% { opacity:0; } }
+  </style>
+</helmet>
+
+<div style="font-family:'Trebuchet MS','Segoe UI','Helvetica Neue',sans-serif; color:#1A1035; padding:40px 40px 90px; display:flex; flex-direction:column; gap:26px;">
+
+  <div id="3a" style="display:flex; flex-direction:column; align-items:flex-start; gap:26px;">
+    <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; letter-spacing:1.4px; text-transform:uppercase; color:#9088B0;">Home · 1180 desktop</span>
+
+    <div style="width:1180px; background:#ffffff; border:1px solid #E2DCF0;">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 26px; border-bottom:1px solid #E2DCF0;">
+        <div style="display:flex; align-items:baseline; gap:6px;">
+          <span style="font-size:20px; font-weight:600; color:#6B3FA0; line-height:1; letter-spacing:-0.5px;">Θ</span>
+          <span style="font-size:14px; font-weight:300; line-height:1;">+</span>
+          <span style="font-size:18px; font-weight:600; color:#E8640C; line-height:1;">π</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:26px;">
+          <a href="#3a" style="font-size:13.5px; color:#4A3F6B;">Search</a>
+          <a href="#3a" style="font-size:13.5px; color:#4A3F6B;">My page</a>
+          <a href="#3a" style="font-size:13.5px; color:#4A3F6B;">Settings</a>
+          <span style="font-size:13.5px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:8px 15px; border-radius:4px; cursor:pointer;" style-hover="background:#5A3488;">Claim your page</span>
+        </div>
+      </div>
+
+      <!-- the query line is the page -->
+      <div style="height:520px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 34px;">
+        <div style="width:100%; max-width:720px;">
+          <div style="display:flex; border-bottom:1.5px solid #1A1035;">
+            <div style="flex:1; display:flex; align-items:center; gap:14px; padding:0 2px 14px; min-width:0;">
+              <span style="width:14px; height:14px; flex:none; border:1.5px solid #9088B0; border-radius:50%;"></span>
+              <span style="display:block; min-width:0; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:19px; color:#1A1035; letter-spacing:-0.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ typed }}</span>
+              <span style="width:2px; height:23px; background:#6B3FA0; animation:tp-caret 1s step-end infinite; flex:none;"></span>
+            </div>
+            <span onClick="{{ runSearch }}" style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:#6B3FA0; padding:0 2px 14px; cursor:pointer; flex:none; align-self:flex-end; white-space:nowrap;" style-hover="color:#5A3488;">Search ↵</span>
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:20px; margin-top:14px;">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#9088B0; letter-spacing:0.3px;">signed evidence only · {{ registryLine }}</span>
+            <a href="#3b" style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; letter-spacing:0.3px;">example result set →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- mobile home -->
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; letter-spacing:1.4px; text-transform:uppercase; color:#9088B0;">390 · mobile</span>
+      <div style="width:390px; background:#ffffff; border:1px solid #E2DCF0;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #E2DCF0;">
+          <div style="display:flex; align-items:baseline; gap:5px;">
+            <span style="font-size:18px; font-weight:600; color:#6B3FA0; line-height:1;">Θ</span>
+            <span style="font-size:12px; font-weight:300; line-height:1;">+</span>
+            <span style="font-size:16px; font-weight:600; color:#E8640C; line-height:1;">π</span>
+          </div>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#6B3FA0; letter-spacing:0.4px; cursor:pointer;">claim page</span>
+        </div>
+        <div style="height:420px; display:flex; flex-direction:column; justify-content:center; padding:0 16px;">
+          <div style="display:flex; border-bottom:1.5px solid #1A1035;">
+            <div style="flex:1; display:flex; align-items:center; gap:10px; padding:0 1px 11px; min-width:0;">
+              <span style="width:12px; height:12px; flex:none; border:1.5px solid #9088B0; border-radius:50%;"></span>
+              <span style="display:block; flex:1; min-width:0; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:14px; color:#1A1035; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ typedShort }}</span>
+            </div>
+            <span onClick="{{ runSearch }}" style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:#6B3FA0; padding:0 1px 11px; cursor:pointer; flex:none; align-self:flex-end; white-space:nowrap;">Search ↵</span>
+          </div>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#9088B0; margin-top:12px; line-height:1.6;">signed evidence only<br>{{ registryLine }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== 3b · RESULTS =========================== -->
+  <div id="3b" style="display:flex; flex-direction:column; align-items:flex-start; gap:26px; margin-top:34px;">
+    <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; letter-spacing:1.4px; text-transform:uppercase; color:#9088B0;">Results · 1180 desktop</span>
+
+    <div style="width:1180px; background:#ffffff; border:1px solid #E2DCF0;">
+
+      <div style="display:flex; align-items:center; gap:20px; padding:12px 26px; border-bottom:1px solid #E2DCF0;">
+        <div style="display:flex; align-items:baseline; gap:6px; flex:none;">
+          <span style="font-size:20px; font-weight:600; color:#6B3FA0; line-height:1; letter-spacing:-0.5px;">Θ</span>
+          <span style="font-size:14px; font-weight:300; line-height:1;">+</span>
+          <span style="font-size:18px; font-weight:600; color:#E8640C; line-height:1;">π</span>
+        </div>
+        <div style="flex:1; display:flex; border:1px solid #E2DCF0; min-width:0;">
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:0 14px; min-width:0;">
+            <span style="width:11px; height:11px; flex:none; border:1.5px solid #9088B0; border-radius:50%;"></span>
+            <span style="display:block; flex:1; min-width:0; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; color:#1A1035; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ query }}</span>
+          </div>
+          <span style="font-size:13px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:11px 18px; cursor:pointer; flex:none;" style-hover="background:#5A3488;">Search</span>
+        </div>
+        <a href="#3b" style="font-size:13.5px; color:#4A3F6B; flex:none;">My page</a>
+      </div>
+
+      <!-- evidence filter bar: the top edge again -->
+      <div style="display:flex; align-items:stretch; border-bottom:1px solid #E2DCF0; background:#FBFAFD;">
+        <sc-for list="{{ trustTabs }}" as="t" hint-placeholder-count="4">
+          <div onClick="{{ t.onClick }}" style="flex:1; display:flex; align-items:center; gap:11px; padding:14px 20px; border-right:1px solid #E2DCF0; cursor:pointer; background:{{ t.bg }}; box-shadow:{{ t.shadow }};" style-hover="background:#F4F0FB;">
+            <span style="width:12px; height:12px; flex:none; border:1.5px solid {{ t.line }}; background:{{ t.fill }}; border-radius:{{ t.radius }}; transform:rotate({{ t.rot }});"></span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11.5px; color:{{ t.color }}; letter-spacing:0.3px;">{{ t.label }}</span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#9088B0; margin-left:auto;">{{ t.count }}</span>
+          </div>
+        </sc-for>
+        <div style="width:200px; flex:none; display:flex; align-items:center; padding:14px 20px;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#9088B0; line-height:1.5;">{{ resultCount }} entities<br>{{ blockCount }} matched blocks</span>
+        </div>
+      </div>
+
+      <!-- result rows -->
+      <sc-for list="{{ results }}" as="r" hint-placeholder-count="3">
+        <div style="border-bottom:1px solid #E2DCF0; padding:24px 34px 26px; background:{{ r.rowBg }};" style-hover="background:#FBFAFD;">
+          <div style="display:flex; align-items:flex-start; gap:20px;">
+            <div style="width:72px; height:72px; flex:none; border:1px solid #E2DCF0; background:repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px);"></div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:baseline; gap:11px; flex-wrap:wrap;">
+                <a href="#3b" style="font-size:22px; font-weight:700; letter-spacing:-0.7px; color:#1A1035; line-height:1.1;" style-hover="color:#6B3FA0;">{{ r.name }}</a>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#6B3FA0; border:1px solid #C9B8E8; padding:2px 7px;">{{ r.handle }}</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#9088B0;">{{ r.type }}</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:14px; margin-top:11px; flex-wrap:wrap;">
+                <span style="display:flex; align-items:center; gap:7px;">
+                  <sc-for list="{{ r.marks }}" as="mk" hint-placeholder-count="3">
+                    <span style="display:flex; align-items:center; gap:5px;">
+                      <span style="width:10px; height:10px; border:1.5px solid {{ mk.line }}; background:{{ mk.fill }}; border-radius:{{ mk.radius }}; transform:rotate({{ mk.rot }});"></span>
+                      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#4A3F6B;">{{ mk.short }}</span>
+                    </span>
+                  </sc-for>
+                </span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:{{ r.trustColor }}; border:1px solid {{ r.trustColor }}; padding:2px 7px; letter-spacing:0.6px;">{{ r.trust }}</span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#9088B0;">{{ r.meta }}</span>
+              </div>
+              <p style="font-size:14.5px; color:#4A3F6B; line-height:1.55; margin:12px 0 0; max-width:660px; text-wrap:pretty;">{{ r.answer }}</p>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; flex:none;">
+              <span style="font-size:13.5px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:10px 18px; border-radius:4px; cursor:pointer; text-align:center;" style-hover="background:#5A3488;">Open page</span>
+              <span onClick="{{ r.onToggle }}" style="font-size:13px; font-weight:600; color:#6B3FA0; border:1px solid #C9B8E8; padding:10px 18px; border-radius:4px; cursor:pointer; text-align:center;" style-hover="border-color:#6B3FA0;">{{ r.toggleLabel }}</span>
+            </div>
+          </div>
+
+          <div style="display:{{ r.evidenceDisplay }}; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:18px; padding-left:92px;">
+            <sc-for list="{{ r.blocks }}" as="b" hint-placeholder-count="3">
+              <div onClick="{{ b.onOpen }}" style="aspect-ratio:1; border:1px solid #E2DCF0; background:#ffffff; cursor:pointer; display:flex; flex-direction:column; overflow:hidden;" style-hover="border-color:#6B3FA0;">
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:9px 11px; border-bottom:1px solid #F1EDF9;">
+                  <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#9088B0; letter-spacing:0.5px;">{{ b.kind }}</span>
+                  <span style="display:flex; gap:3px;">
+                    <sc-for list="{{ b.marks }}" as="mk" hint-placeholder-count="2">
+                      <span style="width:7px; height:7px; border:1.25px solid {{ mk.line }}; background:{{ mk.fill }}; border-radius:{{ mk.radius }}; transform:rotate({{ mk.rot }});"></span>
+                    </sc-for>
+                  </span>
+                </div>
+                <div style="flex:1; background:{{ b.media }}; display:flex; align-items:center; justify-content:center;">
+                  <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:{{ b.mediaColor }};">{{ b.mediaLabel }}</span>
+                </div>
+                <div style="padding:10px 11px 11px; border-top:1px solid #F1EDF9;">
+                  <div style="font-size:12.5px; font-weight:600; line-height:1.3; text-wrap:pretty;">{{ b.title }}</div>
+                  <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:#9088B0; margin-top:5px;">{{ b.meta }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+
+      <!-- unverified tail -->
+      <div style="padding:22px 34px 24px; background:#FBFAFD;">
+        <div style="display:flex; align-items:center; gap:11px;">
+          <span style="width:11px; height:11px; border:1.5px dashed #9088B0; border-radius:50%;"></span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:1.2px; text-transform:uppercase; color:#9088B0;">4 unverified mentions withheld</span>
+        </div>
+        <div style="font-size:13.5px; color:#4A3F6B; line-height:1.55; margin-top:9px; max-width:620px;">Names found in open sources with no signed block behind them. Shown only if you ask for them explicitly.</div>
+        <span style="display:inline-block; font-size:13px; font-weight:600; color:#6B3FA0; border:1px solid #C9B8E8; padding:9px 16px; border-radius:4px; cursor:pointer; margin-top:14px;" style-hover="border-color:#6B3FA0;">Show unverified</span>
+      </div>
+    </div>
+
+    <!-- mobile results -->
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; letter-spacing:1.4px; text-transform:uppercase; color:#9088B0;">390 · mobile</span>
+      <div style="width:390px; background:#ffffff; border:1px solid #E2DCF0;">
+        <div style="display:flex; border:0; border-bottom:1px solid #E2DCF0; padding:12px 16px;">
+          <div style="flex:1; display:flex; border:1px solid #E2DCF0; min-width:0;">
+            <div style="flex:1; display:flex; align-items:center; gap:8px; padding:0 11px; min-width:0;">
+              <span style="width:10px; height:10px; flex:none; border:1.5px solid #9088B0; border-radius:50%;"></span>
+              <span style="display:block; flex:1; min-width:0; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11.5px; color:#1A1035; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ query }}</span>
+            </div>
+            <span style="font-size:12px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:10px 13px; flex:none;">Go</span>
+          </div>
+        </div>
+        <div style="display:flex; overflow-x:auto; border-bottom:1px solid #E2DCF0; background:#FBFAFD;">
+          <sc-for list="{{ trustTabs }}" as="t" hint-placeholder-count="4">
+            <div onClick="{{ t.onClick }}" style="display:flex; align-items:center; gap:7px; padding:11px 14px; border-right:1px solid #E2DCF0; cursor:pointer; white-space:nowrap; background:{{ t.bg }}; box-shadow:{{ t.shadow }};">
+              <span style="width:9px; height:9px; flex:none; border:1.5px solid {{ t.line }}; background:{{ t.fill }}; border-radius:{{ t.radius }}; transform:rotate({{ t.rot }});"></span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:{{ t.color }};">{{ t.label }} {{ t.count }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <sc-for list="{{ resultsMobile }}" as="r" hint-placeholder-count="2">
+          <div style="border-bottom:1px solid #E2DCF0; padding:16px;">
+            <div style="display:flex; gap:12px;">
+              <div style="width:48px; height:48px; flex:none; border:1px solid #E2DCF0; background:repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px);"></div>
+              <div style="min-width:0;">
+                <div style="font-size:16px; font-weight:700; letter-spacing:-0.4px; line-height:1.15;">{{ r.name }}</div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:7px;">
+                  <sc-for list="{{ r.marks }}" as="mk" hint-placeholder-count="3">
+                    <span style="width:9px; height:9px; border:1.5px solid {{ mk.line }}; background:{{ mk.fill }}; border-radius:{{ mk.radius }}; transform:rotate({{ mk.rot }});"></span>
+                  </sc-for>
+                  <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:{{ r.trustColor }};">{{ r.trust }}</span>
+                </div>
+              </div>
+            </div>
+            <p style="font-size:13.5px; color:#4A3F6B; line-height:1.5; margin:11px 0 0;">{{ r.answerShort }}</p>
+            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:12px;">
+              <sc-for list="{{ r.mobileBlocks }}" as="b" hint-placeholder-count="2">
+                <div onClick="{{ b.onOpen }}" style="aspect-ratio:1; border:1px solid #E2DCF0; display:flex; flex-direction:column; cursor:pointer;">
+                  <div style="flex:1; background:{{ b.media }}; display:flex; align-items:flex-start; justify-content:space-between; padding:8px;">
+                    <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9px; color:{{ b.mediaColor }};">{{ b.kind }}</span>
+                    <span style="display:flex; gap:3px;">
+                      <sc-for list="{{ b.marks }}" as="mk" hint-placeholder-count="2">
+                        <span style="width:6px; height:6px; border:1.25px solid {{ mk.line }}; background:{{ mk.fill }}; border-radius:{{ mk.radius }}; transform:rotate({{ mk.rot }});"></span>
+                      </sc-for>
+                    </span>
+                  </div>
+                  <div style="padding:8px; border-top:1px solid #F1EDF9; font-size:11px; font-weight:600; line-height:1.25;">{{ b.title }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ open }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:fixed; inset:0; z-index:80; background:rgba(26,16,53,0.55); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; padding:40px;">
+      <div onClick="{{ stop }}" style="width:600px; max-width:100%; background:#ffffff; border:1px solid #C9B8E8;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 22px; border-bottom:1px solid #E2DCF0; background:#FBFAFD;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:#6B3FA0;">{{ openOwner }} · {{ openKind }}</span>
+          <span onClick="{{ closeModal }}" style="font-size:18px; color:#9088B0; cursor:pointer; line-height:1;">×</span>
+        </div>
+        <div style="padding:24px 22px 26px;">
+          <div style="height:190px; border:1px solid #E2DCF0; background:repeating-linear-gradient(45deg,#F1EDF9 0 8px,#FBFAFD 8px 16px); display:flex; align-items:flex-end; padding:12px;">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#9088B0;">{{ openMediaLabel }}</span>
+          </div>
+          <h2 style="font-size:21px; font-weight:700; letter-spacing:-0.6px; margin:20px 0 0; line-height:1.25;">{{ openTitle }}</h2>
+          <div style="font-size:14.5px; color:#4A3F6B; line-height:1.6; margin-top:10px;">{{ openBody }}</div>
+          <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:#E2DCF0; border:1px solid #E2DCF0; margin-top:22px;">
+            <sc-for list="{{ openRows }}" as="r" hint-placeholder-count="4">
+              <div style="background:#ffffff; padding:13px 15px;">
+                <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; letter-spacing:1.2px; text-transform:uppercase; color:#9088B0;">{{ r.k }}</div>
+                <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#1A1035; margin-top:6px; word-break:break-all;">{{ r.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; gap:12px; margin-top:22px;">
+            <span onClick="{{ closeModal }}" style="font-size:14px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:11px 20px; border-radius:4px; cursor:pointer;" style-hover="background:#5A3488;">Verify chain</span>
+            <span onClick="{{ closeModal }}" style="font-size:14px; font-weight:600; color:#6B3FA0; border:1px solid #C9B8E8; padding:11px 20px; border-radius:4px; cursor:pointer;" style-hover="border-color:#6B3FA0;">Open entity page</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:1400},&quot;defaultTrustFilter&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ALL&quot;,&quot;FULL&quot;,&quot;PARTIAL&quot;,&quot;DECLARED&quot;],&quot;default&quot;:&quot;ALL&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Results&quot;},&quot;expandFirstResult&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Results&quot;}}">
+const P = '#6B3FA0', O = '#E8640C', INK = '#1A1035', DIM = '#9088B0';
+const MK = {
+  registry: { short: 'registry', line: P, fill: P, radius: '1px', rot: '0deg' },
+  c2pa:     { short: 'c2pa',     line: P, fill: 'transparent', radius: '50%', rot: '0deg' },
+  btc:      { short: 'btc:ts',   line: O, fill: O, radius: '1px', rot: '45deg' }
+};
+const STRIPE = 'repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px)';
+const INKSTRIPE = 'repeating-linear-gradient(45deg,#241847 0 6px,#1A1035 6px 12px)';
+
+const QUERY = 'organic strawberry growers, Vinnytsia oblast';
+const EXAMPLES = [
+  'organic strawberry growers, Vinnytsia oblast',
+  'who filmed the Kharkiv protest on 14 May',
+  'suppliers with cold chain proof',
+  'photographers with C2PA cameras'
+];
+
+const RESULTS = [
+  { id: 'e1', name: 'Yasna Farm LLC', handle: 'tetapi.dev/yasna', type: 'business · agriculture',
+    marks: ['registry', 'c2pa', 'btc'], trust: 'L3 media-backed', meta: '6 blocks · 318 agent lookups / 30d',
+    answer: 'Answers the query with three signed blocks: harvest video from field 4, an hourly cold-chain photo series, and a notarised declaration of no synthetic pesticides.',
+    short: 'Three signed blocks match: harvest video, cold-chain photo series, pesticide declaration.',
+    blocks: [
+      { kind: 'VIDEO', title: 'Morning harvest, field 4', meta: '0:42 · 12 JUN 2026', marks: ['registry', 'c2pa', 'btc'], dark: true, hash: 'c2pa:9f41…a207', body: 'Uncut capture from the east field at 06:10, signed by the camera at the moment of capture.' },
+      { kind: 'PHOTO', title: 'Cold chain holding at 4 °C', meta: 'IoT photo · hourly', marks: ['c2pa', 'btc'], dark: false, hash: 'c2pa:2b70…ee19', body: 'Thermometer readout photographed automatically each hour inside the packing room.' },
+      { kind: 'TEXT', title: 'No synthetic pesticides used', meta: 'declaration · notarised', marks: ['registry'], dark: false, hash: 'sha256:44c1…8bd0', body: 'Written declaration bound to the registry record.' }
+    ] },
+  { id: 'e2', name: 'Bereh Berry Co-op', handle: 'tetapi.dev/bereh', type: 'co-operative · 14 members',
+    marks: ['registry', 'c2pa'], trust: 'L2 partial chain', meta: '11 blocks · 96 agent lookups / 30d',
+    answer: 'Registry-attested co-operative. Member farms publish their own blocks; two of fourteen have no signed media yet, so the chain is partial.',
+    short: 'Registry-attested co-op. Two of fourteen member farms have no signed media yet.',
+    blocks: [
+      { kind: 'PHOTO', title: 'Member field walk, June', meta: '24 photos · signed', marks: ['c2pa'], dark: false, hash: 'c2pa:88de…41ab', body: 'Photo set from the annual member inspection walk.' },
+      { kind: 'AUDIO', title: 'Members assembly minutes', meta: '18:04 · UA', marks: ['registry'], dark: false, hash: 'sha256:0cc9…7f12', body: 'Recorded assembly where the pesticide policy was adopted.' }
+    ] },
+  { id: 'e3', name: 'Kolos Trade', handle: 'tetapi.dev/kolos', type: 'business · distribution',
+    marks: ['registry'], trust: 'L1 declared only', meta: '2 blocks · 41 agent lookups / 30d',
+    answer: 'Registry record exists, but every claim is a plain text declaration with no signed media behind it. Ranked below entities that put evidence on the record.',
+    short: 'Registry record only — no signed media behind any claim.',
+    blocks: [
+      { kind: 'TEXT', title: 'Sourcing statement 2026', meta: 'declaration · unsigned media', marks: ['registry'], dark: false, hash: 'sha256:31fa…9b04', body: 'Self-written sourcing statement. No media attached.' }
+    ] }
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const exp = props.expandFirstResult ?? true;
+    this.state = { typed: 0, trust: props.defaultTrustFilter ?? 'ALL', expanded: { e1: exp, e2: false, e3: false }, open: null };
+  }
+  componentDidMount() {
+    this.t = setInterval(() => {
+      this.setState(s => {
+        if (s.typed >= QUERY.length) { clearInterval(this.t); return null; }
+        return { typed: s.typed + 1 };
+      });
+    }, 42);
+  }
+  componentWillUnmount() { clearInterval(this.t); }
+  blockView(b, ownerName) {
+    return { ...b,
+      marks: b.marks.map(k => MK[k]),
+      media: b.dark ? INKSTRIPE : STRIPE,
+      mediaColor: b.dark ? '#C9B8E8' : DIM,
+      mediaLabel: b.kind === 'TEXT' ? 'text · no media' : b.kind.toLowerCase() + ' source',
+      onOpen: () => this.setState({ open: { ...b, owner: ownerName } })
+    };
+  }
+  visible() {
+    const t = this.state.trust;
+    return RESULTS.filter(r => t === 'ALL' || (t === 'FULL' ? r.marks.length === 3 : (t === 'PARTIAL' ? r.marks.length === 2 : r.marks.length === 1)));
+  }
+  renderVals() {
+    const rows = this.visible().map(r => {
+      const exp = this.state.expanded[r.id];
+      return { ...r,
+        marks: r.marks.map(k => MK[k]),
+        trustColor: r.marks.length === 3 ? P : (r.marks.length === 2 ? O : DIM),
+        rowBg: exp ? '#FBFAFD' : '#ffffff',
+        evidenceDisplay: exp ? 'grid' : 'none',
+        toggleLabel: exp ? 'Hide evidence' : 'Show ' + r.blocks.length + ' blocks',
+        onToggle: () => this.setState(s => ({ expanded: { ...s.expanded, [r.id]: !s.expanded[r.id] } })),
+        blocks: r.blocks.map(b => this.blockView(b, r.name)),
+        mobileBlocks: r.blocks.slice(0, 2).map(b => this.blockView(b, r.name)),
+        answerShort: r.short
+      };
+    });
+    const typed = QUERY.slice(0, this.state.typed);
+    const o = this.state.open;
+    const counts = { ALL: RESULTS.length, FULL: 1, PARTIAL: 1, DECLARED: 1 };
+    return {
+      typed, typedShort: typed,
+      query: QUERY,
+      runSearch: () => this.setState({ typed: QUERY.length }),
+      registryLine: '48,201 entities · 1,204,776 blocks',
+      trustTabs: [
+        { id: 'ALL', label: 'all results', ...MK.registry, fill: 'transparent' },
+        { id: 'FULL', label: 'full chain', ...MK.registry },
+        { id: 'PARTIAL', label: 'partial chain', ...MK.btc },
+        { id: 'DECLARED', label: 'declared only', ...MK.c2pa, line: DIM }
+      ].map(t => ({ ...t,
+        count: counts[t.id],
+        onClick: () => this.setState({ trust: t.id }),
+        bg: this.state.trust === t.id ? '#F4F0FB' : 'transparent',
+        color: this.state.trust === t.id ? INK : '#4A3F6B',
+        shadow: this.state.trust === t.id ? 'inset 0 -2px 0 0 ' + P : 'none'
+      })),
+      results: rows, resultsMobile: rows.slice(0, 2),
+      resultCount: rows.length,
+      blockCount: rows.reduce((n, r) => n + r.blocks.length, 0),
+      open: !!o,
+      openOwner: o ? o.owner : '',
+      openKind: o ? o.kind : '',
+      openTitle: o ? o.title : '',
+      openBody: o ? o.body : '',
+      openMediaLabel: o ? o.kind.toLowerCase() + ' source' : '',
+      openRows: o ? [
+        { k: 'type', v: o.kind.toLowerCase() }, { k: 'signature', v: o.hash },
+        { k: 'captured', v: o.meta }, { k: 'attestations', v: o.marks.join(' · ') }
+      ] : [],
+      closeModal: () => this.setState({ open: null }),
+      stop: e => e.stopPropagation()
+    };
+  }
+}
+</script>
+</body>
+</html>
