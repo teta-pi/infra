@@ -3,6 +3,19 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 No per-entity "agent lookups" analytics (found 2026-07-29, roadmap 3.15a)
+The Grid of Record facts strip (`docs/design/profile-grid-of-record/README.md`
+region 4) wants a real "agent lookups / 30d" stat per entity. Grepped
+`teta-pi/web`'s API client and `teta-pi/infra`'s `docs/api.md`/`docs/database.md`
+— no such field or endpoint exists anywhere; only admin-level aggregates
+(`/admin/product-metrics`) exist, and those are `require_admin`-gated, not
+usable from a regular owner's `/profile`. `FactsStrip` (`web/src/app/profile/page.tsx`)
+renders "—" for this stat rather than fabricate a number.
+**Fix:** needs a backend session — track per-entity MCP/API read-access counts
+(likely `verification_events`-adjacent, or a new lightweight counter table) and
+expose it on `GET /businesses/{id}` or a dedicated endpoint.
+Status: OPEN (backend work not started).
+
 ## 2.8 fix — TWIRA path now enforces `verified_only` (2026-07-28)
 
 **Repo:** `teta-pi/api` PR #15 (merged, deployed).
