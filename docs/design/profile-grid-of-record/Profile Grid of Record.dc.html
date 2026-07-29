@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin:0; padding:0; background:#F4F2F8; }
+    body { -webkit-font-smoothing:antialiased; }
+    *, *::before, *::after { box-sizing:border-box; }
+    ::selection { background:rgba(107,63,160,0.16); }
+    a { color:#6B3FA0; text-decoration:none; }
+    a:hover { color:#5A3488; }
+    @keyframes tp-pulse { 0%,100% { opacity:.35; } 50% { opacity:1; } }
+  </style>
+</helmet>
+
+<div style="font-family:'Trebuchet MS','Segoe UI','Helvetica Neue',sans-serif; color:#1A1035; padding:40px 40px 80px; display:flex; flex-direction:column; align-items:flex-start; gap:26px;">
+
+  <div style="width:1180px; background:#ffffff; border:1px solid #E2DCF0;">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 26px; border-bottom:1px solid #E2DCF0;">
+      <div style="display:flex; align-items:baseline; gap:6px;">
+        <span style="font-size:20px; font-weight:600; color:#6B3FA0; line-height:1; letter-spacing:-0.5px;">Θ</span>
+        <span style="font-size:14px; font-weight:300; line-height:1;">+</span>
+        <span style="font-size:18px; font-weight:600; color:#E8640C; line-height:1;">π</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:26px;">
+        <a href="#top" style="font-size:13.5px; color:#4A3F6B;">Search</a>
+        <a href="#top" style="font-size:13.5px; color:#4A3F6B;">My page</a>
+        <a href="#top" style="font-size:13.5px; color:#4A3F6B;">Settings</a>
+        <span style="font-size:13.5px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:8px 15px; border-radius:4px; cursor:pointer;" style-hover="background:#5A3488;">Save</span>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:stretch; border-bottom:1px solid #E2DCF0; background:#FBFAFD;">
+      <sc-for list="{{ marks }}" as="m" hint-placeholder-count="3">
+        <div style="flex:1; display:flex; align-items:center; gap:12px; padding:15px 20px; border-right:1px solid #E2DCF0;" style-hover="background:#F4F0FB;">
+          <span style="width:14px; height:14px; flex:none; border:1.5px solid {{ m.line }}; background:{{ m.fill }}; border-radius:{{ m.radius }}; transform:rotate({{ m.rot }});"></span>
+          <div style="min-width:0;">
+            <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11.5px; letter-spacing:0.4px; color:#1A1035;">{{ m.token }}</div>
+            <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:#9088B0; margin-top:4px;">{{ m.detail }}</div>
+          </div>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:{{ m.line }}; margin-left:auto; letter-spacing:0.6px;">✓ {{ m.state }}</span>
+        </div>
+      </sc-for>
+      <div style="width:210px; flex:none; display:flex; align-items:center; gap:9px; padding:15px 20px;">
+        <span style="width:6px; height:6px; border-radius:50%; background:#E8640C; animation:tp-pulse 2.4s ease-in-out infinite;"></span>
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#9088B0; line-height:1.5;">re-checked hourly<br>12 JUN 2026 · 09:41Z</span>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:flex-start; gap:28px; padding:32px 34px 24px;">
+      <div style="width:104px; height:104px; flex:none; border:1px solid #E2DCF0; background:repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px); display:flex; align-items:flex-end; justify-content:center; padding-bottom:9px;">
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:#9088B0; letter-spacing:0.4px;">avatar 1:1</span>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
+          <h1 style="font-size:34px; font-weight:700; letter-spacing:-1.1px; margin:0; line-height:1.02;">Yasna Farm LLC</h1>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11.5px; color:#6B3FA0; border:1px solid #C9B8E8; padding:3px 8px;">tetapi.dev/yasna</span>
+        </div>
+        <p style="font-size:15.5px; color:#4A3F6B; line-height:1.55; margin:13px 0 0; max-width:640px; text-wrap:pretty;">Strawberry and berry grower, Vinnytsia oblast. Every claim below is a signed block — not a description.</p>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:14px; flex:none;">
+        <div style="display:flex; border:1px solid #E2DCF0;">
+          <sc-for list="{{ modes }}" as="md" hint-placeholder-count="3">
+            <div onClick="{{ md.onClick }}" style="font-size:13px; font-weight:600; padding:9px 16px; cursor:pointer; color:{{ md.color }}; background:{{ md.bg }}; border-right:1px solid #E2DCF0;">{{ md.label }}</div>
+          </sc-for>
+        </div>
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#9088B0; letter-spacing:0.6px;">shareable · agent-readable</span>
+      </div>
+    </div>
+
+    <div style="display:flex; border-top:1px solid #E2DCF0; border-bottom:1px solid #E2DCF0;">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+        <div style="flex:1; padding:16px 34px 17px; border-right:1px solid #E2DCF0;">
+          <div style="font-size:21px; font-weight:700; letter-spacing:-0.6px; line-height:1;">{{ s.v }}</div>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:#9088B0; margin-top:7px;">{{ s.k }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:{{ verifyDisplay }}; padding:22px 34px 0;">
+      <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:#6B3FA0; margin-bottom:12px;">Verification &amp; publishing</div>
+      <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:10px;">
+        <sc-for list="{{ verify }}" as="v" hint-placeholder-count="6">
+          <div onClick="{{ v.onClick }}" style="position:relative; height:56px; border:1px solid {{ v.border }}; background:{{ v.bg }}; color:{{ v.color }}; cursor:pointer; display:flex; align-items:center; gap:11px; padding:0 12px;" style-hover="border-color:#6B3FA0;">
+            <span style="width:{{ v.w }}; height:{{ v.h }}; flex:none; border:1.5px solid currentColor; background:{{ v.fill }}; border-radius:{{ v.radius }}; transform:rotate({{ v.rot }});"></span>
+            <span style="min-width:0;">
+              <span style="display:block; font-size:13px; font-weight:600; color:#1A1035; letter-spacing:-0.1px;">{{ v.label }}</span>
+              <span style="display:block; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; letter-spacing:0.6px; color:{{ v.statusColor }}; margin-top:3px;">{{ v.status }}</span>
+            </span>
+            <span style="position:absolute; top:9px; right:9px; width:6px; height:6px; border-radius:50%; background:#6B3FA0; display:{{ v.dotDisplay }};"></span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:20px; padding:22px 34px 15px;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:#6B3FA0;">Statements</span>
+        <div style="display:flex; gap:6px;">
+          <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+            <span onClick="{{ f.onClick }}" style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; letter-spacing:0.6px; padding:6px 11px; cursor:pointer; color:{{ f.color }}; border:1px solid {{ f.border }}; background:{{ f.bg }};" style-hover="border-color:#6B3FA0;">{{ f.label }}</span>
+          </sc-for>
+        </div>
+      </div>
+      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#9088B0;">{{ hint }}</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:{{ gap }}; padding:0 34px 34px;">
+      <sc-for list="{{ blocks }}" as="b" hint-placeholder-count="6">
+        <div draggable="{{ b.drag }}" onDragStart="{{ b.onDragStart }}" onDragOver="{{ b.onDragOver }}" onDrop="{{ b.onDrop }}" onDragEnd="{{ b.onDragEnd }}" onMouseEnter="{{ b.onEnter }}" onMouseLeave="{{ b.onLeave }}" onClick="{{ b.onOpen }}" style="position:relative; aspect-ratio:1; border:1px solid #E2DCF0; background:#ffffff; cursor:pointer; opacity:{{ b.opacity }}; display:flex; flex-direction:column; overflow:hidden;" style-hover="border-color:#6B3FA0;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:11px 13px; border-bottom:1px solid #F1EDF9;">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#9088B0; letter-spacing:0.6px;">{{ b.num }} · {{ b.kind }}</span>
+            <span style="display:flex; gap:4px;">
+              <sc-for list="{{ b.marks }}" as="mk" hint-placeholder-count="3">
+                <span style="width:8px; height:8px; border:1.25px solid {{ mk.line }}; background:{{ mk.fill }}; border-radius:{{ mk.radius }}; transform:rotate({{ mk.rot }});"></span>
+              </sc-for>
+            </span>
+          </div>
+          <div style="flex:1; background:{{ b.media }}; display:flex; align-items:center; justify-content:center;">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:{{ b.mediaLabelColor }}; letter-spacing:0.6px;">{{ b.mediaLabel }}</span>
+          </div>
+          <div style="padding:12px 13px 13px; border-top:1px solid #F1EDF9;">
+            <div style="font-size:14px; font-weight:600; line-height:1.3; letter-spacing:-0.2px; text-wrap:pretty;">{{ b.title }}</div>
+            <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#9088B0; margin-top:7px;">{{ b.meta }}</div>
+          </div>
+          <div style="position:absolute; inset:0; background:rgba(26,16,53,0.93); opacity:{{ b.overlay }}; transition:opacity .16s ease; pointer-events:none; padding:14px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; letter-spacing:1.4px; text-transform:uppercase; color:{{ b.sealColor }};">{{ b.seal }}</div>
+              <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; color:#C9B8E8; line-height:1.7; margin-top:12px; word-break:break-all;">{{ b.hash }}<br>{{ b.meta }}</div>
+            </div>
+            <div style="font-size:12.5px; color:#ffffff; line-height:1.45;">{{ b.body }}</div>
+          </div>
+        </div>
+      </sc-for>
+      <div onClick="{{ add }}" style="aspect-ratio:1; border:1px dashed #C9B8E8; background:#FBFAFD; display:{{ addDisplay }}; flex-direction:column; align-items:center; justify-content:center; gap:9px; cursor:pointer;" style-hover="background:#F4F0FB; border-color:#6B3FA0;">
+        <span style="font-size:28px; font-weight:300; color:#6B3FA0; line-height:1;">+</span>
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#6B3FA0; letter-spacing:0.8px;">ADD BLOCK</span>
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:#9088B0;">video · photo · text · audio</span>
+      </div>
+    </div>
+
+    <sc-if value="{{ visitor }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:24px; border-top:1px solid #E2DCF0; background:#FBFAFD; padding:22px 34px 24px;">
+        <div style="font-size:14.5px; color:#4A3F6B; line-height:1.55; max-width:620px;">Nothing on this page is self-reported. Each square carries its own signature chain — open one to check it yourself.</div>
+        <div style="display:flex; gap:12px; flex:none;">
+          <span style="font-size:14px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:11px 20px; border-radius:4px; cursor:pointer;" style-hover="background:#5A3488;">Contact farm</span>
+          <span style="font-size:14px; font-weight:600; color:#6B3FA0; border:1px solid #C9B8E8; padding:11px 20px; border-radius:4px; cursor:pointer;" style-hover="border-color:#6B3FA0;">Verify all blocks</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ agent }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#1A1035; padding:26px 34px 30px;">
+        <div style="display:flex; align-items:center; gap:9px; margin-bottom:18px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:#6B3FA0;"></span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; color:#9088B0; letter-spacing:0.8px;">mcp · tetapi.get_entity("yasna-farm") → response</span>
+        </div>
+        <pre style="margin:0; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12.5px; line-height:1.8; color:#C9B8E8; overflow-x:auto;"><span style="color:#9088B0;">entity:</span>      yasna-farm
+<span style="color:#9088B0;">registry:</span>    <span style="color:#ffffff;">UA · EDR 41902377</span>  <span style="color:#E8640C;">attested</span>
+<span style="color:#9088B0;">c2pa:</span>        <span style="color:#ffffff;">4 of 6 blocks signed</span>  <span style="color:#E8640C;">verified</span>
+<span style="color:#9088B0;">btc_ts:</span>      <span style="color:#ffffff;">block 902,441</span>  <span style="color:#E8640C;">confirmed</span>
+<span style="color:#9088B0;">blocks:</span>      <span style="color:#ffffff;">{{ count }}</span>  <span style="color:#9088B0;">[video:2 photo:2 text:1 audio:1]</span>
+<span style="color:#9088B0;">trust:</span>       <span style="color:#ffffff;">level 3 — media-backed</span>
+<span style="color:#9088B0;">claims:</span>      no-synthetic-pesticides, cold-chain-4c, organic-cert
+<span style="color:#9088B0;">fetch:</span>       <span style="color:#ffffff;">tetapi.get_block(id) → signed media + chain</span></pre>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- mobile 390 -->
+  <div style="display:flex; flex-direction:column; gap:12px;">
+    <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; letter-spacing:1.4px; text-transform:uppercase; color:#9088B0;">390 · mobile</span>
+    <div style="width:390px; background:#ffffff; border:1px solid #E2DCF0;">
+      <div style="display:flex; flex-direction:column; border-bottom:1px solid #E2DCF0; background:#FBFAFD;">
+        <sc-for list="{{ marks }}" as="m" hint-placeholder-count="3">
+          <div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid #F1EDF9;">
+            <span style="width:11px; height:11px; flex:none; border:1.5px solid {{ m.line }}; background:{{ m.fill }}; border-radius:{{ m.radius }}; transform:rotate({{ m.rot }});"></span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; color:#1A1035; letter-spacing:0.3px;">{{ m.token }}</span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:{{ m.line }}; margin-left:auto;">✓</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex; gap:14px; padding:18px 16px 14px;">
+        <div style="width:60px; height:60px; flex:none; border:1px solid #E2DCF0; background:repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px);"></div>
+        <div>
+          <div style="font-size:20px; font-weight:700; letter-spacing:-0.7px; line-height:1.1;">Yasna Farm LLC</div>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#6B3FA0; margin-top:7px;">tetapi.dev/yasna · trust 3</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px; padding:0 16px 14px; overflow-x:auto;">
+        <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+          <span onClick="{{ f.onClick }}" style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10px; letter-spacing:0.5px; padding:8px 11px; cursor:pointer; white-space:nowrap; color:{{ f.color }}; border:1px solid {{ f.border }}; background:{{ f.bg }};">{{ f.label }}</span>
+        </sc-for>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px; padding:0 16px 18px;">
+        <sc-for list="{{ mobile }}" as="b" hint-placeholder-count="3">
+          <div onClick="{{ b.onOpen }}" style="aspect-ratio:1; border:1px solid #E2DCF0; display:flex; flex-direction:column; cursor:pointer;">
+            <div style="flex:1; background:{{ b.media }}; display:flex; align-items:flex-start; justify-content:space-between; padding:9px;">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9px; color:{{ b.mediaLabelColor }};">{{ b.num }} · {{ b.kind }}</span>
+              <span style="display:flex; gap:3px;">
+                <sc-for list="{{ b.marks }}" as="mk" hint-placeholder-count="2">
+                  <span style="width:7px; height:7px; border:1.25px solid {{ mk.line }}; background:{{ mk.fill }}; border-radius:{{ mk.radius }}; transform:rotate({{ mk.rot }});"></span>
+                </sc-for>
+              </span>
+            </div>
+            <div style="padding:9px; border-top:1px solid #F1EDF9; font-size:11.5px; font-weight:600; line-height:1.3;">{{ b.title }}</div>
+          </div>
+        </sc-for>
+        <div onClick="{{ add }}" style="aspect-ratio:1; border:1px dashed #C9B8E8; background:#FBFAFD; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer;">
+          <span style="font-size:20px; font-weight:300; color:#6B3FA0;">+</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; color:#6B3FA0;">ADD</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ open }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:fixed; inset:0; z-index:80; background:rgba(26,16,53,0.55); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; padding:40px;">
+      <div onClick="{{ stop }}" style="width:600px; max-width:100%; background:#ffffff; border:1px solid #C9B8E8;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 22px; border-bottom:1px solid #E2DCF0; background:#FBFAFD;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:#6B3FA0;">Block {{ openNum }} · {{ openKind }}</span>
+          <span onClick="{{ closeModal }}" style="font-size:18px; color:#9088B0; cursor:pointer; line-height:1;">×</span>
+        </div>
+        <div style="padding:24px 22px 26px;">
+          <div style="height:190px; border:1px solid #E2DCF0; background:repeating-linear-gradient(45deg,#F1EDF9 0 8px,#FBFAFD 8px 16px); display:flex; align-items:flex-end; padding:12px;">
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:#9088B0;">{{ openMediaLabel }}</span>
+          </div>
+          <h2 style="font-size:21px; font-weight:700; letter-spacing:-0.6px; margin:20px 0 0; line-height:1.25;">{{ openTitle }}</h2>
+          <div style="font-size:14.5px; color:#4A3F6B; line-height:1.6; margin-top:10px;">{{ openBody }}</div>
+          <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:#E2DCF0; border:1px solid #E2DCF0; margin-top:22px;">
+            <sc-for list="{{ openRows }}" as="r" hint-placeholder-count="4">
+              <div style="background:#ffffff; padding:13px 15px;">
+                <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:9.5px; letter-spacing:1.2px; text-transform:uppercase; color:#9088B0;">{{ r.k }}</div>
+                <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#1A1035; margin-top:6px; word-break:break-all;">{{ r.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; gap:12px; margin-top:22px;">
+            <span onClick="{{ closeModal }}" style="font-size:14px; font-weight:600; color:#ffffff; background:#6B3FA0; padding:11px 20px; border-radius:4px; cursor:pointer;" style-hover="background:#5A3488;">Verify chain</span>
+            <span onClick="{{ closeModal }}" style="font-size:14px; font-weight:600; color:#6B3FA0; border:1px solid #C9B8E8; padding:11px 20px; border-radius:4px; cursor:pointer;" style-hover="border-color:#6B3FA0;">Replace media</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:1400},&quot;initialMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;edit&quot;,&quot;visitor&quot;,&quot;agent&quot;],&quot;default&quot;:&quot;edit&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behaviour&quot;},&quot;blockGap&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:10,&quot;min&quot;:0,&quot;max&quot;:28,&quot;step&quot;:2,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+const P = '#6B3FA0', O = '#E8640C', INK = '#1A1035', DIM = '#9088B0';
+const MK = {
+  registry: { token: 'registry:attested', short: 'REGISTRY', detail: 'UA · EDR 41902377', state: 'attested', line: P, fill: P, radius: '1px', rot: '0deg' },
+  c2pa:     { token: 'c2pa:verified',     short: 'C2PA',     detail: '4 of 6 blocks signed', state: 'verified', line: P, fill: 'transparent', radius: '50%', rot: '0deg' },
+  btc:      { token: 'btc:ts:confirmed',  short: 'BTC · TS', detail: 'block 902,441',        state: 'confirmed', line: O, fill: O, radius: '1px', rot: '45deg' }
+};
+const STRIPE = 'repeating-linear-gradient(45deg,#F1EDF9 0 6px,#FBFAFD 6px 12px)';
+const INKSTRIPE = 'repeating-linear-gradient(45deg,#241847 0 6px,#1A1035 6px 12px)';
+
+const SEED = [
+  { id: 'b1', kind: 'VIDEO', title: 'Morning harvest, field 4', meta: '0:42 · 12 JUN 2026', marks: ['registry', 'c2pa', 'btc'], dark: true,
+    body: 'Uncut capture from the east field at 06:10. Signed by PI Camera at the moment of capture.', hash: 'c2pa:9f41…a207' },
+  { id: 'b2', kind: 'PHOTO', title: 'Cold chain holding at 4 °C', meta: 'IoT photo · hourly', marks: ['c2pa', 'btc'], dark: false,
+    body: 'Thermometer readout photographed automatically each hour inside the packing room.', hash: 'c2pa:2b70…ee19' },
+  { id: 'b3', kind: 'TEXT', title: 'No synthetic pesticides used', meta: 'declaration · notarised', marks: ['registry'], dark: false,
+    body: 'Written declaration bound to the registry record. Contradicting evidence downgrades the trust level.', hash: 'sha256:44c1…8bd0' },
+  { id: 'b4', kind: 'AUDIO', title: 'Field manager voice note', meta: '1:16 · UA', marks: ['c2pa'], dark: false,
+    body: 'Weekly spoken log describing what was done in the field. Signed, not transcribed by us.', hash: 'c2pa:71ad…03f5' },
+  { id: 'b5', kind: 'PHOTO', title: 'Organic certificate UA-2041', meta: 'valid to 2027', marks: ['registry', 'c2pa', 'btc'], dark: false,
+    body: 'Certificate scan cross-checked against the issuing body registry and timestamped on Bitcoin.', hash: 'c2pa:5e28…b9cc' },
+  { id: 'b6', kind: 'VIDEO', title: 'Live packing line', meta: 'stream · API', marks: ['c2pa'], dark: true,
+    body: 'Continuous stream from the packing line. Agents can request a signed frame on demand.', hash: 'stream:live' }
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: props.initialMode || 'edit', order: SEED.map(b => b.id), filter: 'ALL', hover: null, drag: null, open: null, extra: {}, step: 'domain' };
+  }
+  all() { return SEED.concat(Object.values(this.state.extra)); }
+  find(id) { return this.all().find(x => x.id === id) || SEED[0]; }
+  reorder(from, to) {
+    if (from === to || from == null) return;
+    const list = this.state.order.slice();
+    const [m] = list.splice(from, 1);
+    list.splice(to, 0, m);
+    this.setState({ order: list });
+  }
+  add() {
+    const n = Object.keys(this.state.extra).length + 1, id = 'new' + n;
+    const draft = { id, kind: 'DRAFT', title: 'Untitled claim', meta: 'pick a source', marks: [], dark: false,
+      body: 'Attach a video, photo, text or audio source. Signing happens on upload.', hash: '—' };
+    this.setState(s => ({ extra: { ...s.extra, [id]: draft }, order: s.order.concat(id) }));
+  }
+  verifySteps() {
+    const done = { registry: true, email: true, domain: false, document: false, legal: false, publish: false };
+    const defs = [
+      { id: 'registry', label: 'Registry', w: '15px', h: '15px', radius: '1px', rot: '0deg', fill: 'currentColor' },
+      { id: 'email',    label: 'Email',    w: '18px', h: '12px', radius: '1px', rot: '0deg', fill: 'transparent' },
+      { id: 'domain',   label: 'Domain',   w: '15px', h: '15px', radius: '50%', rot: '0deg', fill: 'transparent' },
+      { id: 'document', label: 'Document', w: '12px', h: '16px', radius: '1px', rot: '0deg', fill: 'transparent' },
+      { id: 'legal',    label: 'Legal',    w: '13px', h: '13px', radius: '1px', rot: '45deg', fill: 'transparent' },
+      { id: 'publish',  label: 'Publish',  w: '14px', h: '14px', radius: '50%', rot: '0deg', fill: 'currentColor' }
+    ];
+    return defs.map(d => {
+      const sel = this.state.step === d.id;
+      const ok = done[d.id];
+      const accent = d.id === 'publish' ? O : P;
+      return {
+        ...d,
+        onClick: () => this.setState({ step: d.id }),
+        border: sel ? accent : '#E2DCF0',
+        bg: sel ? '#F4F0FB' : '#ffffff',
+        color: ok || sel ? accent : DIM,
+        status: ok ? 'verified' : (sel ? 'in progress' : 'pending'),
+        statusColor: ok ? P : (sel ? O : DIM),
+        dotDisplay: ok ? 'block' : 'none'
+      };
+    });
+  }
+  items() {
+    const editing = this.state.mode === 'edit', f = this.state.filter;
+    return this.state.order.map((id, i) => ({ b: this.find(id), i }))
+      .filter(x => f === 'ALL' || x.b.kind === f)
+      .map(({ b, i }) => ({
+        ...b, num: String(i + 1).padStart(2, '0'),
+        drag: editing, opacity: this.state.drag === i ? 0.3 : 1,
+        marks: b.marks.map(k => MK[k]),
+        media: b.dark ? INKSTRIPE : STRIPE,
+        mediaLabel: b.kind === 'TEXT' ? 'plain text · no media' : b.kind.toLowerCase() + ' source',
+        mediaLabelColor: b.dark ? '#C9B8E8' : DIM,
+        seal: b.marks.length === 3 ? 'full chain' : (b.marks.length ? 'partial' : 'unsigned'),
+        sealColor: b.marks.length === 3 ? P : (b.marks.length ? O : DIM),
+        overlay: this.state.hover === b.id ? 1 : 0,
+        onEnter: () => this.setState({ hover: b.id }),
+        onLeave: () => this.setState({ hover: null }),
+        onDragStart: () => editing && this.setState({ drag: i }),
+        onDragOver: e => { e.preventDefault(); },
+        onDrop: e => { e.preventDefault(); this.reorder(this.state.drag, i); this.setState({ drag: null }); },
+        onDragEnd: () => this.setState({ drag: null }),
+        onOpen: () => this.setState({ open: b.id })
+      }));
+  }
+  renderVals() {
+    const items = this.items();
+    const open = this.state.open ? this.find(this.state.open) : null;
+    const idx = this.state.order.indexOf(this.state.open);
+    return {
+      marks: [MK.registry, MK.c2pa, MK.btc],
+      stats: [{ v: '6', k: 'signed blocks' }, { v: 'L3', k: 'trust level' }, { v: '2019', k: 'registered' }, { v: '318', k: 'agent lookups / 30d' }],
+      blocks: items, mobile: items.slice(0, 3),
+      count: this.state.order.length,
+      gap: (this.props.blockGap ?? 10) + 'px',
+      filters: ['ALL', 'VIDEO', 'PHOTO', 'TEXT', 'AUDIO'].map(k => ({
+        label: k === 'ALL' ? 'all ' + this.state.order.length : k.toLowerCase(),
+        onClick: () => this.setState({ filter: k }),
+        color: this.state.filter === k ? INK : DIM,
+        border: this.state.filter === k ? P : '#E2DCF0',
+        bg: this.state.filter === k ? '#F4F0FB' : '#ffffff'
+      })),
+      modes: [['edit', 'Edit'], ['visitor', 'Visitor'], ['agent', 'Agent']].map(([v, label]) => ({
+        label, onClick: () => this.setState({ mode: v }),
+        color: this.state.mode === v ? '#ffffff' : '#4A3F6B',
+        bg: this.state.mode === v ? P : 'transparent'
+      })),
+      verify: this.verifySteps(),
+      verifyDisplay: this.state.mode === 'edit' ? 'block' : 'none',
+      agent: this.state.mode === 'agent',
+      visitor: this.state.mode === 'visitor',
+      addDisplay: this.state.mode === 'edit' ? 'flex' : 'none',
+      hint: this.state.mode === 'edit' ? 'drag a square to reorder · click to inspect' : 'click a square to inspect',
+      add: () => this.add(),
+      open: !!open,
+      openNum: open ? String((idx < 0 ? 0 : idx) + 1).padStart(2, '0') : '',
+      openKind: open ? open.kind : '',
+      openTitle: open ? open.title : '',
+      openBody: open ? open.body : '',
+      openMediaLabel: open ? open.kind.toLowerCase() + ' source' : '',
+      openRows: open ? [
+        { k: 'type', v: open.kind.toLowerCase() }, { k: 'signature', v: open.hash },
+        { k: 'captured', v: open.meta }, { k: 'attestations', v: open.marks.length ? open.marks.join(' · ') : 'none yet' }
+      ] : [],
+      closeModal: () => this.setState({ open: null }),
+      stop: e => e.stopPropagation()
+    };
+  }
+}
+</script>
+</body>
+</html>
