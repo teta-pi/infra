@@ -3,6 +3,20 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 Block data model has no "audio" media type or per-block registry mark (found 2026-07-31, roadmap 3.15b)
+The Grid of Record square ledger spec (`docs/design/profile-grid-of-record/README.md`
+region 6) wants filter chips `ALL·video·photo·text·audio` and per-block seals that
+can include `registry` (max 3 marks = "full chain"). The real data model doesn't
+support either: `MediaItem.type` (`teta-pi/web` `src/lib/types.ts`) is only
+`video`\|`photo`\|`file` — no audio — and registry verification is entity-level
+only, never per-block. `StatementLedger`/`StatementTile` (`web/src/app/profile/page.tsx`)
+adapted rather than faked this: filter chips are `ALL·video·photo·text·file`, and
+"full chain" now means 2 marks (c2pa+btc), not 3. Not a bug — a product/data-model
+gap. **Fix (if ever wanted):** backend would need an `audio` `MediaItem.type` (or a
+generic upload-classification pass) and a way to associate a specific registry
+check with an individual block, not just the entity.
+Status: OPEN, no fix planned — documented adaptation, not blocking 3.15c-f.
+
 ## 🟡 No per-entity "agent lookups" analytics (found 2026-07-29, roadmap 3.15a)
 The Grid of Record facts strip (`docs/design/profile-grid-of-record/README.md`
 region 4) wants a real "agent lookups / 30d" stat per entity. Grepped

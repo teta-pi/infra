@@ -6,6 +6,51 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-31 · 3.15b-web · "Grid of Record" square ledger — statement tiles, drag-reorder, filter chips
+Done: second of 6 sequential sessions on the profile redesign. Replaced 3.13's
+free-form block list with the spec's strict 1:1 square ledger: `StatementTile`
+(head `NN · KIND` + seal glyphs, media row with hover provenance overlay, foot
+title/date), `AddBlockTile` (dashed, Edit-mode only), `LedgerControls` (STATEMENTS
+label + filter chips + hint + Connect Camera), `StatementLedger` (the grid
+itself). Per spec, region 6 shows in **every** mode — hoisted it into the shared
+white board next to 3.15a's regions, so `EditView` and `VisitorView` no longer
+render their own block lists (the last of 3.13's per-mode duplication); `AgentView`'s
+JSON panel now appends below the shared ledger rather than replacing it.
+Real data throughout: KIND from `MediaItem.type` (newly threaded through
+`BlockMedia`/`mapServerBlock`, alongside `uploaded_at` and `ProfileBlock.createdAt`),
+marks from `c2pa_verified`/`bitcoin_confirmed`, hash/date in the hover overlay
+from `original_hash`/`uploaded_at` — nothing hardcoded. Two adaptations where the
+real data model doesn't fit the mock 1:1 (filter chips drop "audio" → "file";
+seal "full chain" means 2 marks not 3) — logged in known-issues, not fixed here,
+not blocking.
+Drag-reorder persists via `blockApi.reorder`/`persistBlockOrder` — checked first,
+this endpoint **already existed** (3.13, `PATCH /blocks/reorder`), so nothing
+new was built or needed logging as missing, contrary to the task's own guess.
+Kept block content editing (title/description/media upload) working via
+`BlockEditPanel` (renamed from `BlockCard`, no longer has its own collapsed/
+editing toggle or drag handle — those moved to the tile) — opens below the grid
+when a tile is clicked in Edit mode or right after ADD BLOCK. This is a
+deliberate bridge, not a scope-creep into 3.15d: the real click-to-open detail
+modal (fact grid, Verify chain/Replace media actions) is still 3.15d's job:
+without this bridge, editing a block's content or uploading media would have
+had literally no UI this session, which would have been a regression, not just
+an incomplete redesign. Ledger hint text says "click to edit" (Edit mode only)
+rather than the spec's "click to inspect", since inspection isn't wired yet;
+non-edit modes show no hint.
+Changed: `teta-pi/web` `src/app/profile/page.tsx` (major — new region 5/6
+components, `EditView`/`VisitorView` trimmed further, `BlockCard`→`BlockEditPanel`),
+`src/stores/useProfileStore.ts` (`BlockMedia.type`/`uploaded_at`, `ProfileBlock.createdAt`).
+`docs/roadmap.md` (3.15 row), `docs/known-issues.md` (new 🟡 data-model-gap finding).
+Risk: mobile still only has the minimal 3.15a wrap-not-clip treatment (grid
+drops to 2 columns, no more) — the spec's dedicated 390px ledger layout is
+3.15f. Verified locally (add/edit/remove block, all filter chips including
+real-index-under-filter, mode switching, live attestation/facts recompute) —
+no test account with real uploaded media/multiple blocks was available in this
+session's environment; prod verification (hellfire-solutions, 2 real blocks)
+still to do after merge.
+Next: 3.15c (verification action-tile row, replaces `VerifyMenu`'s icon-accordion) —
+same file, must land after this merges, not in parallel.
+
 ## 2026-07-29 · 3.15a-web · "Grid of Record" foundation — attestation bar, identity, facts strip
 Done: first of 6 sequential sessions redesigning `/profile` per the owner's
 high-fidelity handoff (`docs/design/profile-grid-of-record/`). Built the 3
