@@ -6,6 +6,37 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-07-31 · 3.16a-web · "Grid of Record" home page — minimalist redesign
+Done: `/` rewritten from scratch per the owner's second design handoff
+(`docs/design/search-home-results/`, "Home" section). Replaced the hero copy +
+feature-card + glass search bar + footer with the spec's 3-region page: nav
+(Θ+π + `Search · My page · Settings` + `Claim your page`, collapsing to a mono
+`claim page` link under 640px), a centered query field on a single
+`border-bottom` hairline (no box) using a real `<input>` — kept its native
+caret, dropped the design's animated fake one per the README's own note that
+production should — and an under-rule mono line. Enter or clicking `SEARCH ↵`
+routes to `/search?q=<encoded>` (or bare `/search` if empty); `/search`
+itself untouched, still resolves `?q=` exactly as before (3.16b's job).
+"N entities · N blocks" has no real backend source — logged as a known-issue
+(same "don't fabricate" call as 3.15a's "agent lookups / 30d") — renders "—"
+for both until a public count endpoint exists.
+Deleted, not relocated (per the task's explicit instruction): the old hero
+text, search-bar-with-inline-results state, footer links, and — since nothing
+else imported them — `lib/seedData.ts` (`SEED_BUSINESSES`, the same hardcoded
+fake-entity fallback data 3.14 (#32) found leaking into search results; this
+removes the data from the repo entirely, not just its last remaining call
+site) and the now-orphaned `DisplaySearchResult` type in `lib/types.ts`.
+Changed: `teta-pi/web` `src/app/page.tsx` (full rewrite), `src/lib/seedData.ts`
+(deleted), `src/lib/types.ts` (`DisplaySearchResult` removed).
+`docs/roadmap.md` (3.16 row), `docs/known-issues.md` (new 🟡 finding).
+Risk: none identified — home page had no other consumers of its removed
+internals; `/search` unaffected (verified `?q=` still works end-to-end,
+including a real live query against `hellfire-solutions`-style data locally).
+Home page bundle 5.75kB→1.83kB (dead code removed, not from any regression).
+Next: 3.16b (results page — evidence filter bar, trust badges, expandable
+tile grid reusing 3.15b's `StatementTile`) — waits on 3.15d (block detail
+modal) too, not just 3.15b, per the roadmap's own sequencing note.
+
 ## 2026-07-31 · 3.15b-web · "Grid of Record" square ledger — statement tiles, drag-reorder, filter chips
 Done: second of 6 sequential sessions on the profile redesign. Replaced 3.13's
 free-form block list with the spec's strict 1:1 square ledger: `StatementTile`

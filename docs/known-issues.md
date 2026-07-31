@@ -3,6 +3,19 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 No public "total entities / total blocks" count endpoint (found 2026-07-31, roadmap 3.16a)
+The new minimal home page (`docs/design/search-home-results/README.md` region 3)
+wants a real registry-scale line: `signed evidence only · N entities · N blocks`.
+Grepped `teta-pi/web`'s API client and `teta-pi/infra`'s `docs/api.md` — no public
+endpoint returns these totals; only `GET /claim/stats` (waitlist-specific) and
+`require_admin`-gated `/admin/stats`/`/admin/product-metrics` exist. `page.tsx`
+(`useEvidenceCounts`) renders "—"/"—" rather than fabricate numbers — same choice
+as 3.15a's "agent lookups / 30d" gap.
+**Fix:** needs a backend session — a lightweight public `GET /stats` (or similar)
+exposing `entities_count`/`blocks_count`, likely a cheap aggregate query or a
+cached counter, not `require_admin`.
+Status: OPEN (backend work not started).
+
 ## 🟡 Block data model has no "audio" media type or per-block registry mark (found 2026-07-31, roadmap 3.15b)
 The Grid of Record square ledger spec (`docs/design/profile-grid-of-record/README.md`
 region 6) wants filter chips `ALL·video·photo·text·audio` and per-block seals that
