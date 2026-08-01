@@ -6,6 +6,55 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-01 · 3.15c-web · "Grid of Record" verification & publishing action tiles
+Done: replaced `VerifyMenu`'s round-icon-button row (3.13) with the spec's
+6-up row of 56px `VerifyActionTile`s — `Registry · Email · Domain · Document
+· Legal · Publish`. Moved from the old 880px glass-styled area into the
+shared white board, positioned between facts strip and ledger controls (the
+board hadn't followed spec's region order for 5a until now, since 3.15b
+didn't touch this region). Reused 3.13's existing SVG icon set at 18px per
+the task's own allowance rather than building new CSS-shape glyphs.
+All verification logic — every handler (`runRegistry`, `sendEmailCode`,
+`confirmEmailCode`, `getDomainInstr`, `checkDomain`, `linkLegal`,
+`unlinkLegal`, `doPublish`, `togglePrivacy`) and every `MethodCard` panel —
+is completely unchanged; only the selector row's chrome was replaced, not
+rewritten, per the task's explicit instruction. Tile state machine (verified
+/ in progress / pending) is a literal port of the design's own `verifySteps()`
+JS, including a non-obvious asymmetry worth flagging: a verified tile's
+status text is always purple regardless of item (even Publish), while an
+in-progress tile's status text is always orange regardless of item — only
+the border/glyph color uses the per-item accent (orange for Publish, purple
+otherwise). Real done-state per step from existing store/API signals
+(`registryStatus`, `emailDone`, `domainDone`, `linked`, `isPublished`) — no
+hardcoded `done` map, per the task's explicit requirement.
+Two small, deliberate simplifications vs. 3.13's prior behavior: Domain's old
+distinct green dot accent is retired for the new design's purple/orange-only
+palette (matches AttestationBar/StatementTile); Publish's tile-level "done"
+is now simply `isPublished` (the published-but-private nuance stays visible
+in the unchanged panel's status pill, just not double-encoded on the tile).
+Grid columns match the real visible step count (6 business/organization, 3
+person-kind, since Registry/Document/Legal don't apply to persons) instead of
+a hardcoded 6 that would leave gaps for persona accounts.
+`EditView` — by 3.15b already shrunk to a bare `<VerifyMenu/>` wrapper — is
+now fully retired; `VerifyMenu` mounts directly in `ProfilePage()`, keeping
+its `key={businessId ?? "new"}` remount-on-entity-switch behavior (QA #18).
+Changed: `teta-pi/web` `src/app/profile/page.tsx` (new `VerifyActionTile`,
+`EditView` removed, `MenuIconButton`/`vSectionLabel` removed as dead code).
+`docs/roadmap.md` (3.15 row).
+Risk: none identified. Verified locally with a synthetic entity id (no real
+authenticated multi-step account available in this session's environment):
+pending state (all 6 tiles), in-progress/selected state including Publish's
+orange accent, business (6 tiles) vs. person-kind (3 tiles) gating, mobile
+3-column wrap, and that the existing Registry/Publish panels still open and
+function against the real API exactly as before. Did not get to click-verify
+an actual "verified" (done=true, purple dot) tile end-to-end against a real
+completed step — the state-machine code path is identical to the already-
+verified in-progress path (`ok || sel` for glyph color), just gated on `done`
+instead of `selected`, so risk is low; flagging the gap rather than claiming
+a check that wasn't done. Will re-check against a real verified entity on
+prod after deploy.
+Next: 3.15d (block detail modal) — same file, must land after this merges.
+
 ## 2026-07-31 · 3.16a-web · "Grid of Record" home page — minimalist redesign
 Done: `/` rewritten from scratch per the owner's second design handoff
 (`docs/design/search-home-results/`, "Home" section). Replaced the hero copy +
