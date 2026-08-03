@@ -6,6 +6,34 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-03 · 10.7-whitepaper · publish whitepaper v1.1
+Done: published the owner-authored `TETAPI_Whitepaper_v1.1.pdf` on
+tetapi.dev. New `whitepaper.html` page (built off the `about.html`
+template — same nav/footer/glass style, `[data-reveal]` animation) with
+the PDF's Abstract as a teaser, a 6-tile "What's inside" summary
+(registry model, claims-based verification, TWIRA, Temporal Moat,
+roadmap, governance), and read/download CTAs pointing at the PDF served
+flat from the repo root. Wired four discoverable entry points per the
+task: `index.html` footer Resources column, a callout section on
+`for-agents.html`, a tile in `developers.html`'s open-source grid, and
+mentions in `llms.txt` + `sitemap.xml`.
+Deliberately did *not* add "Whitepaper" (or "Developers") to the
+site-wide nav — every subpage shares one fixed 5-item nav
+(About/For Businesses/For Agents/Registries/Start), and `developers.html`
+itself is already an orphan outside that set, so a footer/section link
+matches the site's existing discovery pattern better than growing global
+nav for one new page.
+PDF content itself is unedited, as instructed — only site-side entry
+points were added.
+Changed: `teta-pi/landing` — new `whitepaper.html`,
+`TETAPI_Whitepaper_v1.1.pdf`; modified `index.html`, `for-agents.html`,
+`developers.html`, `llms.txt`, `sitemap.xml`. `docs/roadmap.md` (10.7 row).
+Risk: none — additive static content, no code paths touched. nginx
+config was deliberately left alone (PDFs already serve via nginx's
+default mime.types as `application/pdf`, confirmed live on prod).
+Next: none — owner may want the whitepaper cross-linked from
+`how-it-works.html` or `registries.html` later, not requested this round.
+
 ## 2026-08-02 · 3.15d-web · "Grid of Record" block detail modal
 Done: built `BlockDetailModal` (600px panel, media placeholder/real photo,
 title/desc, 2-col fact grid — type/signature/captured/attestations —
