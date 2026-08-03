@@ -3,6 +3,21 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 No backend endpoint for a manual per-block "Verify chain" re-check (found 2026-08-02, roadmap 3.15d)
+The block detail modal spec (`docs/design/profile-grid-of-record/README.md`,
+"Block detail modal") gives every block a `Verify chain` action. Grepped
+`teta-pi/web`'s `verifyApi`/`blockApi` (`lib/api.ts`) — every existing verify
+endpoint is entity-level (registry/email/domain start+confirm); nothing
+triggers a re-check of one block's own c2pa/bitcoin attestation state on
+demand. `BlockDetailModal` (`web/src/app/profile/page.tsx`) mirrors the
+design prototype's own stub behavior (the button just closes the modal, same
+as the mock's `closeModal` handler) and adds a caption underneath saying a
+manual trigger isn't wired to a backend endpoint yet — not a fabricated call.
+**Fix (if ever wanted):** a backend session would need a per-block
+`POST /blocks/{id}/verify` (or similar) that re-runs the c2pa/bitcoin checks
+outside the existing hourly automatic recheck.
+Status: OPEN, no fix planned — documented stub, not blocking 3.15e/f.
+
 ## 🟡 No public "total entities / total blocks" count endpoint (found 2026-07-31, roadmap 3.16a)
 The new minimal home page (`docs/design/search-home-results/README.md` region 3)
 wants a real registry-scale line: `signed evidence only · N entities · N blocks`.

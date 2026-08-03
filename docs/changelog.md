@@ -6,6 +6,49 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-02 · 3.15d-web · "Grid of Record" block detail modal
+Done: built `BlockDetailModal` (600px panel, media placeholder/real photo,
+title/desc, 2-col fact grid — type/signature/captured/attestations —
+`Verify chain`/`Replace media` actions), matching the design's exact markup
+and spacing. Every `StatementTile`'s `onClick` now opens this modal
+regardless of mode — `isEdit` only still gates `draggable`/cursor — fixing
+the actual gap this session existed to close: clicking a tile in Visitor or
+Agent mode previously did nothing.
+`Replace media` (Edit mode only) closes the modal and opens the existing
+`BlockEditPanel` via the same `editingBlockId` state ADD BLOCK already used
+— reuses 3.15b's upload flow verbatim rather than building a second one
+inside the modal, per the task's explicit instruction. It's hidden outside
+Edit mode: showing an owner-only action to a visitor/agent who can't act on
+it would be misleading, even though the design mock (no real auth) doesn't
+branch by mode there.
+`Verify chain` has no backend for a manual per-block re-check (grepped
+`verifyApi`/`blockApi` in `lib/api.ts` — only entity-level registry/email/
+domain endpoints exist). Mirrors the prototype's own stub (click closes the
+modal, exactly like the mock's `closeModal`) plus a caption saying a manual
+trigger isn't wired to a backend endpoint yet, instead of faking a call or
+silently hiding the button. Logged in known-issues.
+Fact grid reuses real data via two small helpers extracted out of
+`StatementTile` (`blockHashLabel`, `blockMediaLabel`) so the modal and the
+tile's hover overlay render the identical signature/media-label strings, not
+two copies of the same logic. `LedgerControls`' hint text now matches the
+spec in every mode (`… click to inspect` / `click a square to inspect`)
+instead of 3.15b's Edit-only placeholder ("click to edit").
+Changed: `teta-pi/web` `src/app/profile/page.tsx` (`BlockDetailModal` added;
+`StatementTile`/`StatementLedger` click wiring changed from Edit-only
+`onEditClick` to always-on `onOpen`; `blockHashLabel`/`blockMediaLabel`
+extracted; `LedgerControls` hint text corrected). `docs/roadmap.md` (3.15
+row), `docs/known-issues.md` (new "Verify chain" stub entry).
+Risk: none identified. Verified locally with a synthetic (unauthenticated,
+local-only) block across all three modes — modal opens on tile click in
+Edit/Visitor/Agent; closes on `×`, overlay click, and `Verify chain`;
+`Replace media` (Edit only) hands off to `BlockEditPanel` with the same
+block's title editable; Visitor/Agent modals correctly omit `Replace media`.
+Did not verify against a real authenticated block with actual media/hash/
+attestations (no live session available this session) — logic is identical
+to the already-verified `StatementTile` hover overlay, so risk is low, but
+flagging the gap.
+Next: 3.15e (Visitor footer + Agent panel, new page states).
+
 ## 2026-08-01 · 3.15c-web · "Grid of Record" verification & publishing action tiles
 Done: replaced `VerifyMenu`'s round-icon-button row (3.13) with the spec's
 6-up row of 56px `VerifyActionTile`s — `Registry · Email · Domain · Document
