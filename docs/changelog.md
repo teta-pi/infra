@@ -6,6 +6,50 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-04 · 7.4/7.5/7.6 · CI/CD audit + MCP production-readiness audit + org showcase
+Done:
+- **7.4 CI/CD audit** (read-only): confirmed api's Bandit (1 High —
+  `hashlib.md5` for a cache ETag, false-positive-flavored) and pip-audit
+  (`ecdsa` PYSEC-2026-1325, no upstream fix exists, low real risk since the
+  API's JWTs are HS256 not ECDSA) findings; confirmed web's npm-audit is
+  unchanged from the 2026-07-28 finding (next@15.0.3, fix known, needs its
+  own session); confirmed branch protection is uniform (enforce_admins, PR-
+  only, no force-push/delete) across all 6 public repos with
+  `required_status_checks` unset everywhere (every CI check org-wide is
+  advisory, by design). **Fixed**: pi-cam had zero CI at all — added
+  `npm-audit.yml` (`teta-pi/pi-cam` PR #3, merged). CodeQL deliberately
+  skipped there: pi-cam is private on the org's Free plan, no GHAS
+  available, workflow would 403 — same root cause blocks branch protection
+  on that repo (confirmed via a live 403), making it the only unprotected
+  repo in the org. Owner decision needed (make public, or upgrade plan).
+- **7.5 MCP production-readiness audit** (9-point, read-only, no code
+  changed in `teta-pi/mcp`): zero observability (no logging at all — the
+  single biggest gap for real agent traffic), zero tests, README's
+  `auth: Bearer` claim confirmed false live (fully anonymous MCP — matches
+  infra's own `docs/mcp.md` but contradicts `mcp/README.md`, which also
+  has a dead `/sse` path), zero rate-limiting on the MCP ingress itself,
+  unbounded `sessions` Map (no expiry), `docs/mcp.md` version stale (1.3.1
+  vs live 1.5.1). Timeouts/error-surfacing are sane (confirmed live: a
+  404 returns a clean `isError` tool response, never a hang).
+- **7.6 org showcase**: found (via GraphQL, since GitHub has no repo-pin
+  API) that only `mcp-server` (archived!) + `api` are currently pinned —
+  not what the owner described either. No API path exists to pin/unpin
+  (confirmed via GraphQL schema introspection — web-UI-only feature, not
+  an `admin:org` scope gap); exact 2-minute manual steps left for the
+  owner in `docs/roadmap.md` 7.6. **Fixed**: org profile README
+  (`teta-pi/.github/profile/README.md`) — added missing `pi-cam`/
+  `wordpress-plugin` rows, fixed `/sse`→`/mcp` in the connect snippet.
+Changed: `docs/known-issues.md`, `docs/security.md` (S-11..S-14),
+`docs/roadmap.md` (7.2 marked done, 7.4/7.5/7.6 added) ·
+`teta-pi/pi-cam` `.github/workflows/npm-audit.yml` (new) ·
+`teta-pi/.github` `profile/README.md`.
+Risk: none — audit + docs-only for 7.4/7.5, one small CI-workflow addition
+and one README edit for 7.6, both low-blast-radius and already merged.
+Next: owner does the manual pin-repos step (7.6); dedicated sessions for
+the `ecdsa`/next-upgrade CI findings (7.4), MCP observability/auth/rate-
+limit/tests (7.5, likely a `2 mcp` direction session), pi-cam
+public-vs-GHAS decision.
+
 ## 2026-08-03 · 10.7-whitepaper · publish whitepaper v1.1
 Done: published the owner-authored `TETAPI_Whitepaper_v1.1.pdf` on
 tetapi.dev. New `whitepaper.html` page (built off the `about.html`
