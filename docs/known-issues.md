@@ -3,6 +3,187 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 7.x CI/CD + MCP production-readiness audit (2026-08-04, read-only — see docs/security.md for the security-relevant subset)
+
+Boot 7.x (`teta-pi/infra`). Three parts: CI/CD audit across all repos, MCP
+production-readiness audit (9-point), org showcase correction. This section
+covers the functional/CI findings; auth/observability/rate-limit findings
+that are security-relevant are also filed in `docs/security.md` §5 as
+S-11..S-14 (same findings, cross-referenced, not duplicated in full here).
+
+### 🟡 `teta-pi/api` CI: Bandit + pip-audit both red (new findings)
+Neither blocks merge/deploy — no repo in the org has `required_status_checks`
+set on `main` (verified across all 6 public repos), so every CI check
+everywhere is advisory-only, matching 15.2's original "non-blocking to
+start" design.
+- **Bandit** (`bandit -r app -ll`, high-severity-only reporting): 1 High
+  finding — `app/api/routes/badge.py:79`, `hashlib.md5(svg.encode()).hexdigest()`
+  used to build an `ETag` cache-control header. Not a real security use of
+  MD5 (collision resistance is irrelevant for a cache key) — bandit flags any
+  MD5 use by default. Quick fix: `hashlib.md5(svg.encode(), usedforsecurity=False)`
+  (Python ≥3.9), one line. The scan also found 6 Low findings not printed
+  (the `-ll` flag only reports High+) — not inspected this session, low
+  priority given the one High is itself borderline.
+- **pip-audit**: 1 vuln — `ecdsa==0.19.2`, `PYSEC-2026-1325` / `CVE-2024-23342`
+  (Minerva timing side-channel on P-256 ECDSA). **No fix will ever land**:
+  upstream `python-ecdsa` explicitly declined to fix it (side-channel attacks
+  are out of scope per their own security policy) — pip-audit will report
+  this forever regardless of how current the lockfile is. `ecdsa` is not a
+  direct dependency (`pyproject.toml` has no `ecdsa` line) — it's pulled in
+  transitively, likely via `opentimestamps-client` or `python-jose`'s
+  dependency tree, not confirmed which this session. Real exploitability is
+  low: confirmed `app/core/auth.py` signs JWTs with `ALGORITHM = "HS256"`
+  (symmetric HMAC), so the API's own JWT code path never calls into `ecdsa`'s
+  signing/ECDH functions at all. **Not a quick win** (no upstream fix
+  exists) — needs a small session to (a) find the actual pulling package via
+  `pip show -f` / dependency tree, (b) decide accept-with-suppression
+  (pip-audit `--ignore-vuln PYSEC-2026-1325` + a comment) vs. removing
+  whatever pulls it in if it's dead weight.
+Status: OPEN, both non-blocking. Next: `7 github` or `1 backend` session, small.
+
+### 🟡 `teta-pi/web` CI: `npm audit` still red — same finding as 2026-07-28, unchanged
+Re-confirmed this session, no new information: 3 vulns (2 high, 1 critical),
+all rooted in pinned `next@15.0.3`. See the existing entry below
+("`teta-pi/web` CI: `npm audit` job red (found 2026-07-28...)") for the full
+detail — not duplicated here. `npm audit fix --force` still resolves it by
+bumping to `next@15.5.22`, still needs a deliberate upgrade + regression
+session, not a blind `--force`.
+
+### ✅ `teta-pi/pi-cam` had zero CI — fixed this session (partial)
+`.github/workflows` 404'd on this repo before this session — none of 15.2's
+CodeQL/npm-audit rollout (api/web/mcp/landing, PRs #9/#9/#4/#6) had touched
+it. **Fixed:** added `npm-audit.yml` (`teta-pi/pi-cam` PR #3, merged,
+matches the web/mcp pattern exactly). **CodeQL intentionally NOT added** —
+pi-cam is a **private** repo on the org's **Free** plan, and GitHub Advanced
+Security (required for code-scanning uploads on private repos) isn't
+available on Free; the workflow would just 403 on every run. Confirmed the
+same root cause blocks branch protection on this repo too:
+`gh api repos/teta-pi/pi-cam/branches/main/protection` → `403 "Upgrade to
+GitHub Pro or make this repository public"`. **This makes pi-cam the only
+repo in the org where `main` isn't protected at all** (no PR-only
+enforcement, no force-push/delete protection) — not a policy inconsistency,
+a platform-tier constraint. Fix requires an owner decision: (a) make pi-cam
+public — unlocks both branch protection and CodeQL, matches all 6 other
+repos, and the app has no baked-in secrets to expose (client-side RN/Expo
+app, keys are per-device via `pk_live_` + Secure Enclave, not in source); or
+(b) upgrade the org to GitHub Team/Enterprise for GHAS on private repos.
+**First real run (post-merge) is red**: several high/moderate vulns, all in
+build/CLI tooling (`brace-expansion`, `js-yaml`, `postcss`, `shell-quote`,
+`node-tar`, `undici`, `uuid` — Expo/Metro toolchain transitives, not app
+runtime code), most with a non-force `npm audit fix` available. Not
+triaged/fixed this session (same "audit, don't fix" scope as everywhere
+else in 7.x) — flagged for whoever picks up the pi-cam dependency bump.
+Status: OPEN (owner decision on public/GHAS + a dependency-bump session
+needed), npm-audit workflow itself done+merged.
+
+### MCP (`teta-pi/mcp`) production-readiness audit — 9-point, read-only
+Full findings, evidence, and the "minimum for production" list live in
+`docs/security.md` §5 (S-11..S-14) for the security-relevant items (auth,
+CORS, rate-limiting, session-map memory growth) and here for the rest:
+
+- **Observability: zero.** Grepped `mcp/src/client.ts` + `mcp/src/index.ts`
+  in full (891 lines) — no logging anywhere except 3 static `console.log`
+  lines at process boot. No per-call log of which tool, which entity,
+  latency, or success/fail; no request-id/correlation-id generated or
+  forwarded to the API. If an agent operator reports a bad result for a
+  specific call, there is currently no way to reconstruct it after the fact.
+  **Single highest-leverage fix**: structured stdout logging (tool name,
+  entity id, latency ms, ok/error) — captured by `journalctl -u tetapi-mcp`
+  already, no new infra needed.
+- **Graceful degradation: reasonable but raw.** `client.ts::apiFetch`
+  (lines 82-105) has a 15s `AbortController` timeout, single-shot, no
+  retry/fallback/cache. On any failure it throws `Error("API {status}:
+  {body}")`; the MCP SDK's `server.tool()` wrapper catches this and returns
+  `{isError:true, content:[...]}` — **confirmed live**:
+  `teta_verify_entity` on a nonexistent UUID → `"API 404:
+  {\"detail\":\"Business not found\"}"`. Never hangs, never crashes the
+  process, but the agent always sees the raw upstream error text verbatim —
+  no domain-specific fallback, no "try again" guidance. A real backend 500
+  would surface FastAPI's raw error body the same way (not checked here
+  whether that body ever contains a stack trace in prod — separate,
+  backend-side question).
+- **No retry / no circuit breaker.** One failing call costs one 15s wait,
+  no retry loop (so no self-inflicted flood if `api.tetapi.dev` is down),
+  but also no fast-fail — a chained `teta_search`→`teta_verify_entity`→
+  `teta_get_proof` sequence during an outage burns up to 45s before the
+  agent sees three raw errors. Acceptable for occasional traffic, not for
+  sustained real load during an incident.
+- **Guardrails: solid shape validation, zero independent integrity check.**
+  Every tool's zod schema (uuid/url/length/enum/numeric bounds) is real and
+  correctly wired — no injection surface found (no raw SQL/shell built from
+  tool args; `client.ts` only builds `URLSearchParams`/JSON bodies). But
+  `teta_get_proof` (`index.ts:196-265`) is a pure pass-through formatter —
+  the MCP layer never recomputes a C2PA manifest hash or an OTS merkle proof
+  itself, it fully trusts whatever `/businesses/{id}/proof` returns. That's
+  architecturally fine (verification logic belongs in
+  `api/app/services/{bitcoin,c2pa}.py`, not duplicated here) but is worth
+  stating plainly since tool descriptions ("so your agent can set its own
+  trust threshold") could be read as MCP doing independent verification —
+  it doesn't; the API is the sole source of truth.
+- **Testing: zero.** `mcp/package.json` has no test framework (no
+  jest/vitest/mocha/tap) and no `test` script; `mcp/src/` is exactly
+  `client.ts` + `index.ts`, no `__tests__`/`*.test.ts` anywhere. None of the
+  7 tools have coverage, happy-path or error-path (not-found, invalid input,
+  timeout — all unverified except by hand/live curl, as done in this
+  audit). CI's only gate is `npx tsc` inside `deploy.yml` (typecheck, not
+  tests).
+- **CI/CD**: 3 workflows, all green — `codeql.yml` (JS/TS),
+  `npm-audit.yml` (`--omit=dev --audit-level=high`), `deploy.yml` (push to
+  main: `npm install && npx tsc` → rsync `dist/` → restart
+  `tetapi-mcp`). Deploy is gated only by `tsc` succeeding (a real compile
+  error blocks it); no test gate exists since there are no tests. No
+  `required_status_checks` on `main`, same as every other repo — advisory
+  only.
+- **Docs consistency — 2 real bugs found:**
+  - `docs/mcp.md` (infra, canonical) says "Version 1.3.1"; the live server
+    (confirmed via a real `initialize` JSON-RPC call — `serverInfo.version`)
+    and `package.json` both say **1.5.1**. The 2.7/2.8 sessions (merged
+    2026-07-27/28) touched `mcp/src/index.ts` but never updated this doc.
+    The 7-tool table itself is accurate (names/backends/purposes all match
+    live code) — just the version line and the missing changelog of what
+    2.7/2.8 shipped.
+  - `mcp/README.md` (the repo's own) has two real bugs, found while cross-
+    checking auth: `auth: Bearer` in the connect snippet is **false** — no
+    auth is enforced anywhere in `mcp/src/index.ts` (see security.md S-11),
+    and `url: https://mcp.tetapi.dev/sse` is a **wrong path** — only
+    `/health`, `/.well-known/mcp`, `/mcp` are routed (`index.ts:600-632`),
+    everything else 404s (confirmed the same bug existed in the **org-level**
+    README, `teta-pi/.github/profile/README.md` — fixed there this session
+    since Part 3 explicitly scoped org-README updates, PR merged; the mcp
+    repo's own README bug is left as this documented finding, not fixed
+    silently, per the audit-not-fix instruction).
+- **Technical debt**: no `TODO`/`FIXME`/`XXX`/`HACK` anywhere in `mcp/src/*`
+  (grepped, zero matches) — clean of debt markers, partly because so little
+  operational/defensive code exists yet (see observability/testing above).
+  One real structural finding: the `sessions` Map (`index.ts:571`,
+  `Map<string, StreamableHTTPServerTransport>`) has no expiry beyond
+  `transport.onclose` — a client that opens a session and never sends a
+  clean `DELETE` (crash, network drop, an agent that just stops calling)
+  leaves its transport in memory for the process lifetime. Invisible under
+  today's occasional/demo traffic; an unbounded slow leak under sustained
+  real agent traffic with many imperfectly-closed sessions. Not urgent, but
+  exactly the class of bug that only shows up after real load.
+
+**Minimum for production with real AI-agent clients as load, ranked:**
+1. Structured logging (tool/entity/latency/ok-or-error) — smallest, highest
+   leverage, unblocks postfactum debugging.
+2. Resolve the auth desync — either implement real Bearer auth, or if the
+   product decision is genuinely "stay open for now," remove the false
+   claim from `mcp/README.md` (actively misleading integrators today).
+3. Rate-limit the MCP ingress itself, not just the API behind it — MCP is a
+   second anonymous entry point with no limits of its own (see security.md
+   S-13).
+4. A minimal test suite — one happy-path + one error-path (not-found) test
+   per tool, so the next `mcp/src/*` change has a safety net (this audit
+   found zero regressions, but nothing would have caught one).
+5. `sessions` Map expiry/cleanup — low urgency, known unbounded-growth risk.
+6. `docs/mcp.md` version bump + 2.7/2.8 changelog; `mcp/README.md` auth+path
+   fix (trivial, both — org README already fixed this session).
+
+Status: OPEN — all findings above, filed for future `2 mcp`/`15 security`
+sessions. No code touched in `teta-pi/mcp` this session (audit only, per
+instruction).
+
 ## 🟡 No backend endpoint for a manual per-block "Verify chain" re-check (found 2026-08-02, roadmap 3.15d)
 The block detail modal spec (`docs/design/profile-grid-of-record/README.md`,
 "Block detail modal") gives every block a `Verify chain` action. Grepped

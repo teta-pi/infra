@@ -96,6 +96,8 @@ Standing checklist re-run each audit cycle. `✅ = verified good`, `⚠️ = kno
   (`/auth/email-code`) — confirm attempt-count lockout, not just cooldown.
 - ☐ `pk_live_` keys: confirm rotation (`/auth/personal-api-key`) invalidates the
   old key immediately; no key logging.
+- ⚠️ MCP (B1) has no auth at all despite its own README claiming `auth: Bearer`
+  (S-11, 7.x audit 2026-08-04) — confirmed live, every tool call is anonymous.
 
 ### authz (authorization) & IDOR
 - ✅ Admin surface uniformly behind `require_admin` + `admin_audit_log` (A3).
@@ -142,6 +144,8 @@ Standing checklist re-run each audit cycle. `✅ = verified good`, `⚠️ = kno
   same design as the 1.10 badge endpoint. Still single-worker-only (S-10).
 - ✅ `/claim` rate-limited 5/min/IP.
 - ☐ `resolve-intent` / `search`: confirm per-IP/key limits on expensive ranking.
+- ⚠️ MCP (`mcp.tetapi.dev`) has zero rate-limiting of its own (S-13,
+  7.x audit 2026-08-04) — a second anonymous ingress in front of the API.
 
 ### secrets exposure
 - ✅ Secrets in server `.env` only; `api/certs/*.key.pem` never synced/committed
@@ -173,6 +177,10 @@ items are tracked here; functional-only bugs stay in `known-issues.md`.
 | S-8 | `GET /businesses/{id}/blocks` leaks private blocks | 🟡 | known-issues | 1.x (block read authz) | OPEN — note: new `GET /blocks/{block_id}` permalink added 2026-07-24 (1.20, api PR #13) does NOT share this bug — it correctly 404s a private block to non-owners; only the list endpoint is affected |
 | S-9 | `/verify/domain/check` mild SSRF (boolean fetch to caller-influenced host) | 🟡 | 6.1 #7 sibling | api PR #8 (1.21 bundle) | ✅ CLOSED 2026-07-18 — `domain_ownership._check_file` now resolves the host and rejects private/loopback/link-local/reserved IPs (incl. 169.254.169.254) + `follow_redirects=False`; prod-verified rejecting a private-resolving domain. DNS-TXT path was already safe (DoH only) |
 | S-10 | In-memory rate limiters → single-worker-only; `/v1/tag-ping` now has a limiter (api PR #12) but it's the same in-memory pattern, still not multi-worker-safe | 🟠 | architecture / 12.5b | devops (Redis) | OPEN (design) — rate limiting exists, Redis migration still pending |
+| S-11 | `teta-pi/mcp` README claims `auth: Bearer` — not implemented anywhere in `mcp/src/index.ts`; every MCP tool call is fully anonymous. Confirmed live: `POST mcp.tetapi.dev/mcp` `initialize` with zero auth headers succeeds normally | 🟠 | 7.x MCP audit (2026-08-04) | `2 mcp` | OPEN — code matches infra's canonical `docs/mcp.md` ("no auth required yet"), so this is a **docs bug in the mcp repo's own README**, not a code gap per se; but the false claim is actively misleading to integrators reading it, and there's genuinely no auth layer at all (CORS is `Access-Control-Allow-Origin: *` too) — flagged here because "should MCP have real auth before scaling agent traffic" is a security/product decision, not just a typo fix |
+| S-12 | `teta-pi/mcp` has zero request logging — no tool/entity/latency/success-fail trail anywhere (`mcp/src/*` grepped in full, only 3 static boot `console.log`s exist) | 🟠 | 7.x MCP audit (2026-08-04) | `2 mcp` | OPEN — biggest production-readiness gap for real agent traffic; no way to reconstruct a specific bad call after the fact. See known-issues.md for full writeup |
+| S-13 | `teta-pi/mcp` has no rate-limiting of its own — every tool call is free, unauthenticated (S-11), and unlimited; MCP is a second anonymous ingress point in front of `api.tetapi.dev` distinct from the API's own limits (S-10) | 🟡 | 7.x MCP audit (2026-08-04) | `2 mcp` | OPEN — all 7 tools are currently read-only so worst case today is cost/load, not data corruption, but this is the same class of gap as S-10, on a different surface |
+| S-14 | `teta-pi/mcp`'s `sessions` Map (`index.ts:571`) has no expiry beyond `transport.onclose` — a client that never sends a clean session `DELETE` (crash, network drop) leaks its transport for the process lifetime | 🟡 | 7.x MCP audit (2026-08-04) | `2 mcp` | OPEN — invisible under today's traffic, an unbounded slow memory leak under sustained real agent traffic with many imperfectly-closed sessions |
 
 **Closed-item provenance:** S-1 and S-2 both landed in
 [`teta-pi/api` PR #3](https://github.com/teta-pi/api/pull/3) —
