@@ -1247,3 +1247,19 @@ Status: **FIXED 2026-07-19** (roadmap 3.11, `teta-pi/web` PR #11) — entity-loa
 effect now resets the store's entity-scoped fields before fetching and assigns
 fetched values unconditionally; `EditView` is keyed on `businessId` so the child
 components' local state resets too.
+
+### 🟠 `teta-pi/pi-cam` has 16 unresolved npm audit findings, all needing `expo` 54→57
+Found 2026-08-04/05 (roadmap 14.7, following 14.6's new npm-audit CI). All are
+transitive: `postcss` (XSS, path-traversal-via-sourcemap) and `uuid` (buffer
+bounds check), pulled in through `@expo/config`/`@expo/config-plugins`/`xcode`/
+`@expo/ngrok`. `npm audit fix` (non-force) already applied — cleared
+`brace-expansion`, `js-yaml`, `shell-quote`, `node-tar`, `undici`, `form-data`
+(22→16 vulnerabilities). The rest only resolve via `npm audit fix --force`,
+which pulls `expo@57.0.10` — a 3-major jump from the current `~54.0.36` pin.
+Deliberately not done in 14.7: this is the same Expo/Metro/reanimated stack
+where 14.4 hit a real New-Architecture/Expo-Go incompatibility, and a
+mobile-tooling major bump needs its own dedicated session with a real-device
+boot check, not a silent dependency-audit fix. None of the remaining CVEs are
+in app runtime code (all build/CLI tooling).
+Status: OPEN — needs a dedicated `expo` 54→57 upgrade session (new roadmap task,
+budget for `expo-doctor` + device boot verification, ties into 14.4's history).
