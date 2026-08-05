@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-05 · URGENT · home page anonymous-nav auth leak fix
+Done: fixed `app.tetapi.dev/` showing logged-in-looking nav (`Search · My
+page · Settings · Claim your page`) to anonymous visitors. Root cause: 3.16a
+(2026-07-31) rewrote `web/src/app/page.tsx` with its own hardcoded nav block
+instead of the shared `AppHeader` component every other app page uses —
+`AppHeader` already checks `useAuthStore().token` correctly (`Sign in /
+Create account` when logged out), the hardcoded block had no auth check at
+all. 3.16a's changelog claimed "Risk: none identified," which was wrong — it
+only verified link destinations, not auth-state rendering.
+Changed: `teta-pi/web` `src/app/page.tsx` — now renders `<AppHeader/>` (no
+new auth logic written), removed the hardcoded nav links and the now-unused
+`GR_BODY` token, added top padding for the now-fixed header. `docs/roadmap.md`
+(new 3.16-urgent row), `docs/known-issues.md` (root cause + a "check for
+shared-component auth logic before a full-page rewrite" lesson logged).
+Investigated but did not change: owner's second reported symptom (logged-out
+click landing on the HELLFIRE Solutions entity page) — not reproduced in a
+clean browser; `useProfileStore`/`useAuthStore` have no fallback-to-last-
+entity logic; reproduced instead by manually seeding a stale `tetapi-auth`
+localStorage token, which correctly triggers the authenticated header state
+— most likely explained by leftover browser state from prior testing, not a
+second bug.
+Risk: low — swaps in a component already used identically on 4 other pages,
+no new logic. Verified `npm run build` clean (0 errors), in a browser tab
+with empty `document.cookie`/`localStorage` (header shows `Sign in`/`Create
+account`), and live on `app.tetapi.dev` in a fresh browser tab post-deploy
+(PR #27 merged, deploy workflow green).
+Next: none — this was a standalone urgent fix, resume the 3.16c (mobile)
+queue item next.
+
 ## 2026-08-05 · 5.5 · auto-restart celery worker/beat on deploy
 Done: `deploy.yml` now restarts `tetapi-celery-worker` + `tetapi-celery-beat`
 on every push to `main`, not just `tetapi-api`. Closes the gap 5.4/1.9 exposed —
