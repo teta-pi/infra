@@ -4,7 +4,7 @@ TypeScript server exposing TETA+PI to AI agents via the Model Context Protocol.
 Source: `mcp/src/index.ts` (tools + HTTP bootstrap) + `mcp/src/client.ts` (API
 client, 15s timeout per call). Tool handlers are stateless — every call hits
 `api.tetapi.dev` over HTTP. Deployed as systemd `tetapi-mcp` on port 3002,
-public at `mcp.tetapi.dev`. **Version 1.3.1.**
+public at `mcp.tetapi.dev`. **Version 1.5.2.**
 
 ## Transport & manifest
 - HTTP + SSE via `@modelcontextprotocol/sdk` `StreamableHTTPServerTransport`,
@@ -63,6 +63,41 @@ found the deployed server unusable for more than one client at a time:
   behaviour change) in `mcp/package.json`, `mcp/src/index.ts`
   (`SERVER_VERSION`), the `/.well-known/mcp` manifest, and both `agent.json`
   files.
+
+## 2.9 production hardening (2026-08-05)
+Found in the 7.x MCP production-readiness audit (S-11/S-12/S-13,
+`docs/security.md` §5, `docs/known-issues.md`). This doc itself had drifted
+to "Version 1.3.1" despite the live server and `package.json` already being
+at 1.5.1 (2.7/2.8 shipped a `teta_resolve_intent` fix without updating this
+file) — fixed as part of this session too.
+
+- **Structured logging (S-12, closed).** Zero observability before this: no
+  per-call record of which tool, which entity, latency, or ok/error. Added
+  structured JSON stdout logging around every tool call — `{ts, tool, entity,
+  latency_ms, status}` (+ `error` on failure) — by wrapping `server.tool`
+  once in `mcp/src/index.ts` (`withCallLogging`) rather than touching each of
+  the 7 handlers, so future tools get logging for free. No new infra:
+  captured by the existing `journalctl -u tetapi-mcp`.
+- **Rate-limiting (S-13, closed).** MCP had no limits of its own — a second
+  fully anonymous ingress in front of `api.tetapi.dev`. Added an in-memory
+  sliding-window limiter on `/mcp` (60 req/min/IP), the same pattern already
+  proven for `api`'s other anonymous public endpoints (`routes/badge.py`,
+  `routes/tag.py` — `teta-pi/api` PR #12): per-IP hit list trimmed to the
+  window on each check, `429` past the limit. Same single-worker-only
+  caveat as those (S-10) — fine at current scale.
+- **Auth desync (S-11, closed as a docs fix).** `mcp/README.md` falsely
+  claimed `auth: Bearer` while no auth exists anywhere in `mcp/src/index.ts`
+  — fixed by removing the false line; README now correctly says no auth is
+  required. **Real Bearer auth was intentionally not implemented** — whether
+  MCP needs it before scaling agent traffic is a product decision, raised
+  explicitly for the owner in the `2.9` PR rather than decided unilaterally.
+  Still true today: **no auth on MCP at all.**
+- Version bumped **1.5.1 → 1.5.2** (`mcp/package.json`, `mcp/server.json`,
+  `SERVER_VERSION`) — hardening only, no tool schema or behaviour change for
+  callers.
+- Not done this session (tracked, see `docs/known-issues.md`): a minimal
+  test suite (one happy/error-path test per tool) and `sessions` Map
+  expiry/cleanup (S-14).
 
 ## Tools (7)
 | Tool | Purpose | Backend |

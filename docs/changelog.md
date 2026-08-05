@@ -6,6 +6,25 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-05 · 14.7 · pi-cam dependency bump (npm audit)
+Done: cleared 6 of 20 `npm audit` findings on `teta-pi/pi-cam` via non-force
+`npm audit fix` (run twice) — `brace-expansion`, `js-yaml`, `shell-quote`,
+`node-tar`, `undici`, plus `form-data` (a new advisory that appeared since
+14.6's CI run 2 days earlier). 22→16 vulnerabilities (15 moderate, 1 high).
+`package.json` untouched — lockfile-only, transitive bumps. Verified clean:
+`expo-doctor` 18/18, `tsc --noEmit` no errors.
+Changed: `teta-pi/pi-cam` `package-lock.json` only.
+Risk: none from what shipped — no `package.json`/runtime dependency changed.
+Remaining 16 vulnerabilities (`postcss`, `uuid`, transitively `@expo/*`) all
+require `npm audit fix --force`, which jumps `expo` `~54.0.36`→`57.0.10`
+(3-major). Deliberately not done — same Expo/Metro/reanimated stack that hit
+a real New-Architecture/Expo-Go break in 14.4; a major Expo bump needs its own
+session with device-boot verification, not a silent audit-fix. Logged as a new
+open item in `docs/known-issues.md`.
+Next: dedicated `expo` 54→57 upgrade session (new roadmap task) to close the
+remaining `postcss`/`uuid` findings, budgeted for `expo-doctor` + a real-device
+boot check given 14.4's history.
+
 ## 2026-08-05 · 15.3 · security.md S-3–S-8 reconciliation (live-verified, not just read)
 Done:
 - Live-verified all 6 assigned findings against prod (`app.tetapi.dev`,

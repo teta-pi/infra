@@ -113,15 +113,15 @@ Full findings, evidence, and the "minimum for production" list live in
 `docs/security.md` §5 (S-11..S-14) for the security-relevant items (auth,
 CORS, rate-limiting, session-map memory growth) and here for the rest:
 
-- **Observability: zero.** Grepped `mcp/src/client.ts` + `mcp/src/index.ts`
-  in full (891 lines) — no logging anywhere except 3 static `console.log`
-  lines at process boot. No per-call log of which tool, which entity,
-  latency, or success/fail; no request-id/correlation-id generated or
-  forwarded to the API. If an agent operator reports a bad result for a
-  specific call, there is currently no way to reconstruct it after the fact.
-  **Single highest-leverage fix**: structured stdout logging (tool name,
-  entity id, latency ms, ok/error) — captured by `journalctl -u tetapi-mcp`
-  already, no new infra needed.
+- **Observability: FIXED 2026-08-05 (`2.9`).** Was zero — no logging anywhere
+  except 3 static `console.log` lines at process boot. Now: structured JSON
+  stdout logging (tool name, entity id, latency_ms, ok/error) on every tool
+  call, added by wrapping `server.tool` once in `mcp/src/index.ts` instead of
+  touching all 7 handlers individually — covers future tools for free.
+  Captured by `journalctl -u tetapi-mcp`, no new infra. Live-verified against
+  prod `api.tetapi.dev`. No request-id/correlation-id yet (not attempted this
+  session) — still no way to *forward* a trace id to the API side, only to
+  see the MCP-side call record.
 - **Graceful degradation: reasonable but raw.** `client.ts::apiFetch`
   (lines 82-105) has a 15s `AbortController` timeout, single-shot, no
   retry/fallback/cache. On any failure it throws `Error("API {status}:
@@ -166,24 +166,20 @@ CORS, rate-limiting, session-map memory growth) and here for the rest:
   error blocks it); no test gate exists since there are no tests. No
   `required_status_checks` on `main`, same as every other repo — advisory
   only.
-- **Docs consistency — 2 real bugs found:**
-  - `docs/mcp.md` (infra, canonical) says "Version 1.3.1"; the live server
-    (confirmed via a real `initialize` JSON-RPC call — `serverInfo.version`)
-    and `package.json` both say **1.5.1**. The 2.7/2.8 sessions (merged
-    2026-07-27/28) touched `mcp/src/index.ts` but never updated this doc.
-    The 7-tool table itself is accurate (names/backends/purposes all match
-    live code) — just the version line and the missing changelog of what
-    2.7/2.8 shipped.
-  - `mcp/README.md` (the repo's own) has two real bugs, found while cross-
-    checking auth: `auth: Bearer` in the connect snippet is **false** — no
-    auth is enforced anywhere in `mcp/src/index.ts` (see security.md S-11),
-    and `url: https://mcp.tetapi.dev/sse` is a **wrong path** — only
-    `/health`, `/.well-known/mcp`, `/mcp` are routed (`index.ts:600-632`),
-    everything else 404s (confirmed the same bug existed in the **org-level**
-    README, `teta-pi/.github/profile/README.md` — fixed there this session
-    since Part 3 explicitly scoped org-README updates, PR merged; the mcp
-    repo's own README bug is left as this documented finding, not fixed
-    silently, per the audit-not-fix instruction).
+- **Docs consistency — 2 real bugs found, both FIXED 2026-08-05 (`2.9`):**
+  - `docs/mcp.md` (infra, canonical) said "Version 1.3.1"; live server and
+    `package.json` were already at 1.5.1 pre-`2.9` (2.7/2.8 never updated this
+    doc). `2.9` bumped the server itself to **1.5.2** (structured logging +
+    rate limiting) and the doc now reflects that, confirmed via a live
+    `initialize` call.
+  - `mcp/README.md` had two real bugs, found while cross-checking auth:
+    `auth: Bearer` in the connect snippet was **false** (no auth is enforced
+    anywhere — see security.md S-11) and `url: https://mcp.tetapi.dev/sse`
+    was a **wrong path** (only `/health`, `/.well-known/mcp`, `/mcp` are
+    routed). Both fixed in `2.9` — README now says `url:
+    https://mcp.tetapi.dev/mcp` with no `auth` line. (The same bug in the
+    **org-level** README, `teta-pi/.github/profile/README.md`, was already
+    fixed in the 7.x audit session.)
 - **Technical debt**: no `TODO`/`FIXME`/`XXX`/`HACK` anywhere in `mcp/src/*`
   (grepped, zero matches) — clean of debt markers, partly because so little
   operational/defensive code exists yet (see observability/testing above).
@@ -197,24 +193,24 @@ CORS, rate-limiting, session-map memory growth) and here for the rest:
   exactly the class of bug that only shows up after real load.
 
 **Minimum for production with real AI-agent clients as load, ranked:**
-1. Structured logging (tool/entity/latency/ok-or-error) — smallest, highest
-   leverage, unblocks postfactum debugging.
-2. Resolve the auth desync — either implement real Bearer auth, or if the
-   product decision is genuinely "stay open for now," remove the false
-   claim from `mcp/README.md` (actively misleading integrators today).
-3. Rate-limit the MCP ingress itself, not just the API behind it — MCP is a
-   second anonymous entry point with no limits of its own (see security.md
-   S-13).
-4. A minimal test suite — one happy-path + one error-path (not-found) test
-   per tool, so the next `mcp/src/*` change has a safety net (this audit
+1. ✅ DONE 2026-08-05 (`2.9`) — Structured logging (tool/entity/latency/ok-or-error).
+2. ✅ DONE 2026-08-05 (`2.9`) — Auth desync resolved as a docs fix: the false
+   `auth: Bearer` claim is removed from `mcp/README.md`. Real Bearer auth was
+   **not** implemented — that's a product decision, not a technical one, and
+   was explicitly left to the owner rather than decided silently (see the
+   `2.9` PR description).
+3. ✅ DONE 2026-08-05 (`2.9`) — MCP ingress now rate-limited (60 req/min/IP),
+   same in-memory pattern as `/v1/tag-ping`/badge.
+4. OPEN — A minimal test suite — one happy-path + one error-path (not-found)
+   test per tool, so the next `mcp/src/*` change has a safety net (this audit
    found zero regressions, but nothing would have caught one).
-5. `sessions` Map expiry/cleanup — low urgency, known unbounded-growth risk.
-6. `docs/mcp.md` version bump + 2.7/2.8 changelog; `mcp/README.md` auth+path
-   fix (trivial, both — org README already fixed this session).
+5. OPEN — `sessions` Map expiry/cleanup — low urgency, known unbounded-growth
+   risk (S-14).
+6. ✅ DONE 2026-08-05 (`2.9`) — `docs/mcp.md` version bump (1.3.1 → 1.5.2);
+   `mcp/README.md` auth+path fix.
 
-Status: OPEN — all findings above, filed for future `2 mcp`/`15 security`
-sessions. No code touched in `teta-pi/mcp` this session (audit only, per
-instruction).
+Status: items 1/2/3/6 CLOSED by `2.9` (2026-08-05); items 4/5 (test suite,
+session-map expiry) remain OPEN, filed for a future `2 mcp` session.
 
 ## 🟡 No backend endpoint for a manual per-block "Verify chain" re-check (found 2026-08-02, roadmap 3.15d)
 The block detail modal spec (`docs/design/profile-grid-of-record/README.md`,
@@ -1304,3 +1300,19 @@ Status: **FIXED 2026-07-19** (roadmap 3.11, `teta-pi/web` PR #11) — entity-loa
 effect now resets the store's entity-scoped fields before fetching and assigns
 fetched values unconditionally; `EditView` is keyed on `businessId` so the child
 components' local state resets too.
+
+### 🟠 `teta-pi/pi-cam` has 16 unresolved npm audit findings, all needing `expo` 54→57
+Found 2026-08-04/05 (roadmap 14.7, following 14.6's new npm-audit CI). All are
+transitive: `postcss` (XSS, path-traversal-via-sourcemap) and `uuid` (buffer
+bounds check), pulled in through `@expo/config`/`@expo/config-plugins`/`xcode`/
+`@expo/ngrok`. `npm audit fix` (non-force) already applied — cleared
+`brace-expansion`, `js-yaml`, `shell-quote`, `node-tar`, `undici`, `form-data`
+(22→16 vulnerabilities). The rest only resolve via `npm audit fix --force`,
+which pulls `expo@57.0.10` — a 3-major jump from the current `~54.0.36` pin.
+Deliberately not done in 14.7: this is the same Expo/Metro/reanimated stack
+where 14.4 hit a real New-Architecture/Expo-Go incompatibility, and a
+mobile-tooling major bump needs its own dedicated session with a real-device
+boot check, not a silent dependency-audit fix. None of the remaining CVEs are
+in app runtime code (all build/CLI tooling).
+Status: OPEN — needs a dedicated `expo` 54→57 upgrade session (new roadmap task,
+budget for `expo-doctor` + device boot verification, ties into 14.4's history).
