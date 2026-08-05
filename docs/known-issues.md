@@ -566,8 +566,8 @@ items are already addressed. Mapping to sessions:
 
 | QA# | Sev | Item | Where it went |
 |---|---|---|---|
-| 1 | 🔴 | expired session still shows editable profile | **3.9** |
-| 2 | 🟠 | Make private → "invalid token" | **3.9** (stale-token family; PATCH-500 part already fixed in 1.18) |
+| 1 | 🔴 | expired session still shows editable profile | **3.9 ✅ closed 2026-08-05 (15.3), web PR #10** — live-verified on prod: stale token now renders a sign-in gate, not the editable grid (S-4) |
+| 2 | 🟠 | Make private → "invalid token" | **3.9 ✅ closed 2026-08-05 (15.3)** — PATCH-500 part fixed in 1.18 (api PR #6, live re-verified); stale-token part covered by the same web PR #10 401 pipeline as #1 above (S-5) |
 | 3 | 🟠 | persona sees business verifier set | **3.10** |
 | 4 | 🟠 | Business Email "Send Code" dead | **3.9** re-test (Resend was also broken during QA — key rotation + sandbox; may already work) |
 | 5 | 🟡 | Domain Ownership untested | folded into **6.2 re-run** checklist |
@@ -583,7 +583,7 @@ items are already addressed. Mapping to sessions:
 | 15 | 🟠 | profile needs full visual redesign | **3.13** (design-first) |
 | 16 | 🟡 | no per-block permalink/view | **1.20 ✅ backend fixed 2026-07-24** — public `GET /api/v1/blocks/{block_id}` (api PR #13), respects `is_public`/ownership, 404s for private blocks to non-owners. Web route to it still needed (1.20-web) |
 | 17 | 🟢 | favicon missing everywhere | **3.12 ✅ fixed 2026-07-21 (app)** + **10.6** (landing+email) — reused 10.6's `favicon.svg`/`apple-touch-icon.png` as Next's `src/app/icon.svg` + `apple-icon.png` (auto-wired) |
-| 18 | 🔴 | data leakage between entities of one account | **3.11** (prime suspect: `useProfileStore` localStorage reuse; backend must be ruled out too) |
+| 18 | 🔴 | data leakage between entities of one account | **3.11 ✅ closed 2026-08-05 (15.3), web PR #11** — backend owner-scoping re-verified live and clean this session too (S-6) |
 | 19 | 🔴 | Pi CAM app won't launch | **14.4** (blocks 14.2/14.3) |
 | 20 | 🔴 | blocks not indexed/findable | **1.20**; partly explained: `/search` covers entities only, block embeddings blocked on OpenAI billing (5.1) |
 | 21 | 🟢 | marketing numbers not clickable/sourced | **10.6** |
@@ -862,7 +862,15 @@ payloads) stays true. Same class of bug as the already-tracked
 `registry_status`-survives-rename issue (queued as 1.5), different field.
 **Fix:** reset `agent_endpoint_verified = False` in `update_business` whenever
 `agent_endpoint` is in the payload and differs from the current value.
-Status: OPEN.
+Status: OPEN — **re-confirmed live 2026-08-05 (15.3 reconciliation)**, code at
+`businesses.py:233-247` unchanged (blind `setattr` loop, no `agent_endpoint`
+special-casing). Tracked as S-7 in `docs/security.md` §5. **Currently not
+practically exploitable**: the only code path that can ever set
+`agent_endpoint_verified=true` (`POST /verify-endpoint`) 500s on every call
+that passes `entity_id` — see new bug #18 below — so no business in prod
+today has the flag true (`SELECT … WHERE agent_endpoint_verified=true` → 0
+rows, checked live via psql). The moment #26 is fixed, this bug becomes live
+again unless fixed alongside it.
 
 ### 🟠 7. `POST /verify-endpoint` is fully unauthenticated and performs a server-side GET to any caller-supplied URL
 `api/app/api/routes/endpoint_verification.py:73-113` has no
@@ -984,7 +992,17 @@ the step that's supposed to gate creating an account as an authorized
 representative of an entity, and it's fully client-side and fakeable. **Fix:**
 wire it to the real `/verify/email/*` endpoints (already implemented per
 `docs/api.md`), or hide the method until it is.
-Status: OPEN.
+Status: **CLOSED — 2026-08-05 (15.3 reconciliation)**. Not fixed by the
+suggested `/verify/email/*` wiring; superseded entirely by `teta-pi/web`
+PR #4 (`0a2d700`, "feat(claim): registry-free create flow (3.7)", merged
+2026-07-16), which deleted this whole step — and its `setProven`/prove-method
+state — from the claim flow. Confirmed live in current
+`web/src/app/claim/page.tsx`: no `onClick={() => {}}`, no `setProven`, no
+"Registry domain email" step at all; the only verify step left is real
+account-email verification (`authApi.sendEmailCode`/`verifyCode`). Registry
+ownership is now a separate real backend call from `/profile`
+(`POST /businesses/{id}/verify/registry`). Tracked as S-3 in
+`docs/security.md` §5.
 
 ### 🟠 12. No web UI control ever calls `businessApi.publish`
 `grep` across `web/src/**` finds zero call sites for `businessApi.publish`
@@ -1056,6 +1074,29 @@ timeout. If `TETA_PI_API_URL` is unreachable or slow, the calling agent gets no
 error, just an indefinite hang. **Fix:** add a timeout (e.g. `AbortSignal.timeout(10_000)`)
 and surface a clear error on expiry.
 Status: OPEN.
+
+### 🟠 18. `POST /verify-endpoint` 500s on every call that includes `entity_id`
+Found live 2026-08-05 during 15.3 security reconciliation, while trying to
+reproduce S-7/known-issue #6 (`agent_endpoint_verified` stale-flag bug) end to
+end. `api/app/api/routes/endpoint_verification.py:86` builds the entity
+lookup as `(Business.slug == payload.entity_id) | (Business.id.cast("text")
+== payload.entity_id)` — `.cast("text")` passes a bare Python string where
+SQLAlchemy expects a type object (e.g. `String`), which breaks query
+compilation. Confirmed live via `curl`: `POST /verify-endpoint` with a valid
+`endpoint_url` and any `entity_id` (tried both a slug and a UUID) returns
+`500 Internal Server Error` every time; omitting `entity_id` avoids the crash
+but then `belongs_to_entity`/`data_consistent` can never be true, so the
+endpoint can never actually verify anything either way. This has been broken
+since the original commit (`2964ba3`, 2026-06-25) — not a regression.
+**Practical consequence:** `agent_endpoint_verified` can currently never be
+set to `true` through this endpoint (confirmed: 0 rows in prod have it true),
+which incidentally makes S-7 unreachable in practice today — but is itself a
+real functional bug blocking the one legitimate way to verify an agent
+endpoint. **Fix:** replace `.cast("text")` with `cast(Business.id, String)`
+(or just compare `str(Business.id)` / drop the OR and look up by slug vs.
+`uuid.UUID(payload.entity_id)` in a try/except).
+Status: OPEN, not yet triaged into the roadmap. Tracked alongside S-7 in
+`docs/security.md` §5.
 
 ## 🔴 Profile "My Page" does not persist blocks to the backend
 `web/src/app/profile/page.tsx` uses `useProfileStore` (zustand) which had **no
@@ -1200,13 +1241,25 @@ fix must add ownership/auth there (and route non-owner reads through the public
 `by-slug/{slug}/public` path, which already filters). Left as-is during the block
 persistence work to avoid breaking agent readers. **Fix:** require `get_current_user`
 + owner check on `list_blocks`, or split owner vs public listing.
-Status: FIXED (2026-07-12). `list_blocks` now takes an optional bearer
-(`_get_optional_user` in `routes/blocks.py`, `HTTPBearer(auto_error=False)` wrapping
-`get_current_user` so anonymous/invalid-token callers fall through to the public
-view instead of 401). The owner sees every block; non-owners and anonymous callers
-get `is_public=true` blocks only. `/profile` still gets all its own blocks (owner
+Status: FIXED (2026-07-12), api PR #10 (`5c46ad8`). `list_blocks` now takes an
+optional bearer (`_get_optional_user` in `routes/blocks.py`,
+`HTTPBearer(auto_error=False)` wrapping `get_current_user` so
+anonymous/invalid-token callers fall through to the public view instead of
+401). The owner sees every block; non-owners and anonymous callers get
+`is_public=true` blocks only. `/profile` still gets all its own blocks (owner
 match), and `/e/[slug]` is untouched (it uses `by-slug/{slug}/public`). Agent
-readers keep working — they just no longer see private blocks.
+readers keep working — they just no longer see private blocks. Tracked as S-8
+in `docs/security.md` §5 (that table had drifted stale, still showing this as
+OPEN). **Re-verified live 2026-08-05 (15.3 reconciliation)**: created one
+public + one private block on a fresh test entity; `GET
+/businesses/{id}/blocks` with no auth and separately with a garbage bearer
+token both returned only the public block, the owner's token returned both.
+**New bug found in passing, unrelated to this leak**: `POST
+/businesses/{id}/blocks` (`add_block`, `routes/blocks.py:59-72`) ignores the
+`is_public` field of `BlockCreate` entirely when constructing the `Block` row
+— every new block is created public regardless of what the caller sends; a
+private block can currently only be produced by `PATCH`ing it right after
+creation. Status: OPEN, not yet triaged into the roadmap.
 
 ## 🟡 Email delivery limited to one address
 Resend domain `tetapi.dev` not verified; sender `onboarding@resend.dev` only
