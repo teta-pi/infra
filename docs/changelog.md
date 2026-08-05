@@ -6,6 +6,101 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-05 · 5.5 · auto-restart celery worker/beat on deploy
+Done: `deploy.yml` now restarts `tetapi-celery-worker` + `tetapi-celery-beat`
+on every push to `main`, not just `tetapi-api`. Closes the gap 5.4/1.9 exposed —
+the deploy left the celery units on stale task code until a manual
+`systemctl restart` (33 min of a crashing worker during the 1.9 OTS fix, from
+disk-code-update at 19:46 to a hand restart at 20:19). No user-load babysitting
+now.
+Changed: `.github/workflows/deploy.yml` (api repo, PR #16) — added
+`systemctl restart tetapi-celery-worker tetapi-celery-beat` to the "Migrate +
+restart" step right after the API restart, each with an `is-active` health
+check that fails the deploy and dumps `journalctl` if either doesn't come up.
+Always restarts, no file-change detection (cheap: `--concurrency=1`). Docs:
+`deployment.md` systemd + CI/CD sections updated; `roadmap.md` 5.5 → ✅.
+Risk: low. Restart adds ~8s + two health checks to each deploy. The three
+services are independent (shared code/DB/redis broker, no start-order
+dependency), so restarting celery can't wedge the API or vice-versa. If a
+worker code change is itself broken, the new `is-active` gate now *fails the
+deploy* loudly instead of silently leaving a dead worker — strictly safer than
+before.
+Verified: proven on the very deploy that shipped it — CI log shows `✓ API up`
+/ `✓ Celery worker up` / `✓ Celery beat up`; prod `ActiveEnterTimestamp` moved
+from `2026-07-31 06:18` → `2026-08-05 10:16:23`(api)/`:28`(beat)/`:30`(worker),
+all three `active/running`.
+Next: nothing required. If celery ever grows a slow/blocking shutdown, consider
+`TimeoutStopSec` on the units so a restart can't stall a deploy — not a concern
+at `--concurrency=1` today.
+
+---
+
+## 2026-08-04 · 3.16b · Grid of Record search results page
+Done: rewrote `/search` from the old 3.13 glassmorphism list to the design
+spec's evidence-filter-bar + result-row + evidence-grid board. Extracted
+`StatementTile`/`BlockDetailModal`'s shared dependencies (`GR_*` tokens,
+`blockKind`/`blockMarks`/`blockHashLabel`/`blockMediaLabel`/`formatTileDate`/
+`mapServerBlock`, `SealGlyph`, `BlockDetailModal`) out of `profile/page.tsx`
+into a new `src/components/GridOfRecord.tsx`, generalizing the modal's
+`index`+`isEdit`+`onReplaceMedia` props into `headerPrefix`+`secondaryAction`
+so search reuses the exact same component with "Open entity page" instead of
+building a second copy. New `EvidenceTile` (spec's "same component, one size
+down") built from the same shared helpers. Real-data gaps found and adapted
+rather than faked: `/search`'s `badges` only ever reflects registry status
+(never c2pa/btc — confirmed live), and zero blocks in prod are actually
+c2pa/bitcoin-verified today, so real per-entity marks need a `blockApi.list()`
+call per result (parallel, same endpoint the profile ledger uses); filter-tab
+counts are computed from that same real data client-side, since no faceted-
+count endpoint exists. The spec's "unverified open-source mentions withheld"
+tail has no backing feature (no mention-harvesting anywhere in this codebase)
+— reinterpreted as this product's real equivalent: claimed entities with zero
+marks, excluded from the ranked list and every filter, revealed via a real
+"Show unverified" toggle. Did not adopt `/resolve-intent` (TWIRA) — its
+`verified_only` default silently hides unverified entities, conflicting with
+this task's own "never hide by default" ranking rule, and its schema is
+missing half of what a row needs.
+Changed: `teta-pi/web` `src/app/search/page.tsx` (full rewrite),
+`src/app/profile/page.tsx` (shared pieces extracted, `BlockDetailModal` call
+site updated to the generalized props), `src/components/GridOfRecord.tsx`
+(new) · `docs/roadmap.md` (3.16 row, 3.16b done) · `docs/known-issues.md`
+(facet-count gap, `/resolve-intent` non-adoption both logged).
+Risk: low-medium — `profile/page.tsx`'s refactor is a pure extraction (same
+logic, moved and parameterized), verified locally that the profile page still
+renders identically after it; `/search` is a full rewrite of a page with no
+other internal callers. N+1 blocks-per-result fetch is a real perf cost at
+larger result-set sizes — capped at 12 results this session.
+Next: 3.16c (390px mobile layer for both `/` and `/search`) — last step in
+the 3.16 chain.
+
+## 2026-08-04 · 3.15e · Grid of Record visitor footer + agent panel
+Done: rewrote `VisitorView`/`AgentView` — 3.13-era stubs (`VisitorView` was a
+no-op returning `null`; `AgentView` was an old glassmorphism JSON card) that
+had sat unused below the shared board since 3.15a — into the spec's regions
+7/8, and moved both inside the same white-bordered card as regions 1-6 so
+they read as the ledger's own bottom edge. Visitor footer's trust sentence
+and CTAs use the real entity name; "Contact {name}" is a documented stub (no
+contact field anywhere in the schema), "Verify all blocks" is real (opens
+the first block's 3.15d detail modal). Agent panel's `entity/registry/c2pa/
+btc_ts/blocks/trust/fetch` fields are derived from `store.blocks`/
+`registryStatus`/`registryData`, the same computations `AttestationBar`
+(region 2) already uses — dropped the spec's `claims` row, nothing backs it.
+Found `businessApi.agentPreview()` (`GET /businesses/{id}/preview`) already
+defined but never called; checked its live shape on prod (also confirmed the
+2026-07-13 known-issue reporting it 500s no longer reproduces on 4 spot-
+checked entities) and chose the in-store derivation instead, since the REST
+call would just re-aggregate data already in the store from this page's own
+authenticated load. Verified in browser against prod API, unauthenticated
+(no login available): Edit mode shows neither region; Visitor/Agent both
+render correctly empty and after typing a real name client-side.
+Changed: `teta-pi/web` `src/app/profile/page.tsx` (`VisitorView`/`AgentView`
+rewritten and relocated, stale region comments updated) · `docs/roadmap.md`
+(3.15 row, 3.15e done) · `docs/known-issues.md` (new claims/contact-channel
+gap logged; `/preview` 500 finding updated with a re-check note).
+Risk: low — additive UI in Visitor/Agent modes only, Edit mode path
+untouched; "Contact" button is inert by design (no click handler).
+Next: 3.15f (390px mobile responsive layer) — last step in the 3.15 chain.
+
+
 ## 2026-08-04 · 7.4/7.5/7.6 · CI/CD audit + MCP production-readiness audit + org showcase
 Done:
 - **7.4 CI/CD audit** (read-only): confirmed api's Bandit (1 High —
