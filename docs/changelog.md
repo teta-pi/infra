@@ -6,6 +6,62 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-05 · 15.3 · security.md S-3–S-8 reconciliation (live-verified, not just read)
+Done:
+- Live-verified all 6 assigned findings against prod (`app.tetapi.dev`,
+  `api.tetapi.dev`) instead of trusting the table's written status.
+  **5 of 6 CLOSED, 1 confirmed still OPEN:**
+  - **S-3** (`/claim` fake verify step) — CLOSED. Not fixed by 3.9 as the
+    table claimed; actually removed entirely by the earlier 3.7 registry-free
+    rework (web PR #4). No `onClick={()=>{}}`/`setProven` left in code.
+  - **S-4** (expired session shows editable profile) — CLOSED, web PR #10.
+    Live: garbage token + real business id on `/profile` → sign-in gate, not
+    the editable grid.
+  - **S-5** (stale-token family) — CLOSED both sub-parts. PATCH-500 (api PR
+    #6, missing `db.refresh`) re-verified live twice, incl. two 2026-07-16/17
+    QA entities that were stuck public finally showing successful
+    unpublish. Stale-token part shares S-4's fix (same `request()`/
+    `handleUnauthorized()` pipeline).
+  - **S-6** (data leakage between entities) — CLOSED, web PR #11. Backend
+    owner-scoping independently re-verified live (two fresh test entities,
+    no cross-contamination); full SPA switch re-test skipped (no in-app
+    switcher UI yet, avoided putting the test credential into a browser tool
+    call).
+  - **S-7** (`agent_endpoint_verified` survives endpoint change) — **still
+    OPEN**, code defect confirmed unchanged live. Currently unexploitable in
+    practice only because of a separate bug found this session (below) that
+    means the flag can never become `true` at all right now.
+  - **S-8** (`GET /businesses/{id}/blocks` leaks private blocks) — CLOSED,
+    api PR #10 (already fixed 2026-07-12, but security.md's table had drifted
+    stale and still showed it OPEN). Live: anon + garbage-token requests
+    return only public blocks; owner sees both.
+- **2 new bugs found in passing, not part of the original assignment:**
+  - `POST /verify-endpoint` 500s on every call with `entity_id`
+    (`Business.id.cast("text")` — string instead of a SQLAlchemy type,
+    `endpoint_verification.py:86`; broken since the original 2026-06-25
+    commit). Logged as known-issues #18.
+  - `POST /businesses/{id}/blocks` (create) ignores `BlockCreate.is_public`
+    entirely — new blocks are always created public; `is_public:false` at
+    creation time is silently dropped. Logged inline in the blocks-leak
+    known-issue.
+Changed: `docs/security.md` §5 table rows S-3–S-8 rewritten with exact
+closing PR/commit + live-verification evidence per row; `docs/known-issues.md`
+numbered items #6, #11, QA-table rows #1/#2/#18, and the blocks-leak writeup
+updated to match; new numbered item #18 (`/verify-endpoint` 500) added.
+Risk: S-7 is a live landmine — if someone fixes the `/verify-endpoint` 500
+(new #18) without also fixing S-7's missing reset-on-change logic, the
+original stale-flag vulnerability becomes immediately exploitable again with
+zero warning, since nothing currently guards against it besides the crash.
+Test entities created during live verification
+(`e5b79aaa…`/`ab27ca35…`/`abed5367…`, "TETA Security Sync Test A/B/C 15.3")
+were all set `is_public=false, is_published=false` after testing — not
+deleted (no `DELETE /businesses/{id}` endpoint exists).
+Next: fix S-7 (reset `agent_endpoint_verified=False` in `update_business`
+whenever `agent_endpoint` changes) and known-issues #18
+(`Business.id.cast("text")` → proper type) together, in the same PR, so the
+fix doesn't reopen the vulnerability the moment #18 is patched. Separately:
+fix the create-block `is_public` drop.
+
 ## 2026-08-05 · 3.17 · root-fix app-paths-manifest.json deploy bug
 Done: `deploy.yml`'s "Patch standalone output" step was overwriting
 `.next/server/app-paths-manifest.json` with a hardcoded copy on every
