@@ -6,6 +6,61 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-05 · 2.9 · MCP production hardening (logging + rate-limit + auth-desync docs fix)
+Done: closed S-11/S-12/S-13 from the 7.5 MCP production-readiness audit.
+(1) Structured JSON stdout logging on every tool call (`tool`, `entity`,
+`latency_ms`, `status`, `error` on failure) — added by wrapping
+`server.tool` once (`withCallLogging`) instead of touching all 7 handlers,
+so future tools log for free; captured by the existing `journalctl -u
+tetapi-mcp`. (2) In-memory sliding-window rate limiter on `/mcp`, 60
+req/min/IP — reused the exact pattern already proven in `teta-pi/api`
+(`routes/badge.py` / `routes/tag.py`, PR #12), not a new mechanism.
+(3) Auth desync (S-11) resolved as a **docs-only fix**: removed the false
+`auth: Bearer` line from `mcp/README.md` (no auth was ever enforced in
+`mcp/src/index.ts`) and fixed the wrong `/sse` path to `/mcp`. Did **not**
+implement real Bearer auth — that's a product decision, not a technical
+one, and is raised explicitly for the owner in the PR rather than decided
+silently. MCP remains fully unauthenticated today. Also fixed `docs/mcp.md`'s
+stale "Version 1.3.1" line (live server + `package.json` were already at
+1.5.1 from 2.7/2.8, which never updated this doc) and bumped the server to
+**1.5.2** for this session's changes.
+Changed: `teta-pi/mcp` `src/index.ts` (`withCallLogging`, rate limiter,
+`SERVER_VERSION`), `README.md`, `package.json`, `server.json`. `teta-pi/infra`
+`docs/mcp.md`, `docs/security.md` (S-11/S-12/S-13 → CLOSED), `docs/known-issues.md`,
+`docs/roadmap.md` (2.9 → done).
+Risk: rate limiter is in-memory / single-process only (same S-10 caveat as
+the API-side limiters) — fine at current single-worker scale, would need a
+Redis move alongside S-10 if MCP ever runs multi-process. Logging has no
+request-id/correlation-id forwarded to the API side yet.
+Next: MCP still has zero test coverage and the `sessions` Map still has no
+expiry (S-14) — both filed, not done this session. Owner decision still
+open: does MCP need real auth before scaling agent traffic, or does "no auth
+required yet" stay the intentional default for now?
+
+## 2026-08-05 · 3.17 · root-fix app-paths-manifest.json deploy bug
+Done: `deploy.yml`'s "Patch standalone output" step was overwriting
+`.next/server/app-paths-manifest.json` with a hardcoded copy on every
+deploy, even though the "Sync Next.js standalone" step right above it
+already rsyncs the real, `next build`-generated manifest — present since
+the very first commit of this workflow (5.3 split, `34a06bb`). This exact
+mechanism silently 404'd two new routes after otherwise-clean deploys
+before (3.12 icon routes, 1.20-web's block permalink), both patched with a
+one-line hardcoded-list edit rather than a root fix. Removed the hardcoded
+`cat > … << JSON` block entirely (PR #28); left the unrelated chunk-copy
+loop and `BUILD_ID` rewrite in the same step untouched. Proved the fix, not
+just the diff: added a throwaway `/test-manifest-fix` route, deployed with
+zero manifest edits, confirmed 200 with real content on `app.tetapi.dev`,
+then removed it in a follow-up commit (PR #29) and confirmed it 404s again.
+All pre-existing routes (`/profile`, `/search`, `/icon.svg`, `/e/[slug]`)
+re-confirmed 200 after the change.
+Changed: `teta-pi/web` `.github/workflows/deploy.yml` · `docs/roadmap.md`
+(3.17 row, 3.18's stale "land 3.17 first" note updated) ·
+`docs/known-issues.md` (1.20-web's root-cause follow-up flag closed).
+Risk: low — deleted code only, no new logic added; verified live on prod
+both before and after removing the test route.
+Next: none — this closes the 3.15-3.17 backlog cluster; 3.18 (Next.js
+upgrade, npm audit) no longer has this as a dependency risk.
+
 ## 2026-08-05 · URGENT · home page anonymous-nav auth leak fix
 Done: fixed `app.tetapi.dev/` showing logged-in-looking nav (`Search · My
 page · Settings · Claim your page`) to anonymous visitors. Root cause: 3.16a
