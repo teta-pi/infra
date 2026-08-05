@@ -489,7 +489,12 @@ this exact mechanism has caused a silent prod 404 after a clean deploy**
 (3.12 icon routes, now this) — worth fixing at the root (sync the real
 manifest instead of hand-maintaining a copy) rather than patching entry by
 entry each time a new route ships; flagged as a roadmap follow-up.
-Status: CLOSED.
+Status: CLOSED. **Root cause fixed 2026-08-05 (roadmap 3.17, web PR #28)** —
+removed the hardcoded `app-paths-manifest.json` overwrite entirely; the
+rsync step right above it already puts the real `next build`-generated
+manifest in place. Verified with a throwaway route that reached prod with
+zero manifest edits, then removed. This class of bug (3.12, this entry)
+should not recur.
 
 ## Found + fixed 2026-07-21 (3.12) — `overflow:hidden` page shells become invisible scroll containers
 
