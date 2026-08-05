@@ -3,6 +3,38 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🔴 FIXED 2026-08-05 — home page (`/`) showed logged-in nav to anonymous visitors
+3.16a (2026-07-31, `session/3.16a-home-minimal`) rewrote `web/src/app/page.tsx`
+from scratch and built its own hardcoded nav block (`Search · My page ·
+Settings · Claim your page`) instead of reusing the shared `AppHeader`
+component that `/profile`/`/search`/`/settings`/`/e/[slug]` all use (`AppHeader`'s
+own doc comment already claimed it covered "every app page"). The hardcoded
+block had no auth check at all — it rendered the same links regardless of
+`useAuthStore().token`, so anonymous visitors saw the authenticated-looking
+nav (`My page`/`Settings`) instead of `Sign in`/`Create account`. 3.16a's own
+changelog entry ("Risk: none identified... all nav links point at real
+routes") did not check auth state, only that the hrefs resolved, so the bug
+shipped invisibly and wasn't caught until the owner tested a clean/incognito
+session on 2026-08-05. **Fixed**: `page.tsx` now renders `<AppHeader/>`
+directly, same as every other app page — no new auth logic written. Verified
+in a browser tab with empty `document.cookie`/`localStorage`.
+**Lesson for future rewrites of pages using the shared app chrome**: when a
+task says "rewrite `X`", check whether `X` already composes a shared
+component (`AppHeader`, etc.) before replacing its markup wholesale — a full
+rewrite that silently drops a shared component's behavior (here: auth-aware
+rendering) won't show up in a route/link check, only in an actual
+logged-out-vs-logged-in comparison.
+**Related, not a separate bug**: owner also reported a click from logged-out
+state once landing on the HELLFIRE Solutions entity page; not reproduced in a
+genuinely clean browser. Checked `useProfileStore`/`useAuthStore` for any
+"fallback to last/first entity" logic — none exists. Reproduced instead by
+manually seeding a stale `tetapi-auth` key into `localStorage` (the
+zustand-persisted auth token): this correctly flips the header to the
+authenticated state, same mechanism as the main bug — i.e. most likely
+explained by a leftover token from earlier dev/testing in the owner's browser
+profile, not a second code defect. No fix needed; documenting for the next
+QA pass so it isn't re-filed as a mystery redirect.
+
 ## 7.x CI/CD + MCP production-readiness audit (2026-08-04, read-only — see docs/security.md for the security-relevant subset)
 
 Boot 7.x (`teta-pi/infra`). Three parts: CI/CD audit across all repos, MCP
@@ -239,6 +271,68 @@ renders "—" for this stat rather than fabricate a number.
 expose it on `GET /businesses/{id}` or a dedicated endpoint.
 Status: OPEN (backend work not started).
 
+## 🟡 No `claims`/certifications field, and no entity contact channel (found 2026-08-04, roadmap 3.15e)
+The Grid of Record spec's Agent panel (`docs/design/profile-grid-of-record/README.md`
+region 8) has a `claims:` row (e.g. `no-synthetic-pesticides, cold-chain-4c,
+organic-cert`) and the Visitor footer's "Contact {entity}" button implies a real
+contact channel. Neither exists in the data model: grepped `Business`/
+`AgentBusinessProfile` (`web/src/lib/types.ts`, and confirmed against prod's live
+`/openapi.json` schema for the latter) — no certifications/tags field anywhere,
+and no email/phone/contact field on `Business` at all. `AgentView` drops the
+`claims` row entirely rather than inventing one; `VisitorView`'s "Contact {name}"
+button (`web/src/app/profile/page.tsx`) is non-interactive with a title tooltip
+explaining why, the same treatment 3.15d gave "Verify chain" for its own missing
+backend. **Fix (if ever wanted):** a `claims`/certifications field would need a
+new column + owner-facing editor (self-reported, so it'd need its own
+attestation story to stay consistent with "nothing on this page is
+self-reported"); a contact channel would need a new `Business.contact_email` (or
+similar) field, exposed only in Visitor mode, with real spam/abuse
+considerations before shipping.
+Status: OPEN, no fix planned — documented adaptation, not blocking 3.15f.
+
+## 🟡 `/search` has no per-entity signing marks or faceted counts — results page fetches blocks client-side (found 2026-08-04, roadmap 3.16b)
+The search results spec (`docs/design/search-home-results/README.md` region 2)
+wants trust-tier facet counts ("must come from the same query, not
+recomputed on client") and per-entity `marks[]` (registry/c2pa/btc). Neither
+exists on `BusinessSearchResult`/`GET /search` (confirmed via prod's live
+`/openapi.json`): `badges` only ever reflects registry status (`["registry"]`
+or `[]` — checked 30+ live entities via curl, never `c2pa`/`btc`), and there
+is zero c2pa-verified or bitcoin-confirmed media in production at all (`select
+… from blocks join media … where c2pa_verified or bitcoin_confirmed` → 0
+rows, so this is currently unreachable in practice, not just unpopulated).
+`web/src/app/search/page.tsx` fetches `blockApi.list()` per result (parallel,
+same endpoint the profile ledger already uses) to derive real marks, and
+computes filter-tab counts from that same fetched data client-side rather
+than a server facet. Same shape as 3.15a's "agent lookups" gap: real data,
+just derived at a real cost (N+1 requests) instead of a cheap endpoint.
+**Fix (if ever wanted):** a `GET /search` facet-count param or a dedicated
+`/search/facets` endpoint, and rolling `badges` up to include per-entity
+c2pa/btc aggregates (or exposing `block_count`'s signed subset directly) so
+the results page doesn't need a blocks fetch per row just to render the
+attestation line.
+Status: OPEN, no fix planned this session — documented adaptation, not
+blocking 3.16c.
+
+## 🟡 `/resolve-intent`'s `verified_only` default conflicts with the results-page ranking rule — not adopted for `/search` (found 2026-08-04, roadmap 3.16b)
+3.16b's task named `/resolve-intent` (TWIRA-ranked) as an equally valid data
+source for the new results page. Not adopted: live-tested against prod
+(`POST /resolve-intent {"query":"hellfire solutions"}`) and it returns an
+empty result set by default — `verified_only` defaults to `true` server-side,
+silently excluding every unverified entity. That's the same default already
+flagged in "`resolve-intent` `verified_only` defaults to `true` — L0 entities
+invisible to default agent calls" (2026-07-16, below) for agent callers, but
+here it actively conflicts with this task's own explicit ranking rule ("never
+hide entities by default — rank declared-only/unattested last instead, never
+drop them"). `IntentResolution`
+also lacks `slug`/`description`/`badges`/`block_count`, which would need a
+second per-result fetch on top of the blocks fetch 3.16b already added.
+`/search` (keyword, `level=any`) was kept as the sole data source instead.
+**Fix (if ever wanted):** fix the `verified_only` default first (tracked
+separately), then `/search` could layer TWIRA ranking on top for natural-
+language queries once its schema carries what the row UI needs.
+Status: OPEN, no fix planned this session — documented as a deliberate
+non-adoption, not blocking 3.16c.
+
 ## 2.8 fix — TWIRA path now enforces `verified_only` (2026-07-28)
 
 **Repo:** `teta-pi/api` PR #15 (merged, deployed).
@@ -395,7 +489,12 @@ this exact mechanism has caused a silent prod 404 after a clean deploy**
 (3.12 icon routes, now this) — worth fixing at the root (sync the real
 manifest instead of hand-maintaining a copy) rather than patching entry by
 entry each time a new route ships; flagged as a roadmap follow-up.
-Status: CLOSED.
+Status: CLOSED. **Root cause fixed 2026-08-05 (roadmap 3.17, web PR #28)** —
+removed the hardcoded `app-paths-manifest.json` overwrite entirely; the
+rsync step right above it already puts the real `next build`-generated
+manifest in place. Verified with a throwaway route that reached prod with
+zero manifest edits, then removed. This class of bug (3.12, this entry)
+should not recur.
 
 ## Found + fixed 2026-07-21 (3.12) — `overflow:hidden` page shells become invisible scroll containers
 
@@ -1041,6 +1140,14 @@ on prod) and get the actual traceback (prod only returns "Internal Server
 Error" with no detail).
 Status: OPEN (blocks 3/7 MCP tools; not fixed in 2.5 since it's outside
 `mcp/src/*` scope).
+Update 2026-08-04 (found incidentally during 3.15e, not investigated/fixed
+this session): re-curled the exact id above plus 3 more real prod entities
+(varied — with/without registry data, with/without blocks/media) — all now
+return 200 with the expected `AgentBusinessProfile` shape, no 500s. Whatever
+backend work fixed this wasn't logged here at the time. Leaving this open
+rather than marking fixed outright, since it wasn't re-tested against the
+original failing conditions/traceback (which were never captured — see "Fix"
+note above) — a backend session should confirm intentionally and close it.
 
 ## 🟡 `/search` relevance looks off for unrelated queries
 Found during 2.5 MCP live E2E testing (2026-07-13): `teta_search` (backend

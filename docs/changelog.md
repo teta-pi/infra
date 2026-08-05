@@ -62,6 +62,209 @@ whenever `agent_endpoint` changes) and known-issues #18
 fix doesn't reopen the vulnerability the moment #18 is patched. Separately:
 fix the create-block `is_public` drop.
 
+## 2026-08-05 · 3.17 · root-fix app-paths-manifest.json deploy bug
+Done: `deploy.yml`'s "Patch standalone output" step was overwriting
+`.next/server/app-paths-manifest.json` with a hardcoded copy on every
+deploy, even though the "Sync Next.js standalone" step right above it
+already rsyncs the real, `next build`-generated manifest — present since
+the very first commit of this workflow (5.3 split, `34a06bb`). This exact
+mechanism silently 404'd two new routes after otherwise-clean deploys
+before (3.12 icon routes, 1.20-web's block permalink), both patched with a
+one-line hardcoded-list edit rather than a root fix. Removed the hardcoded
+`cat > … << JSON` block entirely (PR #28); left the unrelated chunk-copy
+loop and `BUILD_ID` rewrite in the same step untouched. Proved the fix, not
+just the diff: added a throwaway `/test-manifest-fix` route, deployed with
+zero manifest edits, confirmed 200 with real content on `app.tetapi.dev`,
+then removed it in a follow-up commit (PR #29) and confirmed it 404s again.
+All pre-existing routes (`/profile`, `/search`, `/icon.svg`, `/e/[slug]`)
+re-confirmed 200 after the change.
+Changed: `teta-pi/web` `.github/workflows/deploy.yml` · `docs/roadmap.md`
+(3.17 row, 3.18's stale "land 3.17 first" note updated) ·
+`docs/known-issues.md` (1.20-web's root-cause follow-up flag closed).
+Risk: low — deleted code only, no new logic added; verified live on prod
+both before and after removing the test route.
+Next: none — this closes the 3.15-3.17 backlog cluster; 3.18 (Next.js
+upgrade, npm audit) no longer has this as a dependency risk.
+
+## 2026-08-05 · 2.9 · MCP production hardening (logging + rate-limit + auth-desync docs fix)
+Done: closed S-11/S-12/S-13 from the 7.5 MCP production-readiness audit.
+(1) Structured JSON stdout logging on every tool call (`tool`, `entity`,
+`latency_ms`, `status`, `error` on failure) — added by wrapping
+`server.tool` once (`withCallLogging`) instead of touching all 7 handlers,
+so future tools log for free; captured by the existing `journalctl -u
+tetapi-mcp`. (2) In-memory sliding-window rate limiter on `/mcp`, 60
+req/min/IP — reused the exact pattern already proven in `teta-pi/api`
+(`routes/badge.py` / `routes/tag.py`, PR #12), not a new mechanism.
+(3) Auth desync (S-11) resolved as a **docs-only fix**: removed the false
+`auth: Bearer` line from `mcp/README.md` (no auth was ever enforced in
+`mcp/src/index.ts`) and fixed the wrong `/sse` path to `/mcp`. Did **not**
+implement real Bearer auth — that's a product decision, not a technical
+one, and is raised explicitly for the owner in the PR rather than decided
+silently. MCP remains fully unauthenticated today. Also fixed `docs/mcp.md`'s
+stale "Version 1.3.1" line (live server + `package.json` were already at
+1.5.1 from 2.7/2.8, which never updated this doc) and bumped the server to
+**1.5.2** for this session's changes.
+Changed: `teta-pi/mcp` `src/index.ts` (`withCallLogging`, rate limiter,
+`SERVER_VERSION`), `README.md`, `package.json`, `server.json`. `teta-pi/infra`
+`docs/mcp.md`, `docs/security.md` (S-11/S-12/S-13 → CLOSED), `docs/known-issues.md`,
+`docs/roadmap.md` (2.9 → done).
+Risk: rate limiter is in-memory / single-process only (same S-10 caveat as
+the API-side limiters) — fine at current single-worker scale, would need a
+Redis move alongside S-10 if MCP ever runs multi-process. Logging has no
+request-id/correlation-id forwarded to the API side yet.
+Next: MCP still has zero test coverage and the `sessions` Map still has no
+expiry (S-14) — both filed, not done this session. Owner decision still
+open: does MCP need real auth before scaling agent traffic, or does "no auth
+required yet" stay the intentional default for now?
+
+## 2026-08-05 · 3.17 · root-fix app-paths-manifest.json deploy bug
+Done: `deploy.yml`'s "Patch standalone output" step was overwriting
+`.next/server/app-paths-manifest.json` with a hardcoded copy on every
+deploy, even though the "Sync Next.js standalone" step right above it
+already rsyncs the real, `next build`-generated manifest — present since
+the very first commit of this workflow (5.3 split, `34a06bb`). This exact
+mechanism silently 404'd two new routes after otherwise-clean deploys
+before (3.12 icon routes, 1.20-web's block permalink), both patched with a
+one-line hardcoded-list edit rather than a root fix. Removed the hardcoded
+`cat > … << JSON` block entirely (PR #28); left the unrelated chunk-copy
+loop and `BUILD_ID` rewrite in the same step untouched. Proved the fix, not
+just the diff: added a throwaway `/test-manifest-fix` route, deployed with
+zero manifest edits, confirmed 200 with real content on `app.tetapi.dev`,
+then removed it in a follow-up commit (PR #29) and confirmed it 404s again.
+All pre-existing routes (`/profile`, `/search`, `/icon.svg`, `/e/[slug]`)
+re-confirmed 200 after the change.
+Changed: `teta-pi/web` `.github/workflows/deploy.yml` · `docs/roadmap.md`
+(3.17 row, 3.18's stale "land 3.17 first" note updated) ·
+`docs/known-issues.md` (1.20-web's root-cause follow-up flag closed).
+Risk: low — deleted code only, no new logic added; verified live on prod
+both before and after removing the test route.
+Next: none — this closes the 3.15-3.17 backlog cluster; 3.18 (Next.js
+upgrade, npm audit) no longer has this as a dependency risk.
+
+## 2026-08-05 · URGENT · home page anonymous-nav auth leak fix
+Done: fixed `app.tetapi.dev/` showing logged-in-looking nav (`Search · My
+page · Settings · Claim your page`) to anonymous visitors. Root cause: 3.16a
+(2026-07-31) rewrote `web/src/app/page.tsx` with its own hardcoded nav block
+instead of the shared `AppHeader` component every other app page uses —
+`AppHeader` already checks `useAuthStore().token` correctly (`Sign in /
+Create account` when logged out), the hardcoded block had no auth check at
+all. 3.16a's changelog claimed "Risk: none identified," which was wrong — it
+only verified link destinations, not auth-state rendering.
+Changed: `teta-pi/web` `src/app/page.tsx` — now renders `<AppHeader/>` (no
+new auth logic written), removed the hardcoded nav links and the now-unused
+`GR_BODY` token, added top padding for the now-fixed header. `docs/roadmap.md`
+(new 3.16-urgent row), `docs/known-issues.md` (root cause + a "check for
+shared-component auth logic before a full-page rewrite" lesson logged).
+Investigated but did not change: owner's second reported symptom (logged-out
+click landing on the HELLFIRE Solutions entity page) — not reproduced in a
+clean browser; `useProfileStore`/`useAuthStore` have no fallback-to-last-
+entity logic; reproduced instead by manually seeding a stale `tetapi-auth`
+localStorage token, which correctly triggers the authenticated header state
+— most likely explained by leftover browser state from prior testing, not a
+second bug.
+Risk: low — swaps in a component already used identically on 4 other pages,
+no new logic. Verified `npm run build` clean (0 errors), in a browser tab
+with empty `document.cookie`/`localStorage` (header shows `Sign in`/`Create
+account`), and live on `app.tetapi.dev` in a fresh browser tab post-deploy
+(PR #27 merged, deploy workflow green).
+Next: none — this was a standalone urgent fix, resume the 3.16c (mobile)
+queue item next.
+
+## 2026-08-05 · 5.5 · auto-restart celery worker/beat on deploy
+Done: `deploy.yml` now restarts `tetapi-celery-worker` + `tetapi-celery-beat`
+on every push to `main`, not just `tetapi-api`. Closes the gap 5.4/1.9 exposed —
+the deploy left the celery units on stale task code until a manual
+`systemctl restart` (33 min of a crashing worker during the 1.9 OTS fix, from
+disk-code-update at 19:46 to a hand restart at 20:19). No user-load babysitting
+now.
+Changed: `.github/workflows/deploy.yml` (api repo, PR #16) — added
+`systemctl restart tetapi-celery-worker tetapi-celery-beat` to the "Migrate +
+restart" step right after the API restart, each with an `is-active` health
+check that fails the deploy and dumps `journalctl` if either doesn't come up.
+Always restarts, no file-change detection (cheap: `--concurrency=1`). Docs:
+`deployment.md` systemd + CI/CD sections updated; `roadmap.md` 5.5 → ✅.
+Risk: low. Restart adds ~8s + two health checks to each deploy. The three
+services are independent (shared code/DB/redis broker, no start-order
+dependency), so restarting celery can't wedge the API or vice-versa. If a
+worker code change is itself broken, the new `is-active` gate now *fails the
+deploy* loudly instead of silently leaving a dead worker — strictly safer than
+before.
+Verified: proven on the very deploy that shipped it — CI log shows `✓ API up`
+/ `✓ Celery worker up` / `✓ Celery beat up`; prod `ActiveEnterTimestamp` moved
+from `2026-07-31 06:18` → `2026-08-05 10:16:23`(api)/`:28`(beat)/`:30`(worker),
+all three `active/running`.
+Next: nothing required. If celery ever grows a slow/blocking shutdown, consider
+`TimeoutStopSec` on the units so a restart can't stall a deploy — not a concern
+at `--concurrency=1` today.
+
+---
+
+## 2026-08-04 · 3.16b · Grid of Record search results page
+Done: rewrote `/search` from the old 3.13 glassmorphism list to the design
+spec's evidence-filter-bar + result-row + evidence-grid board. Extracted
+`StatementTile`/`BlockDetailModal`'s shared dependencies (`GR_*` tokens,
+`blockKind`/`blockMarks`/`blockHashLabel`/`blockMediaLabel`/`formatTileDate`/
+`mapServerBlock`, `SealGlyph`, `BlockDetailModal`) out of `profile/page.tsx`
+into a new `src/components/GridOfRecord.tsx`, generalizing the modal's
+`index`+`isEdit`+`onReplaceMedia` props into `headerPrefix`+`secondaryAction`
+so search reuses the exact same component with "Open entity page" instead of
+building a second copy. New `EvidenceTile` (spec's "same component, one size
+down") built from the same shared helpers. Real-data gaps found and adapted
+rather than faked: `/search`'s `badges` only ever reflects registry status
+(never c2pa/btc — confirmed live), and zero blocks in prod are actually
+c2pa/bitcoin-verified today, so real per-entity marks need a `blockApi.list()`
+call per result (parallel, same endpoint the profile ledger uses); filter-tab
+counts are computed from that same real data client-side, since no faceted-
+count endpoint exists. The spec's "unverified open-source mentions withheld"
+tail has no backing feature (no mention-harvesting anywhere in this codebase)
+— reinterpreted as this product's real equivalent: claimed entities with zero
+marks, excluded from the ranked list and every filter, revealed via a real
+"Show unverified" toggle. Did not adopt `/resolve-intent` (TWIRA) — its
+`verified_only` default silently hides unverified entities, conflicting with
+this task's own "never hide by default" ranking rule, and its schema is
+missing half of what a row needs.
+Changed: `teta-pi/web` `src/app/search/page.tsx` (full rewrite),
+`src/app/profile/page.tsx` (shared pieces extracted, `BlockDetailModal` call
+site updated to the generalized props), `src/components/GridOfRecord.tsx`
+(new) · `docs/roadmap.md` (3.16 row, 3.16b done) · `docs/known-issues.md`
+(facet-count gap, `/resolve-intent` non-adoption both logged).
+Risk: low-medium — `profile/page.tsx`'s refactor is a pure extraction (same
+logic, moved and parameterized), verified locally that the profile page still
+renders identically after it; `/search` is a full rewrite of a page with no
+other internal callers. N+1 blocks-per-result fetch is a real perf cost at
+larger result-set sizes — capped at 12 results this session.
+Next: 3.16c (390px mobile layer for both `/` and `/search`) — last step in
+the 3.16 chain.
+
+## 2026-08-04 · 3.15e · Grid of Record visitor footer + agent panel
+Done: rewrote `VisitorView`/`AgentView` — 3.13-era stubs (`VisitorView` was a
+no-op returning `null`; `AgentView` was an old glassmorphism JSON card) that
+had sat unused below the shared board since 3.15a — into the spec's regions
+7/8, and moved both inside the same white-bordered card as regions 1-6 so
+they read as the ledger's own bottom edge. Visitor footer's trust sentence
+and CTAs use the real entity name; "Contact {name}" is a documented stub (no
+contact field anywhere in the schema), "Verify all blocks" is real (opens
+the first block's 3.15d detail modal). Agent panel's `entity/registry/c2pa/
+btc_ts/blocks/trust/fetch` fields are derived from `store.blocks`/
+`registryStatus`/`registryData`, the same computations `AttestationBar`
+(region 2) already uses — dropped the spec's `claims` row, nothing backs it.
+Found `businessApi.agentPreview()` (`GET /businesses/{id}/preview`) already
+defined but never called; checked its live shape on prod (also confirmed the
+2026-07-13 known-issue reporting it 500s no longer reproduces on 4 spot-
+checked entities) and chose the in-store derivation instead, since the REST
+call would just re-aggregate data already in the store from this page's own
+authenticated load. Verified in browser against prod API, unauthenticated
+(no login available): Edit mode shows neither region; Visitor/Agent both
+render correctly empty and after typing a real name client-side.
+Changed: `teta-pi/web` `src/app/profile/page.tsx` (`VisitorView`/`AgentView`
+rewritten and relocated, stale region comments updated) · `docs/roadmap.md`
+(3.15 row, 3.15e done) · `docs/known-issues.md` (new claims/contact-channel
+gap logged; `/preview` 500 finding updated with a re-check note).
+Risk: low — additive UI in Visitor/Agent modes only, Edit mode path
+untouched; "Contact" button is inert by design (no click handler).
+Next: 3.15f (390px mobile responsive layer) — last step in the 3.15 chain.
+
+
 ## 2026-08-04 · 7.4/7.5/7.6 · CI/CD audit + MCP production-readiness audit + org showcase
 Done:
 - **7.4 CI/CD audit** (read-only): confirmed api's Bandit (1 High —

@@ -33,13 +33,13 @@ alias in `~/.ssh/config` → just `ssh tetapi`).
   — `celery -A app.workers.celery_app:celery_app worker/beat --concurrency=1`,
   same `WorkingDirectory=/opt/tetapi/api` + `EnvironmentFile=/opt/tetapi/api/.env`
   + `/opt/tetapi/venv` as `tetapi-api`, talks to the same `tetapi-redis` broker.
-  Not deployed by `deploy.yml` — the unit files live only at
-  `/etc/systemd/system/*.service` on the server (not in this repo); a code
-  change to `app/workers/tasks/*.py` still deploys via the normal rsync+restart
-  flow, but the worker process itself needs a manual `systemctl restart
-  tetapi-celery-worker` after — **not currently wired into CI**, unlike
-  `tetapi-api`. `--concurrency=1` on the worker matches the single-uvicorn-worker
-  RAM-budget philosophy (droplet is still 1 vCPU / 2 GB).
+  The unit files live only at `/etc/systemd/system/*.service` on the server (not
+  in this repo), but since 2026-08-05 (session 5.5) `deploy.yml` **does restart
+  both celery units on every deploy** (right after `tetapi-api`, each
+  health-checked) so a code change to `app/workers/tasks/*.py` picks up without a
+  manual `systemctl restart`. Restart is unconditional — no file-change detection
+  (cheap: `--concurrency=1`, small RAM). `--concurrency=1` on the worker matches
+  the single-uvicorn-worker RAM-budget philosophy (droplet is still 1 vCPU / 2 GB).
 - **nginx**: serves landing from `/var/www/teta-pi/`, reverse-proxies the subdomains.
 - **Python venv**: `/opt/tetapi/venv`. API code at `/opt/tetapi/api`, web at
   `/opt/tetapi/web`, mcp at `/opt/tetapi/mcp`.
@@ -49,7 +49,10 @@ Trigger: push to `main`. Steps: build Next.js standalone → SSH setup →
 rsync API / certs (public only) / Next output / MCP dist / landing → remote script:
 patch Next standalone chunks, **patch `app-paths-manifest.json`** (must list every
 route — add new pages here!), `pip install` runtime deps, `alembic upgrade head`,
-restart `tetapi-api`, `tetapi-web`, `tetapi-mcp` (each health-checked).
+restart `tetapi-api`, then `tetapi-celery-worker` + `tetapi-celery-beat` (5.5),
+`tetapi-web`, `tetapi-mcp` (each health-checked). Celery restarts unconditionally
+every deploy so worker/beat never keep running stale task code (regression from
+the 1.9 OTS fix, where only the API restarted and the worker crashed for 33 min).
 
 ⚠ When you add a Next.js page, add its route to the `app-paths-manifest.json` block
 in the workflow or it 404s in production.
