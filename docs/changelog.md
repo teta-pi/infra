@@ -6,6 +6,48 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-05 · 12.2 · wordpress.org submission prep (screenshots, readme, Plugin Check fixes)
+Done: prepped `teta-pi/wordpress-plugin` for wp.org submission, PR #3
+(`session/12.2-submission-prep` → `main`, not yet merged). 4 real
+screenshots (`screenshot-1..4.png`) captured from an actual running
+WordPress instance — no Docker or PHP available locally on this macOS 12
+(Monterey) box, so `brew install php`/`colima`/`qemu` all failed building
+from source (no Tier-1 bottles for this OS); worked around it by driving
+WordPress Playground (official in-browser WASM WordPress) headlessly via
+Playwright + the system's already-installed Google Chrome (`channel="chrome"`,
+sidesteps Playwright's own Chromium download which also refuses to install
+on mac12). Screenshots: settings/connect page, domain-verification
+"Verified" state, `[tetapi_badge]` shortcode rendered on a real page,
+"TETA+PI Badge" widget in a live sidebar (Twenty Seventeen theme — Twenty
+Twenty-One only has a Footer widget area, not a Sidebar). `readme.txt`:
+expanded `== Screenshots ==` to 4 entries, added `== Upgrade Notice ==`.
+Icon/banner (`icon-128x128.png`, `icon-256x256.png`, `banner-772x250.png`,
+Θ+π gradient style matching the landing favicon) generated with Pillow,
+kept outside the repo (for SVN `assets/` at actual submission time, per
+task instructions) — saved to
+`~/BOB/SERVER/ttpi-wt/12.2-wp-submission-prep-svn-assets/` alongside a
+`SUBMISSION-CHECKLIST.md` for the owner. Ran Plugin Check locally (via the
+same Playground setup, installing the `plugin-check` plugin and driving
+its admin UI) — found and fixed 2 real findings (unprefixed globals
+`$status_messages`→`$tetapi_status_messages`, `$business`→
+`$tetapi_business` in `includes/views/settings-page.php`); the other ~55
+"errors" it reported were false positives from the GitHub-archive zip's
+folder name not matching the real `tetapi` slug (text-domain-mismatch),
+confirmed clean by pushing and letting the repo's own CI
+(`wordpress/plugin-check-action`, which passes `slug: 'tetapi'` explicitly)
+run — green. Did NOT touch the Module #1/#2 purchase-flow decision, per
+task instructions — stays "not for sale yet".
+Changed: `wordpress-plugin/` — `readme.txt`,
+`includes/views/settings-page.php`, + 4 new `screenshot-*.png`.
+Risk: none to the live product (this repo has no deploy pipeline, wp.org
+submission is owner-executed). The icon/banner PNGs and
+`SUBMISSION-CHECKLIST.md` live only in a local scratch directory, not in
+git — owner should grab them before that directory is cleaned up.
+Next: owner merges PR #3, then follows `SUBMISSION-CHECKLIST.md` to
+actually submit to wordpress.org (account `@tetapi` already exists) and,
+after approval, push to the wp.org SVN repo including the icon/banner
+assets.
+
 ## 2026-08-05 · 14.7 · pi-cam dependency bump (npm audit)
 Done: cleared 6 of 20 `npm audit` findings on `teta-pi/pi-cam` via non-force
 `npm audit fix` (run twice) — `brace-expansion`, `js-yaml`, `shell-quote`,
