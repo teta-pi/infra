@@ -73,13 +73,15 @@ start" design.
   whatever pulls it in if it's dead weight.
 Status: OPEN, both non-blocking. Next: `7 github` or `1 backend` session, small.
 
-### 🟡 `teta-pi/web` CI: `npm audit` still red — same finding as 2026-07-28, unchanged
+### ✅ `teta-pi/web` CI: `npm audit` still red — same finding as 2026-07-28, unchanged
 Re-confirmed this session, no new information: 3 vulns (2 high, 1 critical),
 all rooted in pinned `next@15.0.3`. See the existing entry below
 ("`teta-pi/web` CI: `npm audit` job red (found 2026-07-28...)") for the full
 detail — not duplicated here. `npm audit fix --force` still resolves it by
 bumping to `next@15.5.22`, still needs a deliberate upgrade + regression
 session, not a blind `--force`.
+**Fixed 2026-08-06** (roadmap 3.18, `teta-pi/web` PR #30) — see the full
+closure note on the original entry below.
 
 ### ✅ `teta-pi/pi-cam` had zero CI — fixed this session (partial)
 `.github/workflows` 404'd on this repo before this session — none of 15.2's
@@ -355,7 +357,7 @@ consulting services"` + `verified_only:true` now returns an empty result set
 `verified_only:false` on the same query still returns it, unchanged from
 before the fix.
 
-## 🟡 `teta-pi/web` CI: `npm audit` job red (found 2026-07-28, while in the repo for 3.5)
+## ✅ `teta-pi/web` CI: `npm audit` job red (found 2026-07-28, while in the repo for 3.5)
 
 Not a runtime bug — deploy still succeeds (separate job), just a CI signal
 nobody's acted on. `Dependency audit (npm audit)` reports 3 vulnerabilities (2
@@ -366,6 +368,26 @@ endpoint disclosure, plus transitive `postcss`/`sharp` CVEs. `npm audit fix
 range — needs a deliberate upgrade + regression pass, not a blind `--force` in
 an unrelated session. Not fixed here (out of scope for 3.5); flagging for
 whoever owns dependency upgrades.
+**Fixed 2026-08-06** (roadmap 3.18, `teta-pi/web` PR #30). Checked every
+advisory's exact fixed-in range rather than trusting `--force`'s pick blindly:
+the highest lower bound across all `next`-family advisories is 15.5.21, so
+15.5.22 (latest patch on top of that) is the real minimum safe version, not
+an arbitrary "latest." `--force` alone didn't fully clear the transitive
+`postcss`/`sharp` findings either — `next`'s own `optionalDependencies` still
+want `sharp@^0.34.3` (below the 0.35.0 safe floor) and it bundles its own
+`postcss@<=8.5.22` internally; both only fully resolve by upgrading to
+`next@16`, a real major explicitly kept out of scope. Used `package.json`
+`overrides` instead: `sharp` forced to `0.35.3` globally, `postcss` forced to
+`8.5.25` scoped only inside `next`'s own dependency tree (top-level `postcss`,
+used by Tailwind, was already safe and untouched). `npm audit` now reports 0
+vulnerabilities — confirmed locally and in CI (the job is green for the first
+time since 2026-07-28). Full regression pass (clean build, clean typecheck,
+live pass through `/`, `/profile`, `/search`, `/claim`, `/e/[slug]` locally,
+then curl-verified all 200 on prod post-deploy) found nothing broken by the
+upgrade — no `middleware.ts`, no `generateStaticParams`, and only one static
+route handler exist in this app, so the App Router surfaces most likely to
+change between 15.0 and 15.5 were never in play. Also re-confirmed 3.17's
+manifest-sync mechanism survived the upgrade intact.
 
 ## 2.7 fix — MCP `teta_resolve_intent` `verified_only` (2026-07-27), 🟡 2.8 caveat now fixed (see above)
 

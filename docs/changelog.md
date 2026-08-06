@@ -6,6 +6,58 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-06 · 3.18 · npm audit — Next.js upgrade
+Done: upgraded `next` 15.0.3 → 15.5.22, closing all 3 flagged npm-audit
+findings (2 high, 1 critical, red in CI since 2026-07-28). Checked every
+advisory's exact fixed-in range instead of trusting `npm audit fix --force`'s
+suggestion blindly: the highest lower bound across all `next`-family
+advisories is 15.5.21, so 15.5.22 is the real minimum safe version, not an
+arbitrary jump to latest. `--force` alone left the transitive `postcss`/
+`sharp` findings open (next's own `optionalDependencies` want
+`sharp@^0.34.3`, below the safe 0.35.0 floor, and next bundles its own
+`postcss@<=8.5.22` internally) — fully clearing both without a workaround
+needs `next@16`, a real major kept out of scope. Used `package.json`
+`overrides` instead: `sharp` forced to `0.35.3` globally, `postcss` forced to
+`8.5.25` scoped only inside next's own tree (top-level `postcss`, used by
+Tailwind, was already safe and untouched). `npm audit` now reports 0
+vulnerabilities, confirmed both locally and in CI (green for the first time
+since 2026-07-28). Bumped `eslint-config-next` to match; kept the exact-pin
+convention for both instead of `--force`'s own caret-range default. Risk
+check: no `middleware.ts`, no `generateStaticParams`, one static route
+handler in this app — the App Router surfaces most likely to change between
+15.0 and 15.5 aren't in use; React stays on 18.3.1 (15.5.22's peer range
+still accepts it).
+Changed: `teta-pi/web` `package.json` (version bump + `overrides`),
+`next-env.d.ts` (auto-regenerated) · `docs/roadmap.md` (3.18 done) ·
+`docs/known-issues.md` (both npm-audit entries closed).
+Risk: low — dependency-only change, no application code touched. Full
+regression pass found nothing broken: clean build (all 13 routes unchanged),
+clean typecheck, live pass through `/`, `/profile`, `/search`, `/claim`,
+`/e/[slug]` locally (zero Next-version-related errors — only the
+pre-existing, already-documented CORS-from-localhost limitation on
+`/search`/`/e/[slug]`), then curl-verified all 5 return 200 on prod
+post-deploy with real content, plus re-confirmed 3.17's manifest-sync
+mechanism survived the upgrade intact (`icon.svg`/`.well-known/agent.json`
+still 200, the removed `/test-manifest-fix` route still correctly 404s).
+Next: none — this was a standalone dependency-health task, not part of a
+chain.
+
+## 2026-08-06 · 12.2 · wordpress.org submission sent, awaiting review
+Done: owner merged PR #3 (submission-prep) and submitted `tetapi.zip` via
+the wp.org "Add your plugin" form. The form itself caught one more real
+issue: Plugin URI and Author URI were both `https://tetapi.dev` — wp.org
+requires them to differ. Fixed (Author URI → the `@tetapi` wp.org
+profile), PR #4, CI green, owner merged. Submission result: automated
+plugin scan **Pass**, assigned slug `tetapi` (as expected, unchanged),
+status "Awaiting Review".
+Changed: `wordpress-plugin/teta-pi.php` (Author URI header).
+Risk: none — waiting on wp.org's manual review queue (~1–10 business
+days per their FAQ, longer than normal right now per their own banner).
+Next: owner watches for the "[WordPress Plugin Directory] Review in
+Progress: TETA+PI" email at tetakta@gmail.com and responds in that thread
+if reviewers flag anything; `SUBMISSION-CHECKLIST.md` has the SVN-publish
+steps for after approval.
+
 ## 2026-08-05 · 12.2 · wordpress.org submission prep (screenshots, readme, Plugin Check fixes)
 Done: prepped `teta-pi/wordpress-plugin` for wp.org submission, PR #3
 (`session/12.2-submission-prep` → `main`, not yet merged). 4 real
