@@ -6,6 +6,22 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-06 · 12.2 · wordpress.org submission sent, awaiting review
+Done: owner merged PR #3 (submission-prep) and submitted `tetapi.zip` via
+the wp.org "Add your plugin" form. The form itself caught one more real
+issue: Plugin URI and Author URI were both `https://tetapi.dev` — wp.org
+requires them to differ. Fixed (Author URI → the `@tetapi` wp.org
+profile), PR #4, CI green, owner merged. Submission result: automated
+plugin scan **Pass**, assigned slug `tetapi` (as expected, unchanged),
+status "Awaiting Review".
+Changed: `wordpress-plugin/teta-pi.php` (Author URI header).
+Risk: none — waiting on wp.org's manual review queue (~1–10 business
+days per their FAQ, longer than normal right now per their own banner).
+Next: owner watches for the "[WordPress Plugin Directory] Review in
+Progress: TETA+PI" email at tetakta@gmail.com and responds in that thread
+if reviewers flag anything; `SUBMISSION-CHECKLIST.md` has the SVN-publish
+steps for after approval.
+
 ## 2026-08-05 · 12.2 · wordpress.org submission prep (screenshots, readme, Plugin Check fixes)
 Done: prepped `teta-pi/wordpress-plugin` for wp.org submission, PR #3
 (`session/12.2-submission-prep` → `main`, not yet merged). 4 real
