@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-07 · 3.15f · mobile responsive layer — 3.15 chain (a→f) done
+Done: closed out the 390px mobile board for the "Grid of Record" profile
+redesign, the last step in the 3.15 chain. Most of the layout work was
+already sitting uncommitted in the `session/3.15f-mobile` worktree from a
+prior partial pass (attestation seals stacked vertically, identity row
+collapsed to 60×60 avatar, filter chips horizontal-scroll, ledger
+`repeat(2,1fr)` with head-into-media relocation, compact `+ ADD` tile) —
+reviewed and kept rather than rewritten. Found and fixed one real gap:
+`BlockDetailModal` already had a `mobile` prop (compact padding, single-col
+fact grid) but `ProfilePage()` wasn't passing `mobile={m}` at the call
+site — wired up. Verification action tiles (3.15c) and Visitor
+footer/Agent panel (3.15e) already had correct mobile treatment from their
+own sessions. `prefers-reduced-motion` was already handled globally
+(`globals.css`, pre-existing, not this session's work).
+Changed: `teta-pi/web` `src/app/profile/page.tsx` (mobile branches for
+`AttestationCellView`/`ProfileIdentity`/`LedgerControls`/`StatementTile`/
+`AddBlockTile`, `BlockDetailModal` call site now passes `mobile={m}`),
+`src/components/GridOfRecord.tsx` (`BlockDetailModal` mobile prop).
+Risk: verified live at 390px against local dev only (no login available)
+— Edit/Visitor/Agent modes, a real locally-created block's tile + detail
+modal, no page horizontal scroll. Did not verify the populated-data case
+(real registry/c2pa/btc blocks, multiple tiles) at mobile width — same
+no-login constraint prior 3.15 sessions hit, flagged for a manual owner
+pass. `tsc --noEmit` clean; no ESLint config exists in `teta-pi/web` to run.
+Next: owner reviews PR (`session/3.15f-mobile` → `main`), merges, verifies
+on prod at a real mobile viewport with a logged-in account holding actual
+verified blocks. With 3.15 done, regions 1-8 should get one combined
+regression pass across desktop+mobile before starting new profile-page work.
+
 ## 2026-08-06 · 12.2 · wordpress.org submission sent, awaiting review
 Done: owner merged PR #3 (submission-prep) and submitted `tetapi.zip` via
 the wp.org "Add your plugin" form. The form itself caught one more real
