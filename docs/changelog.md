@@ -6,6 +6,26 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-18 · 3.19 · URGENT /search "0 results" investigated — not reproduced, no bug
+Done: investigated owner's urgent report that `/search` shows no results and
+"Show unverified" doesn't work. Live-tested `hellfire`/`shosho`/`tetakta`
+(`verification_level:"none"`, 0 attestation marks) and `bob`
+(`verification_level:"registry"`, 1 mark) on prod. Both are correct,
+already-shipped 3.16b behavior: zero-mark entities are deliberately withheld
+from the ranked list/trust filters (not a fetch bug — the fetch succeeds,
+counted in the withheld tail), and `bob` renders immediately in the ranked
+list, proving fetch/render works. "Show unverified" does toggle and reveal
+the withheld entity on repeated clean tests; the one failed click during
+investigation was this session's own browser-automation coordinate error
+(screenshot space vs. viewport space), not a page defect. No code changed.
+Changed: `teta-pi/infra` `docs/roadmap.md` (3.19 closed as investigated/not
+reproduced, new 3.16c row added), `docs/known-issues.md` (finding + lesson
+for future QA reports on this page).
+Risk: none — no code touched in `teta-pi/web`.
+Next: real, separate gap found in passing — `/search` has no mobile-responsive
+layout at all (375px viewport overflows; 3.16's own plan named this 3.16c and
+it was never done, only `/profile` got 3.15f). Logged as roadmap 3.16c, open.
+
 ## 2026-08-07 · 3.15f · mobile responsive layer — 3.15 chain (a→f) done
 Done: closed out the 390px mobile board for the "Grid of Record" profile
 redesign, the last step in the 3.15 chain. Most of the layout work was

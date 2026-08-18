@@ -3,6 +3,41 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 NOT A BUG 2026-08-18 — "/search shows 0 results" (roadmap 3.19) was the intended withheld-tail design
+Owner reported (2026-08-08 report, investigated 2026-08-18) that `/search?q=hellfire`
+showed "No entities at this trust level yet" / `0 entities · 0 matched blocks` even
+though the backend has a real match, and that clicking "Show unverified" did nothing.
+Investigated live on prod against `hellfire`, `shosho`, `tetakta` (all
+`verification_level:"none"`, zero signed blocks) and `bob` (`verification_level:"registry"`).
+Both symptoms are the page working exactly as 3.16b built and documented it:
+- Entities with zero attestation marks (no registry, no `c2pa_verified`/
+  `bitcoin_confirmed` block) are deliberately excluded from the ranked list and every
+  trust filter — `search/page.tsx`'s own comments and 3.16b's changelog entry both
+  document this as the honest real-data analogue of the design spec's "unverified
+  mentions withheld" tail. "0 entities" is the correct count for the ranked list when
+  every result is withheld; the fetch itself succeeded (counted in "N unverified
+  mention(s) withheld"). `bob` (1 mark) was re-confirmed rendering immediately in the
+  ranked list, proving fetch/render isn't broken.
+- "Show unverified" does toggle and reveal the withheld entity correctly — reproduced
+  cleanly on repeated fresh loads. The first test click that appeared to do nothing was
+  traced to a browser-automation coordinate bug on the investigating session's end
+  (screenshot-pixel space vs. real viewport space), not a defect in the page's `onClick`.
+**Lesson for future QA reports on this page**: "no results" here can mean "the ranked
+list is empty because everything found is unattested," which is correct product
+behavior, not a fetch/render failure — check the withheld-tail count before assuming
+the search pipeline is broken.
+No code change made. Real, unrelated gap found while investigating, logged separately
+below and as new roadmap item 3.16c.
+
+## 🟡 OPEN — `/search` has no mobile-responsive layout (3.16c never done)
+Found 2026-08-18 while investigating the item above. 3.16's own plan named **3.16c**
+("mobile responsive layer for both" home and results pages) as the last step in the
+3.16 chain; only `/profile` ever got a mobile pass (3.15f). At a 375px viewport,
+`/search`'s evidence filter bar (4 fixed-width cells) overflows the viewport with no
+wrap or scroll container — tabs get clipped past the fold. `/` (home) not re-checked
+this session.
+Status: OPEN — tracked as roadmap 3.16c.
+
 ## 🔴 FIXED 2026-08-05 — home page (`/`) showed logged-in nav to anonymous visitors
 3.16a (2026-07-31, `session/3.16a-home-minimal`) rewrote `web/src/app/page.tsx`
 from scratch and built its own hardcoded nav block (`Search · My page ·
