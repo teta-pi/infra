@@ -57,6 +57,33 @@ extensions were in play, mainly to confirm the stale-key theory rather
 than to keep debugging (the mechanism is now understood and reproduced
 independent of any device specifics).
 
+## 2026-08-19 · 3.21 · URGENT — L0 entities were wrongly hidden behind "Show unverified", fixed
+Done: `?q=hellfire` (and any query where every match is an L0 entity —
+`verification_level:"none"`, zero attestation marks) rendered as an empty
+ranked list, read by the owner and 3.19's own investigation as "search is
+broken." Root cause was one level deeper than 3.19 found: 3.16b's "withheld
+tail" was written for the design spec's *unverified open-source mentions*
+(external web mentions with no entity record — a feature that has never
+existed in this codebase) but got reinterpreted as claimed-but-unattested
+(L0) entities and hid those instead. L0 is a normal, documented registry
+state (whitepaper §3.4), and the spec's own ranking rule says weaker
+evidence ranks last, never hidden. Fixed: L0 rows now render in the ranked
+list (sorted last, badged "L0 no attestation on record", dashed border);
+removed the withheld tail and "Show unverified" button entirely since
+there's still no real content behind them.
+Changed: `teta-pi/web` `src/app/search/page.tsx` — `trustBadge` now returns
+a 4th tier for 0 marks instead of the caller excluding it; `WithheldTail`
+component deleted; row sorting/filtering unified into one `all` list instead
+of a separate `ranked`/`withheld` split.
+Risk: none expected — build/typecheck clean, verified locally against live
+prod data for both a pure-L0 query and a mixed L0+L1 query (filter tabs
+correctly exclude L0 when a specific trust tab is selected).
+Next: PR #32 open, awaiting owner merge to deploy + live prod verification
+on `app.tetapi.dev/search?q=hellfire`. Rebased onto 3.20's concurrent
+`search/page.tsx` fix (nav auth gate) — both changes coexist cleanly,
+re-verified locally after rebase. Roadmap 3.16c (mobile layer) is still
+open and untouched by this fix.
+
 ## 2026-08-18 · 3.19 · URGENT /search "0 results" investigated — not reproduced, no bug
 Done: investigated owner's urgent report that `/search` shows no results and
 "Show unverified" doesn't work. Live-tested `hellfire`/`shosho`/`tetakta`
