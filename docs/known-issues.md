@@ -3,6 +3,105 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🔴 FIXED 2026-08-19 — `/search` "My page" nav leak (regression) + `/profile` real unauthenticated data leak (new root cause, supersedes 2026-08-05 note below)
+Owner reported the same nav-leak bug class again, this time on `/search`
+(3.16b), plus re-confirmed (direct question, not a misread) seeing
+"HELLFIRE Solutions" and an open "My page" surface on `/profile` while
+definitely signed out. Roadmap 3.20, `teta-pi/web` branch
+`session/urgent-search-nav-leak`.
+
+**`/search`: a second, unguarded nav row, not a broken `AppHeader`.**
+`search/page.tsx` already renders `<AppHeader/>` correctly (that path was
+never the problem). The leak was `BoardSearchNav`, a page-local "board's
+own search box + My page link" row sitting below `AppHeader`, with an
+unconditional `<Link href="/profile">My page</Link>` — zero auth check.
+Matches the design spec (`docs/design/search-home-results/README.md`,
+region 1: "Wordmark, query field... `My page` on the right", no auth
+condition stated) implemented literally. **Fixed**: gated on
+`useAuthStore().token` + a `mounted` guard, same pattern `AccountMenu`
+already uses to avoid a hydration flash.
+
+**`/profile`: a real, reproduced unauthenticated-read bug — not "a
+leftover browser token," which is what the 2026-08-05 investigation
+below concluded for what looked like the same symptom.** That
+investigation only checked `useProfileStore`/`useAuthStore` for
+"fallback to last/first entity" logic (found none) and reproduced the
+*header* flipping to authenticated by seeding `tetapi-auth` directly — it
+never looked at `/claim`'s separate, bare (non-`useAuthStore`)
+`localStorage` keys, which is where the real bug lives:
+
+- `/claim`'s Step-4 success screen writes three bare keys —
+  `auth_token`, `entity_id`, `entity_kind` — independent of
+  `useAuthStore`'s zustand-persisted `tetapi-auth` key.
+- `lib/api.ts`'s central 401 handler (`handleUnauthorized`, fires on any
+  expired/invalid token anywhere on the site) only ever removed
+  `auth_token`, leaving `entity_id`/`entity_kind` behind.
+- `profile/page.tsx`'s mount effect restored `entity_id` into
+  `store.businessId` **unconditionally** — no check that `auth_token`
+  was still present.
+- The page's only signed-out gate, `sessionInvalid`, defaults `false` and
+  only flips `true` after an actual 401 response — which can't happen for
+  a no-token visitor, because the token-validating effect returns early
+  before making any authenticated call at all.
+
+Net effect: once a real token expired anywhere on the site (routine —
+any 401), the *next* `/profile` load on that same browser silently
+fetched and rendered that real entity's data (`businessApi.get`/
+`blockApi.list` — both intentionally token-free reads, correct for
+`/e/[slug]`'s public pages, wrong for `/profile`'s "this is always
+private" page) in full **Edit mode**, with no token check anywhere in
+the chain. This explains both halves of the owner's report — a real
+entity's real name, in an editable surface — and why a genuinely clean
+tab (no leftover keys at all) never reproduced it, matching this
+session's own first automated attempt.
+
+**Reproduced live both ways, not just reasoned from source**: seeded
+only `entity_id`+`entity_kind` (explicitly no `auth_token`) into a clean
+browser tab. Old code → full Edit-mode profile UI rendered, no sign-in
+gate anywhere, header still correctly showing "Sign in" (confirming the
+break is content-gating, not the header). Same seeded state against the
+fixed code → correct "Sign in to TETA+PI — Your session expired" gate.
+
+**Fixed** (`teta-pi/web`):
+- `lib/api.ts`: `handleUnauthorized` now clears all three bare keys, and
+  calls a new `useProfileStore.resetSession()` (businessId, authToken,
+  view, and every fetched entity field) instead of only clearing
+  `authToken` — a 401 now fully drops the stale entity, not just the
+  token.
+- `profile/page.tsx`: the restore effect only adopts `entity_id`/
+  `entity_kind` when `auth_token` is present in the same pass; the main
+  render gate is now `!token || sessionInvalid`, not `sessionInvalid`
+  alone — absence of a token is sufficient by itself to force the
+  sign-in gate, independent of whether a network 401 ever fired this
+  load.
+- `components/AccountMenu.tsx`: logout now also calls
+  `useProfileStore.resetSession()` and clears the three bare keys — a
+  related, smaller gap found in passing: `clearAuth()` only ever touched
+  `useAuthStore`, so a stale `businessId`/`authToken` could outlive
+  "Log out" in the same tab's in-memory store (module-level singleton,
+  not per-entity) until a full reload.
+
+**Ruled out, not just unchecked**: service worker or CDN/edge caching of
+authenticated HTML — no service worker registration anywhere in the repo
+(no `next-pwa`, workbox, or `sw.js`), no `Cache-Control`/`s-maxage` on
+any personalized route (only `.well-known/agent.json`, a public
+unauthenticated route, sets one), `next.config.ts` is
+`output:"standalone"` (self-hosted Node, no edge/ISR page cache), and
+`/profile` is `"use client"` — all personalization happens client-side
+off `localStorage`, never in server-rendered/cached HTML.
+
+`npx tsc --noEmit` clean, `npm run build` clean (all 13 routes incl.
+`/profile`/`/search`). **Not verified**: a real authenticated sign-in
+end-to-end — no test account credentials available this session. The fix
+only tightens gating around the existing authenticated path and doesn't
+touch its logic, so regression risk is low but genuinely unverified —
+ask the owner to confirm a normal sign-in still works post-deploy, in
+their regular browser (the one that showed the original leak).
+**Lesson**: when a "not reproduced, likely a stale token" writeup exists
+for a symptom that recurs, re-derive it from a full grep of every
+`localStorage` key in play — not just the one obvious zustand-persisted
+store — before concluding "no separate defect" a second time.
+
 ## 🟡 NOT A BUG 2026-08-18 — "/search shows 0 results" (roadmap 3.19) was the intended withheld-tail design
 Owner reported (2026-08-08 report, investigated 2026-08-18) that `/search?q=hellfire`
 showed "No entities at this trust level yet" / `0 entities · 0 matched blocks` even
@@ -69,6 +168,14 @@ authenticated state, same mechanism as the main bug — i.e. most likely
 explained by a leftover token from earlier dev/testing in the owner's browser
 profile, not a second code defect. No fix needed; documenting for the next
 QA pass so it isn't re-filed as a mystery redirect.
+
+> **SUPERSEDED 2026-08-19**: the owner reported this exact symptom again on
+> `/profile` (roadmap 3.20) and it turned out to be a real, distinct code
+> defect after all — this investigation's "leftover `tetapi-auth` token"
+> theory only tested `useAuthStore`'s own key, not `/claim`'s separate bare
+> `entity_id`/`entity_kind` localStorage keys, which is where the actual bug
+> lived. See the "🔴 FIXED 2026-08-19" entry at the top of this file for the
+> real root cause and fix. Left here for the record, not deleted.
 
 ## 7.x CI/CD + MCP production-readiness audit (2026-08-04, read-only — see docs/security.md for the security-relevant subset)
 

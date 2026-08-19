@@ -6,6 +6,57 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-19 · 3.20 · URGENT auth-leak nav regression on /search, real root cause found + fixed on /profile
+Done: fixed a `/search` regression of the same bug class as the earlier
+home-page nav leak — `search/page.tsx` already renders `<AppHeader/>`
+correctly, but a second page-local nav row (`BoardSearchNav`) had its own
+unconditional `<Link href="/profile">My page</Link>` with no auth check,
+matching the design spec's literal (auth-unaware) "My page on the right".
+Gated it on `useAuthStore().token` + a `mounted` guard. Separately
+re-investigated the owner's `/profile` report (HELLFIRE Solutions +
+"My page" while confirmed signed out) and found a real, previously-missed
+code defect, not the "leftover browser token" explanation the 2026-08-05
+session gave for what looked like the same symptom: `/claim`'s Step-4
+success screen writes bare `auth_token`/`entity_id`/`entity_kind`
+localStorage keys, separate from `useAuthStore`'s zustand-persisted
+`tetapi-auth`; the central 401 handler only ever cleared `auth_token`,
+leaving `entity_id`/`entity_kind` behind; and `profile/page.tsx` restored
+`businessId` from that stale `entity_id` with zero check that a token was
+still present, then rendered the full Edit-mode UI because its only
+signed-out gate (`sessionInvalid`) never flips true for a no-token visitor
+(the validating call that would 401 never even fires without a token).
+Reproduced live both ways in a browser (seeded only `entity_id`/
+`entity_kind`, no `auth_token`, into a clean tab): old code rendered the
+full editable profile with no sign-in gate; fixed code correctly shows
+"Sign in to TETA+PI — Your session expired." Ruled out service-worker/CDN
+caching of authenticated HTML as a contributing mechanism — no service
+worker anywhere in the repo, no cache headers on personalized routes,
+`output:"standalone"` (no edge/ISR page cache), `/profile` is fully
+client-rendered off localStorage.
+Changed: `teta-pi/web` `src/app/search/page.tsx` (BoardSearchNav auth gate),
+`src/app/profile/page.tsx` (restore effect gated on token; render gate now
+`!token || sessionInvalid`), `src/lib/api.ts` (`handleUnauthorized` clears
+all three bare keys + resets the profile store, not just the token),
+`src/stores/useProfileStore.ts` (new `resetSession()`),
+`src/components/AccountMenu.tsx` (logout now also resets the profile store
++ clears the bare keys — a related same-tab gap found in passing).
+`teta-pi/infra` `docs/roadmap.md` (3.20 closed), `docs/known-issues.md`
+(new entry + supersession note on the 2026-08-05 "not a separate bug"
+entry for the same symptom).
+Risk: touches the shared `/profile` auth-gating path — `npx tsc --noEmit`
+and `npm run build` both clean (all 13 routes), and both bugs were
+reproduced live before and after the fix, but a real authenticated
+sign-in was **not** re-verified end-to-end this session (no test account
+credentials available) — the fix only adds stricter gating around the
+existing authenticated code path without changing its logic, so regression
+risk there is believed low but is genuinely unverified.
+Next: ask the owner to (a) confirm a normal sign-in still works on
+`/profile` post-deploy, in their regular browser — the one that showed the
+original leak, and (b) if convenient, share which device/browser/
+extensions were in play, mainly to confirm the stale-key theory rather
+than to keep debugging (the mechanism is now understood and reproduced
+independent of any device specifics).
+
 ## 2026-08-18 · 3.19 · URGENT /search "0 results" investigated — not reproduced, no bug
 Done: investigated owner's urgent report that `/search` shows no results and
 "Show unverified" doesn't work. Live-tested `hellfire`/`shosho`/`tetakta`
