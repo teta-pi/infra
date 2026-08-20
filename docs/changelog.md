@@ -6,6 +6,28 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-20 · 3.16c · mobile responsive layer for / and /search — 3.16 chain complete
+Done: `/` (home) was already fully responsive from 3.16a — re-verified at
+390px against `docs/design/search-home-results/README.md`, no changes
+needed. `/search` had none (the gap 3.19 found while investigating a
+different report): added the same local `useViewport`/`m = vw < 640`
+pattern `page.tsx`/`profile/page.tsx` already use, then a mobile branch per
+region — `BoardSearchNav` gets a compact `Go` button and drops the "My
+page" link (no room at 390px, matches the mobile mock); `EvidenceFilterBar`
+switches from 4 equal flex cells to `overflow-x:auto` (count cell dropped,
+tabs scroll instead of compressing or wrapping); result rows get a new
+`MobileResultRowView` (48px avatar, 16px name, seals + trust label only, no
+meta line, always-expanded 2-up evidence grid of the first two blocks — no
+toggle, two tiles fit without one) with a matching mobile branch on
+`EvidenceTile` (kind + marks pinned inside the media area, no separate
+header bar). L0 rows (3.21) verified rendering correctly on mobile too —
+dashed badge, no truncation.
+Changed: `teta-pi/web` `src/app/search/page.tsx` only — `/` untouched.
+Risk: low — desktop (`vw >= 640`) render path is unchanged by the new `m`
+branches, confirmed visually unaffected at 1280px after the edit.
+Next: none — this was the last step in the 3.16 chain (3.16a home, 3.16b
+results, 3.16c mobile all done).
+
 ## 2026-08-19 · 3.20 · URGENT auth-leak nav regression on /search, real root cause found + fixed on /profile
 Done: fixed a `/search` regression of the same bug class as the earlier
 home-page nav leak — `search/page.tsx` already renders `<AppHeader/>`
