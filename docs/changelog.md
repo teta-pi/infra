@@ -6,6 +6,57 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-20 · 1.5+1.7+1.8 · backend verification hygiene bundle
+Done: three related bugs in `routes/businesses.py`'s `update_business`,
+closed together. **1.5**: renaming a business left `registry_status`
+`verified` for the new, unchecked name — now resets to `unverified` when
+`name` changes in the PATCH payload. **1.7**: same class of bug on
+`agent_endpoint_verified` (S-7) — resets to `false` when `agent_endpoint`
+changes. Also found and fixed a second, previously-undocumented bug that had
+been blocking S-7 from being exploitable in practice: `/verify-endpoint`'s
+entity lookup used `Business.id.cast("text")` (bare Python string where
+SQLAlchemy expects a type), 500ing on every call with `entity_id` —
+`agent_endpoint_verified` could never legitimately become `true` at all
+until this was fixed (known-issues #18). Added the same per-IP rate limiter
+already used on `/claim`/`/badge`/`/tag`. Fixed the Redis code-confirm race
+(audit #13): email confirm now uses an atomic Lua check-and-consume (GETDEL
+was rejected — it'd burn the code on the first wrong guess, not just a
+correct one); domain-ownership confirm uses `DEL`'s return count as an
+atomic claim, since the DNS/HTTP check itself can't be made atomic with the
+Redis read. **1.8**: `GET /businesses/{id}` and `GET /businesses` no longer
+write to the DB — they were assigning the computed `verification_level`
+onto the tracked ORM instance, which `get_db`'s unconditional per-request
+commit then persisted, turning every read into a write. Now computed into
+the response only (`BusinessOut.model_validate(...)`); the stored column is
+kept current by the writes that actually change it instead
+(`update_business`, email/domain confirm). `core/database.py` untouched, per
+the task's own caution.
+Changed: `teta-pi/api` `app/api/routes/businesses.py`,
+`app/api/routes/endpoint_verification.py`,
+`app/services/verification/email_control.py`,
+`app/services/verification/domain_ownership.py` (PR #17, merged, deployed).
+`docs/security.md` (S-7 → closed), `docs/known-issues.md` (#6, #7's
+rate-limit half, #13, #18 → closed).
+Risk: low — all changes are narrow conditionals/query fixes in code paths
+directly live-tested end to end on prod (see below), not refactors.
+**Known scope gap, flagged not fixed**: media-derived verification levels
+(`full`/`partial`, from webhooks in `routes/media.py`/`services/bitcoin.py`)
+still don't reactively persist on their own write path — outside 1.8's file
+list, logged as a follow-up in known-issues #8.
+Next: none of these three are blocking anything further; the flagged media-level
+gap is an open follow-up, not yet a numbered roadmap item.
+Live-verified on prod (not just reasoned from source): created a throwaway
+test business, set `agent_endpoint`, called `/verify-endpoint` (previously
+always 500'd) → `agent_endpoint_verified` went `true`, confirmed persisted
+via a follow-up `GET`; PATCHed `agent_endpoint` to a different URL → reset
+to `false` in both the response and a follow-up `GET`. Fired 6 rapid
+`/verify-endpoint` calls → 5×200, 6th 429 (rate limit). Created a second
+test business named after a real GLEIF-registered company (`TESCO PLC`,
+`GB`), ran real registry verification (`registry_status` → `verified`, real
+LEI + address), then PATCHed its `name` → `registry_status` reset to
+`unverified` **and** `verification_level` reset from `registry` to `none`
+in the same response, live proof 1.5/1.7/1.8 all work together correctly.
+
 ## 2026-08-20 · 3.16c · mobile responsive layer for / and /search — 3.16 chain complete
 Done: `/` (home) was already fully responsive from 3.16a — re-verified at
 390px against `docs/design/search-home-results/README.md`, no changes
