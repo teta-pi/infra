@@ -102,6 +102,24 @@ for a symptom that recurs, re-derive it from a full grep of every
 `localStorage` key in play — not just the one obvious zustand-persisted
 store — before concluding "no separate defect" a second time.
 
+## 🔴 FIXED 2026-08-19 — L0 entities wrongly hidden behind "Show unverified" (supersedes the item below)
+The 2026-08-18 "not a bug" verdict below was an accurate read of what the code did, but
+the code itself was wrong. 3.16b's "withheld tail" was written for the design spec's
+**unverified open-source mentions** — external web mentions with no entity record in
+this database, a feature that has never existed anywhere in this codebase — but got
+reinterpreted as claimed entities with zero marks (L0, `verification_level:"none"`) and
+hid *those* behind "Show unverified" instead. L0 is a normal, documented registry state
+(whitepaper §3.4: any name can be claimed instantly, free, no registration check), and
+the design spec's own ranking rule says weaker evidence ranks last, never hidden. When
+every result for a query is L0 (typical for a freshly created page, e.g. `?q=hellfire`),
+the ranked list rendered as empty — read as "search is broken" by both the owner and
+the 3.19 investigation below.
+Fixed in roadmap 3.21 (`teta-pi/web` PR #32, `src/app/search/page.tsx`): L0 rows now
+render in the ranked list, sorted last, badged `L0 no attestation on record` with a
+dashed border. The withheld tail and "Show unverified" button were removed entirely —
+there's still no real content to withhold, so it's gone rather than left as dead UI.
+Status: FIXED, PR #32 open — awaiting owner merge for prod deploy + live verification.
+
 ## 🟡 NOT A BUG 2026-08-18 — "/search shows 0 results" (roadmap 3.19) was the intended withheld-tail design
 Owner reported (2026-08-08 report, investigated 2026-08-18) that `/search?q=hellfire`
 showed "No entities at this trust level yet" / `0 entities · 0 matched blocks` even
