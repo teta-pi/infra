@@ -1033,7 +1033,7 @@ default and stated behavior — gets unverified results mixed in. **Fix:** send
 `level: verified_only ? "registry" : "any"` (or similar) instead of `undefined`.
 Status: OPEN.
 
-### 🟠 6. `PATCH /businesses/{id}` lets an owner keep `agent_endpoint_verified=true` after changing the endpoint
+### ✅ 6. `PATCH /businesses/{id}` lets an owner keep `agent_endpoint_verified=true` after changing the endpoint — CLOSED
 `api/app/schemas/business.py:14-21` (`BusinessUpdate`) includes
 `agent_endpoint`, and `update_business` (`api/app/api/routes/businesses.py:232-247`)
 applies any field from the payload with no side effects — it never resets
@@ -1041,18 +1041,14 @@ applies any field from the payload with no side effects — it never resets
 `POST /verify-endpoint`, then `PATCH` `agent_endpoint` to a different,
 unverified URL while the "verified" flag (surfaced in search/intent/public
 payloads) stays true. Same class of bug as the already-tracked
-`registry_status`-survives-rename issue (queued as 1.5), different field.
-**Fix:** reset `agent_endpoint_verified = False` in `update_business` whenever
-`agent_endpoint` is in the payload and differs from the current value.
-Status: OPEN — **re-confirmed live 2026-08-05 (15.3 reconciliation)**, code at
-`businesses.py:233-247` unchanged (blind `setattr` loop, no `agent_endpoint`
-special-casing). Tracked as S-7 in `docs/security.md` §5. **Currently not
-practically exploitable**: the only code path that can ever set
-`agent_endpoint_verified=true` (`POST /verify-endpoint`) 500s on every call
-that passes `entity_id` — see new bug #18 below — so no business in prod
-today has the flag true (`SELECT … WHERE agent_endpoint_verified=true` → 0
-rows, checked live via psql). The moment #26 is fixed, this bug becomes live
-again unless fixed alongside it.
+`registry_status`-survives-rename issue (1.5), different field.
+Status: **CLOSED 2026-08-20** (1.7, `teta-pi/api` PR #17) — `update_business`
+now compares `agent_endpoint`/`name` against the current DB value before
+applying the PATCH and resets `agent_endpoint_verified`/`registry_status`
+respectively when either changed. Bundled with the #18 fix below (the only
+path that could ever set the flag `true` in the first place), so this was
+verified live end to end, not just in isolation. Tracked as S-7 in
+`docs/security.md` §5, also closed.
 
 ### 🟠 7. `POST /verify-endpoint` is fully unauthenticated and performs a server-side GET to any caller-supplied URL
 `api/app/api/routes/endpoint_verification.py:73-113` has no
@@ -1066,12 +1062,16 @@ URL matches that business's *already-declared* `agent_endpoint` — it can't
 redirect someone else's business to an attacker URL.) **Fix:** at minimum rate
 limit / require auth for the SSRF-prone fetch even if the flip-to-verified path
 stays open.
-Status: **CLOSED** — fixed in api PR #3 (merged 2026-07-14, "fix(security): media
-path traversal (1.6) + SSRF-prone /verify-endpoint (1.7)"). Triaged by 15.1 as
-S-2 in `docs/security.md` §5. (Sibling `/verify/domain/check` mild SSRF stays
+Status: **CLOSED** — auth half fixed in api PR #3 (merged 2026-07-14,
+"fix(security): media path traversal (1.6) + SSRF-prone /verify-endpoint
+(1.7)"), `Depends(get_current_user)` confirmed present on the route since.
+**Rate-limit half was still missing** (re-checked 2026-08-20 while doing 1.7) —
+added then, same per-IP in-memory limiter pattern as `/claim`/`/badge`/`/tag`
+(5 req/min), `teta-pi/api` PR #17. Triaged by 15.1 as S-2 in
+`docs/security.md` §5. (Sibling `/verify/domain/check` mild SSRF stays
 OPEN — tracked as S-9.)
 
-### 🟠 8. `GET /businesses/{id}` and `GET /businesses` (list) write to the DB on every read
+### ✅ 8. `GET /businesses/{id}` and `GET /businesses` (list) write to the DB on every read — CLOSED (partially)
 `_compute_verification_level` is called and assigned onto the ORM object in
 both `get_business` (`api/app/api/routes/businesses.py:228`) and
 `list_businesses` (`businesses.py:193`), and `get_db`
@@ -1082,11 +1082,25 @@ unauthenticated `GET /businesses/{id}` mutates and writes the row. Because
 `verification_level` is otherwise never recomputed proactively, and
 `routes/search.py:55` / `routes/intent.py` filter on the *stored* column, an
 entity that newly qualifies for a higher level won't appear in level-filtered
-search until someone happens to hit one of these GET endpoints. **Fix:**
-either persist `verification_level` reactively (on the events/media writes
-that change it) instead of on read, or don't assign it onto the tracked ORM
-instance in a read-only endpoint (compute into the response schema instead).
-Status: OPEN.
+search until someone happens to hit one of these GET endpoints.
+Status: **CLOSED 2026-08-20 for the businesses.py write paths** (1.8,
+`teta-pi/api` PR #17) — both GET handlers now compute the level into a
+`BusinessOut.model_validate(...)` response object instead of assigning it
+onto the tracked ORM instance, so `get_db`'s commit has nothing dirty to
+flush. `core/database.py` deliberately untouched. The stored column is kept
+current by `update_business` (registry/agent-endpoint resets, #6/#1.5 above)
+and the email/domain confirm endpoints instead. **Live-verified**: the `GET`
+right after `/verify-endpoint` set the flag showed `updated_at` unchanged
+from the write that set it, not bumped by the read.
+**Known remaining gap, not fixed here**: media-derived levels (`full`/
+`partial`, from `c2pa_verified`/`bitcoin_confirmed`) are set by webhooks/
+celery tasks in `routes/media.py`/`services/bitcoin.py` — outside 1.8's file
+list (`routes/businesses.py`, `core/database.py`) — and still don't
+reactively persist `verification_level` on their own write path. An entity
+that only qualifies for `full`/`partial` via media (not registry/email/
+domain) can still show a stale stored level in search/intent until something
+else in businesses.py happens to write it. Follow-up, not yet a numbered
+roadmap item.
 
 ### 🟠 9. Bitcoin timestamping wired to a no-op stub — proofs never actually submitted
 **Fixed in code 2026-07-24 (1.20/1.9, api PR #13, merged+deployed).** Both
@@ -1201,16 +1215,28 @@ anywhere. **Fix:** either build the missing publish/privacy controls into
 `/profile` or `/settings`, or remove the dead client surface.
 Status: OPEN.
 
-### 🟡 13. Business-email/domain confirm endpoints have a check-then-delete race on the Redis code
+### ✅ 13. Business-email/domain confirm endpoints have a check-then-delete race on the Redis code — CLOSED
 `api/app/services/verification/email_control.py:71-76` (and the equivalent in
 `domain_ownership.py`) does `GET` the stored code, compares, then `DELETE`s it
 as a separate awaited call — not an atomic compare-and-delete. Two concurrent
 confirm requests with the same still-valid code can both pass the comparison
 before either delete lands, each writing its own `verification_events` row
 (`businesses.py:295-307`). Impact is a duplicate append-only event, not an auth
-bypass (the code still has to be correct). **Fix:** use a Lua script or
-`GETDEL` for atomic check-and-consume.
-Status: OPEN.
+bypass (the code still has to be correct).
+Status: **CLOSED 2026-08-20** (1.7, `teta-pi/api` PR #17). Two different
+fixes for the two files, since they're not actually the same shape of race:
+`email_control.confirm_email_verification` now uses a small Lua script that
+GETs, compares, and only DELs on a match, all in one atomic call — a plain
+`GETDEL` was considered and rejected: it would consume the code on the
+*first wrong guess* too, a real regression against the existing 5-attempt
+allowance. `domain_ownership.check_domain_verification`'s race can't be made
+fully atomic the same way — there's a genuine DNS/HTTP round-trip between
+reading the token and deciding to delete it — so instead it uses `DEL`'s
+return count as an atomic "claim": only the caller that actually removed the
+key reports `verified=true`, so two concurrent duplicate checks can't both
+write a `verification_events` row (a concurrent "loser" gets `verified:
+false` even though its own DNS/file check also passed — an accepted, rare
+edge case, not a regression on the reported bug).
 
 ### 🟡 14. `landing/onboarding.html` uses the wrong support-email domain
 Four places (`onboarding.html:236,240,272,277`) use `hello@teta-pi.io`, while
@@ -1257,7 +1283,7 @@ error, just an indefinite hang. **Fix:** add a timeout (e.g. `AbortSignal.timeou
 and surface a clear error on expiry.
 Status: OPEN.
 
-### 🟠 18. `POST /verify-endpoint` 500s on every call that includes `entity_id`
+### ✅ 18. `POST /verify-endpoint` 500s on every call that includes `entity_id` — CLOSED
 Found live 2026-08-05 during 15.3 security reconciliation, while trying to
 reproduce S-7/known-issue #6 (`agent_endpoint_verified` stale-flag bug) end to
 end. `api/app/api/routes/endpoint_verification.py:86` builds the entity
@@ -1274,11 +1300,17 @@ since the original commit (`2964ba3`, 2026-06-25) — not a regression.
 set to `true` through this endpoint (confirmed: 0 rows in prod have it true),
 which incidentally makes S-7 unreachable in practice today — but is itself a
 real functional bug blocking the one legitimate way to verify an agent
-endpoint. **Fix:** replace `.cast("text")` with `cast(Business.id, String)`
-(or just compare `str(Business.id)` / drop the OR and look up by slug vs.
-`uuid.UUID(payload.entity_id)` in a try/except).
-Status: OPEN, not yet triaged into the roadmap. Tracked alongside S-7 in
-`docs/security.md` §5.
+endpoint.
+Status: **CLOSED 2026-08-20** (1.7, `teta-pi/api` PR #17) — replaced with
+`cast(Business.id, String)`, the same pattern already used in `badge.py`'s
+equivalent slug-or-id lookup. Fixed alongside S-7/#6 (the reset bug this was
+blocking from being exploitable) rather than separately, since testing that
+fix live required this one working first. **Live-verified**: `POST
+/verify-endpoint` with a real `entity_id` now returns `200` with
+`is_active`/`belongs_to_entity`/`data_consistent` all `true` for a matching
+endpoint, and correctly persists `agent_endpoint_verified=true` (confirmed
+via a follow-up `GET`, not just the response body). Tracked alongside S-7 in
+`docs/security.md` §5, also closed.
 
 ## 🔴 Profile "My Page" does not persist blocks to the backend
 `web/src/app/profile/page.tsx` uses `useProfileStore` (zustand) which had **no
