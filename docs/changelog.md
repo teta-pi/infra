@@ -6,6 +6,39 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-21 · 2.3+2.4 · MCP SSE session limits + usage-analytics correlation
+Done: **2.3** — bounded SSE resource use on the 1 vCPU/1.9GB droplet instead
+of building bespoke result-chunking (MCP tool results aren't naturally
+streamable; the real risk under real agent traffic is unbounded long-lived
+connections, not response size). `MAX_CONCURRENT_SESSIONS=30` (503 +
+Retry-After past cap, number chosen from a live load test) + an idle-session
+sweep (10 min timeout, 60s interval) that also closes the previously-known
+`sessions` Map unbounded-growth risk (S-14). **2.4** — checked first whether
+2.9's existing structured logging was enough for `(query, clicked_entity)`
+pairs; it was one field short (no session correlation). Added `session`
+(MCP session id, from the SDK's `extra.sessionId`, already available in
+every tool handler — no new state) to the existing log line. New off-server
+`mcp/scripts/analyze-usage.mjs` reads `journalctl` output from stdin (no
+prod credentials, no network calls) and pairs each
+`teta_search`/`teta_resolve_intent` call with the next entity-lookup call in
+the same session into `(query, clicked_entity)` counts, for TWIRA weight
+tuning. Version 1.5.2 → 1.5.3.
+Changed: `teta-pi/mcp` `src/index.ts`, `scripts/analyze-usage.mjs` (new),
+`package.json`, `server.json` (PR #8, merged, deployed). `docs/mcp.md`,
+`docs/roadmap.md` (2.3/2.4 → ✅), `docs/known-issues.md` (S-14 → closed).
+Risk: low — both changes are additive guards (a cap + a sweep + one log
+field); no tool schema or existing-behaviour change for callers. Live-
+verified on prod, not just reasoned from source: `free -h` right after
+deploy (933MB used) and again during a real 10-connection SSE burst
+(962MB, settled back to 939MB within seconds of the connections closing —
+no leak); a real `teta_search` call produced a log line carrying the
+correct `session` id.
+Next: the one remaining OPEN item from the 7.x MCP audit is a minimal test
+suite (one happy/error-path test per tool) — no other `2 mcp` work is
+queued right now.
+
+---
+
 ## 2026-08-20 · 1.5+1.7+1.8 · backend verification hygiene bundle
 Done: three related bugs in `routes/businesses.py`'s `update_business`,
 closed together. **1.5**: renaming a business left `registry_status`
