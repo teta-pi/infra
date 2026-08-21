@@ -44,3 +44,6 @@ api/certs/*.key.pem
 
 # Local backups (not for git)
 backups/
+
+# GTM dataset pulls (working data, not source — regenerate via scripts/gtm)
+scripts/gtm/dataset/

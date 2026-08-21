@@ -6,6 +6,35 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-21 · 13.2 · GTM machine v1 (infra, off-server)
+Done:    closed out roadmap 13.2. §1.3 launch copy (Show HN/Discord/outreach
+         template) was already drafted by an earlier partial run of this task
+         (`docs/gtm-drafts.md`, PR #2, 2026-07-14) — this pass built the rest:
+         a copy-paste registry submission packet (`docs/gtm-submission-packet.md`,
+         all 6 Phase 0 listings, incl. a drafted `awesome-mcp-servers` PR body —
+         also corrects `gtm.md`'s stale "category nearly empty" claim, it's grown
+         to 20+ entries since July); `scripts/gtm/pull_top500.py`, an off-server
+         script pulling the official MCP registry + Glama public APIs (both
+         hit live and confirmed working); `scripts/gtm/outreach_queue.py`,
+         which turns that dataset into a Phase-2 outreach queue using the
+         existing guardrail template, gated `draft → approved` with Bob doing
+         every send by hand. Confirmed badge endpoint (1.10) is prod-verified
+         and wired the queue's `badge_url` field to it.
+Changed: `docs/gtm-submission-packet.md` (new), `scripts/gtm/*` (new),
+         `docs/gtm.md`, `docs/roadmap.md`, `.gitignore` (ignore
+         `scripts/gtm/dataset/`, a working-data dir, not source).
+Risk:    none — read-only HTTP to public APIs, no droplet/prod touch. The
+         outreach queue's `approve` command hard-refuses placeholder-linked
+         items, so there's no path to sending anything premature even if
+         someone runs the CLI carelessly.
+Next:    `1.11` (bulk pre-verification import) is the real blocker before
+         Phase 2 outreach can start — until it ships, `outreach_queue.py`
+         can only produce drafts, never approvable items. Also still open:
+         the connectors-directory logo/icon asset (design task, not code)
+         and the actual owner-executed registry submissions themselves.
+
+---
+
 ## 2026-08-20 · 1.5+1.7+1.8 · backend verification hygiene bundle
 Done: three related bugs in `routes/businesses.py`'s `update_business`,
 closed together. **1.5**: renaming a business left `registry_status`
