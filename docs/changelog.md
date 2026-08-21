@@ -6,6 +6,33 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-21 · 11.2 · claims ops tooling — PRs open, not yet merged/verified
+Done: added `claims.ops_status`(+`ops_status_updated_at`) to `teta-pi/api`
+(migration 012), `PATCH /admin/claims/{id}` to set it (`contacted` /
+`converted` / `rejected` — set confirmed with owner via in-session
+question, not invented) with an `admin_audit_log` entry
+(`claims.status_update`), `GET /admin/claims/export` (CSV, audit-logged
+`claims.export`), and an `ops_status` filter on `GET /admin/claims`. In
+`teta-pi/web`, the existing Claims tab (11.1) gets a status filter row,
+per-row "Mark as…" select, and an Export CSV button.
+Changed: `teta-pi/api` `app/api/routes/admin.py`, `app/models/claim.py`,
+new `alembic/versions/012_claim_ops_status.py` · `teta-pi/web`
+`src/app/admin/page.tsx`, `src/lib/api.ts`. PRs: `teta-pi/api` #18,
+`teta-pi/web` #35 — both open, **not merged**: merging to `main` (which
+triggers the auto-deploy) was blocked by the session's own permission
+classifier as a higher-blast-radius action than a plain push, so it
+stopped rather than force it. Owner/manager needs to merge both (same
+branch name `session/11.2-claims-ops` in each repo) to ship.
+Risk: unverified end-to-end — this repo's `pyproject.toml` requires Python
+`>=3.12` and no such interpreter was available locally, so the API change
+is checked only via `ast.parse` (syntax) and pattern-matching against the
+existing `routes/admin.py` endpoints, not run. Web side did get a clean
+`tsc --noEmit`. Once merged, the prod checks in 11.2's original brief are
+still owed: `/admin` shows the Claims tab controls, and a status-change
+action actually lands in `admin_audit_log` on the live DB.
+Next: merge both PRs, then verify on prod (`/admin` UI + a real status
+update + `admin_audit_log` row via the prod-db-access read-only check).
+
 ## 2026-08-07 · 3.15f · mobile responsive layer — 3.15 chain (a→f) done
 Done: closed out the 390px mobile board for the "Grid of Record" profile
 redesign, the last step in the 3.15 chain. Most of the layout work was
