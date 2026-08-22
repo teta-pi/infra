@@ -6,6 +6,32 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-22 · 12.2 · TETA+PI plugin live on wordpress.org
+Done: full loop closed — https://wordpress.org/plugins/tetapi/ is live.
+First review round (2026-08-10) came back with two real findings, both
+fixed same-day: (1) ownership/trademark check — the wp.org account uses
+a gmail.com address, so their reviewer couldn't automatically verify it
+represents `tetapi.dev`; resolved via a DNS TXT record
+(`wordpressorg-tetapi-verification` at the domain root, on Cloudflare),
+the same proof-of-ownership pattern this plugin itself implements for
+its users. (2) undocumented external service — added a readme.txt
+"External services" section for `api.tetapi.dev` (what's sent, when,
+ToS/Privacy Policy links), PR #5. Resubmission's automated scan then
+caught a separately-stale "Tested up to: 7.0" header (WP 7.1 had shipped
+in the interim), PR #6. Approved 2026-08-22; SVN-published (owner ran
+the actual `svn commit`, revision 3660329) with `trunk`, `tags/1.0.0`,
+and `assets/` (icon-128/256, banner-772x250, prepared in the 2026-08-05
+session and still sitting in local scratch storage — now committed to
+SVN so no longer at risk of being lost).
+Changed: `wordpress-plugin/` on `main` (PRs #3–#6); wp.org SVN repo
+`plugins.svn.wordpress.org/tetapi` (new).
+Risk: none — this is the intended live state. Ongoing compliance is now
+the owner's responsibility per wp.org guidelines (no code changes here
+introduce new risk).
+Next: none required. If a future plugin update ships, remember the SVN
+workflow (checkout, edit `trunk`, `svn cp trunk tags/X.Y.Z`, bump
+`Stable tag` in readme.txt, commit) — not a git push.
+
 ## 2026-08-21 · 2.3+2.4 · MCP SSE session limits + usage-analytics correlation
 Done: **2.3** — bounded SSE resource use on the 1 vCPU/1.9GB droplet instead
 of building bespoke result-chunking (MCP tool results aren't naturally
