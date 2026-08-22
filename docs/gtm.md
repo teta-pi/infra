@@ -325,12 +325,19 @@ which isn't a DB row anywhere else.
 | 8.4 | analytics · pre-verified/claimed profile + badge impression metrics | ⚪ after 1.10 + 1.11 exist | `routes/admin.py` product-metrics, `admin/page.tsx` |
 | 10.4 | landing · llms.txt | ⚪ queued, no deploy risk | `landing/llms.txt` (new) |
 | 12.3–12.5 | wordpress · Shopify app / Wix app / universal snippet | ⏳ after companion PDF is transcribed | new dirs, TBD |
-| 13.3 | gtm · top-500 dataset script | ⚪ after 2.5 (needs registry to be listed to pull from it) | new `scripts/` |
+| 13.3 | gtm · top-500 dataset script | absorbed into `13.2` (2026-08-21) — never got its own roadmap row, `13.2`'s description already covered it | `scripts/gtm/pull_top500.py` |
 
 `13.2` (already in roadmap: "GTM machine v1") absorbs the remaining
 owner-facing pieces that aren't standalone code tasks: drafting the Show HN
 / Discord copy, the outreach message template (guardrails verbatim), and the
-launch checklist tying Phase 0 completion to the plugin release.
+launch checklist tying Phase 0 completion to the plugin release. **Done
+2026-08-21** — also absorbed the top-500 dataset script and outreach queue
+tooling (originally sketched as a separate `13.3`, which never got its own
+roadmap row) since the live roadmap description for `13.2` already listed
+both. See [`gtm-submission-packet.md`](gtm-submission-packet.md) (registry
+submission copy, incl. the `awesome-mcp-servers` PR body) and
+[`../scripts/gtm/README.md`](../scripts/gtm/README.md) (dataset +
+owner-approval-gated outreach queue).
 
 ---
 
