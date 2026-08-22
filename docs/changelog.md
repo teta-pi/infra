@@ -6,6 +6,46 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-22 · 12.6 · WordPress plugin becomes agent-readable
+Done: `teta-pi/wordpress-plugin` (`session/12.6-agent-readable`, PR pending)
+adds server-side JSON-LD in `<head>` plus proxied `/.well-known/agent.json`,
+`/.well-known/agent-card.json` and `/llms.txt`, all backed by
+`api.tetapi.dev/wk/{entity_id}/*` — which turned out to be directly
+reachable there right now, no `verify.tetapi.dev` vhost (12.5c) needed for a
+CMS that already controls its own domain. New `Tetapi_Api::get_wk_file()`
+(raw proxy, passes through the upstream content-type since `llms.txt` isn't
+JSON) and a new `class-tetapi-agent.php` (rewrite rules, `wp_head` hook,
+15-min transient cache — same pattern as the existing badge). Reused the
+1.0.1 `redirect_canonical` fix for the three new routes too, since the same
+WordPress trailing-slash redirect issue applies to them. Honesty rule
+enforced: a site with no entity connected gets real 404s on all three paths,
+not default/placeholder data — verified live. Also corrected `docs/roadmap.md`
+12.5's stale note claiming `/wk/*` wasn't reachable without 12.5c; added
+Part C to `docs/universal-tag.md` documenting this WordPress-specific path.
+Live-tested in WordPress Playground (Playwright + system Chrome, same
+approach as the 12.2 session) against the real `hellfire-solutions` entity:
+JSON-LD byte-matches the live `/wk/.../agent.json` response, `/.well-known/
+agent.json` and `agent-card.json` both returned real 200s, `llms.txt`'s
+proxy logic confirmed correct via a direct `runPHP` call after the browser
+address bar proved too flaky for navigating to a bare root-level path (not a
+plugin bug — the same code path as the two files that did navigate cleanly).
+Version bumped 1.0.1 → 1.1.0; readme.txt updated (feature bullet, new FAQ
+entry, External services section, Changelog, Upgrade Notice, tags swapped
+from `security`/`domain verification` to surface `ai agents`/`llms.txt`).
+Changed: `wordpress-plugin/` — new `includes/class-tetapi-agent.php`;
+`includes/class-tetapi-api.php`, `includes/class-tetapi-plugin.php`,
+`teta-pi.php`, `readme.txt` modified. `docs/roadmap.md`, `docs/universal-tag.md`.
+Risk: none to the live product — this repo has no deploy pipeline, wp.org
+publish is owner-executed via SVN. The new proxy calls add one more outbound
+request type from every WordPress site running this plugin to
+`api.tetapi.dev`, cached 15 min per entity per file — same load shape as the
+existing badge calls, no new droplet-load concern.
+Next: owner merges the PR, then publishes `tags/1.1.0` to the wp.org SVN
+repo (same process already used for 1.0.0 and 1.0.1 — checkout, copy
+`trunk/`, `svn cp trunk tags/1.1.0`, commit with the SVN password). 12.5c/d
+(the non-CMS Universal Tag nginx vhost + per-host docs) remain open and
+unaffected by this.
+
 ## 2026-08-21 · 13.2 · GTM machine v1 (infra, off-server)
 Done:    closed out roadmap 13.2. §1.3 launch copy (Show HN/Discord/outreach
          template) was already drafted by an earlier partial run of this task

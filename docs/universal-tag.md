@@ -65,6 +65,32 @@ Agent → GET yourdomain.com/.well-known/agent.json
 TETA+PI needs no write access to the site at all — marketed as a lower
 trust-ask than the WP plugin ("no plugin, no code changes, one redirect rule").
 
+## Part C — WordPress plugin, server-side (12.6, added 2026-08-22)
+
+A third path, specific to the WordPress plugin (`teta-pi/wordpress-plugin`),
+not a general Universal Tag install method: since the plugin already runs
+**on** the domain (not injected via a third-party script), it doesn't need
+Part B's redirect-rule dance or `verify.tetapi.dev` at all. It talks directly
+to `api.tetapi.dev`'s `/wk/{entity_id}/*` endpoints, which turned out to
+already be reachable there directly (no nginx vhost needed for this case —
+12.5c is still needed for the general non-CMS Part B flow, just not for this).
+
+```
+Agent → GET yourwpsite.com/.well-known/agent.json
+      → WordPress rewrite rule (registered by the plugin)
+      → plugin proxies GET https://api.tetapi.dev/wk/{entity_id}/agent.json
+      → 15-min WordPress transient cache (same pattern as the plugin's badge)
+      → Content-Type passed through verbatim (agent.json/agent-card.json:
+        application/json; llms.txt: text/plain)
+```
+
+Same three files as Part B (`agent.json`, `agent-card.json`, `llms.txt`), plus
+a **server-side JSON-LD block in `<head>`** on every page (more reliable than
+Part A's `tag.js` for agents that don't execute JavaScript, since it's
+rendered by PHP before the response is sent). Same honesty rule as
+everywhere else: a site with no entity connected gets real 404s, never
+default/placeholder data.
+
 ## Acceptance criteria (from the spec)
 
 1. `tetapi.dev/generate` produces a working snippet keyed to an entity_id.
