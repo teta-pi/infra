@@ -353,6 +353,10 @@ CORS, rate-limiting, session-map memory growth) and here for the rest:
   today's occasional/demo traffic; an unbounded slow leak under sustained
   real agent traffic with many imperfectly-closed sessions. Not urgent, but
   exactly the class of bug that only shows up after real load.
+  **CLOSED 2026-08-21 (session 2.3, `teta-pi/mcp` PR #8)**: an idle-session
+  sweep (10 min timeout, 60s interval) now closes any transport whose
+  session hasn't been touched in 10 minutes, same fix as the concurrent-
+  session cap added in the same session — see `docs/mcp.md`.
 
 **Minimum for production with real AI-agent clients as load, ranked:**
 1. ✅ DONE 2026-08-05 (`2.9`) — Structured logging (tool/entity/latency/ok-or-error).
@@ -366,13 +370,15 @@ CORS, rate-limiting, session-map memory growth) and here for the rest:
 4. OPEN — A minimal test suite — one happy-path + one error-path (not-found)
    test per tool, so the next `mcp/src/*` change has a safety net (this audit
    found zero regressions, but nothing would have caught one).
-5. OPEN — `sessions` Map expiry/cleanup — low urgency, known unbounded-growth
-   risk (S-14).
+5. ✅ DONE 2026-08-21 (session 2.3) — `sessions` Map expiry/cleanup, closing
+   the known unbounded-growth risk (S-14): idle-session sweep, 10 min
+   timeout.
 6. ✅ DONE 2026-08-05 (`2.9`) — `docs/mcp.md` version bump (1.3.1 → 1.5.2);
    `mcp/README.md` auth+path fix.
 
-Status: items 1/2/3/6 CLOSED by `2.9` (2026-08-05); items 4/5 (test suite,
-session-map expiry) remain OPEN, filed for a future `2 mcp` session.
+Status: items 1/2/3/5/6 CLOSED (2.9 on 2026-08-05, 5 on 2026-08-21 via
+session 2.3); item 4 (test suite) remains OPEN, filed for a future `2 mcp`
+session.
 
 ## 🟡 No backend endpoint for a manual per-block "Verify chain" re-check (found 2026-08-02, roadmap 3.15d)
 The block detail modal spec (`docs/design/profile-grid-of-record/README.md`,

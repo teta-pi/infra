@@ -4,7 +4,7 @@ TypeScript server exposing TETA+PI to AI agents via the Model Context Protocol.
 Source: `mcp/src/index.ts` (tools + HTTP bootstrap) + `mcp/src/client.ts` (API
 client, 15s timeout per call). Tool handlers are stateless — every call hits
 `api.tetapi.dev` over HTTP. Deployed as systemd `tetapi-mcp` on port 3002,
-public at `mcp.tetapi.dev`. **Version 1.5.2.**
+public at `mcp.tetapi.dev`. **Version 1.5.3.**
 
 ## Transport & manifest
 - HTTP + SSE via `@modelcontextprotocol/sdk` `StreamableHTTPServerTransport`,
@@ -98,6 +98,42 @@ file) — fixed as part of this session too.
 - Not done this session (tracked, see `docs/known-issues.md`): a minimal
   test suite (one happy/error-path test per tool) and `sessions` Map
   expiry/cleanup (S-14).
+
+## 2.3+2.4 SSE limits & usage analytics (2026-08-21)
+Server load stayed the hard constraint (1 vCPU, 1.9GB RAM, ~950MB used at
+rest) — both tasks shipped with explicit limits, not "should be fine":
+
+- **2.3 — SSE session limits.** No auth means any client can open a
+  long-lived session; two independent bounds now protect the box:
+  - `MAX_CONCURRENT_SESSIONS = 30` (`mcp/src/index.ts`) — a new session past
+    the cap gets `503` + `Retry-After: 30`. Chosen from a live load test
+    (30 concurrent held SSE connections cost **~13MB RSS over baseline,
+    ~430KB/session, negligible CPU at rest**; verified again live against
+    prod with a 10-connection burst: 933MB → 962MB used, settled back to
+    939MB within seconds of the connections closing — no leak). Full
+    numbers in `teta-pi/mcp` PR #8.
+  - Idle-session sweep (10 min timeout, 60s interval) closes any transport
+    whose session hasn't been touched in 10 minutes — closes the
+    previously-known unbounded `sessions` Map growth risk (S-14 below): a
+    client that opens a session and never sends a clean `DELETE` (crash,
+    dropped connection, an agent that silently stops calling) no longer
+    holds memory for the process lifetime.
+- **2.4 — usage analytics.** Checked first whether 2.9's structured log
+  (`{tool, entity, latency_ms, status}`, already in
+  `journalctl -u tetapi-mcp`) was enough for `(query, clicked_entity)` pairs
+  — it was one field short: no way to tell which calls belonged to the same
+  agent conversation. Added `session` (the MCP `Mcp-Session-Id`, read from
+  the tool handler's `extra.sessionId` — already passed in by the SDK, no
+  new state) to the existing log line. `mcp/scripts/analyze-usage.mjs` is a
+  new **off-server** script (reads `journalctl` output from stdin, no prod
+  credentials, no network calls) that pairs each `teta_search`/
+  `teta_resolve_intent` call with the next entity-lookup call
+  (`teta_verify_entity`/`teta_get_profile`/`teta_verify_claim`/
+  `teta_get_proof`) in the same session and aggregates `(query,
+  clicked_entity)` counts for TWIRA weight tuning. No new server, no new
+  worker — run manually or from a scheduled off-box session.
+- Version bumped **1.5.2 → 1.5.3** — hardening + one log field, no tool
+  schema or behaviour change for callers.
 
 ## Tools (7)
 | Tool | Purpose | Backend |
