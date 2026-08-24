@@ -6,6 +6,45 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-25 · 3.22b · /claim wizard restyled into Grid of Record
+Done: Purely visual restyle of the `/claim` multi-step wizard (type picker →
+sub-kind → name → email verify → success), following 3.22a's `/e/[slug]`
+pass and the same 3.15–3.16 "Grid of Record" language: square borders (no
+radius on cards, `radius:4` only on standalone CTA buttons matching the
+`BlockDetailModal`/search-page precedent), no gradients/box-shadows/backdrop
+blur, `#fff`/`GR_TINT` (`#F4F0FB`)/`GR_RAISED` (`#FBFAFD`) surfaces, mono
+uppercase labels, local hex constants (`INDIGO`/`SUN`/`TEXT`/`TEXT_SEC`/
+`TEXT_AUTH`/`MUTED`/`DOT`) replaced with the shared `GridOfRecord.tsx`
+tokens. Explicitly out of scope and untouched: step order, transition
+conditions, name-availability debounce, email-code send/verify logic, the
+`claimApi.create`/`businessApi.create` effects, and all copy (including
+3.5's already-removed "$25" line). `BtnPrimary` gained a hover swap
+(`GR_PRIMARY`↔`GR_PRIMARY_HOVER`) matching the pattern already used on
+`/search`'s and the block-detail modal's CTAs — the only non-pure-color
+addition, and it's cosmetic (a `onMouseEnter`/`onMouseLeave` pair), not a
+logic change. `tsc --noEmit` clean. Live-walked steps 0→1→2 in a local dev
+server pointed at prod's API (name-availability check hit the real
+`/search` endpoint, returned "available" for a disposable test name); step 4
+(success screen) was visually verified by temporarily seeding
+`useOnboardingStore`'s initial state to `step:4` in dev only, then reverted
+before commit (`git diff` on that file is empty).
+Changed: `teta-pi/web` `src/app/claim/page.tsx`. Docs: this entry,
+`docs/roadmap.md` 3.22 row.
+Risk: styling-only diff (confirmed via manual line-by-line diff review — no
+non-style line touched), so functional risk should be near zero, but the
+actual `POST /auth/email-code` → `/verify-code` → `POST /claim` +
+`POST /businesses` chain could not be exercised end-to-end from this
+sandbox — `localhost` isn't on the API's CORS allowlist (only
+`app.tetapi.dev` is), so those specific fetches fail at the browser
+preflight stage before ever reaching the (unchanged) application logic.
+Same class of gap the 6.2 QA effort hit and documented as an acceptable
+agent limitation (can't read a real inbox's OTP), not a regression.
+Next: owner (or a prod-side re-run) should do one real walk of `/claim` on
+`app.tetapi.dev` post-deploy — confirm `POST /claim` still returns 201 and
+the success screen still lands on `/profile` with the new entity. If that
+passes, direction 3's Grid-of-Record restyle chain (3.15/3.16/3.22) is
+complete across every page that had the old glass/gradient look.
+
 ## 2026-08-22 · 12.6 · WordPress plugin becomes agent-readable
 Done: `teta-pi/wordpress-plugin` (`session/12.6-agent-readable`, PR pending)
 adds server-side JSON-LD in `<head>` plus proxied `/.well-known/agent.json`,
