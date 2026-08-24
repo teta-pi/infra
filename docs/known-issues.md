@@ -155,6 +155,36 @@ wrap or scroll container — tabs get clipped past the fold. `/` (home) not re-c
 this session.
 Status: OPEN — tracked as roadmap 3.16c.
 
+## 🟡 `teta-pi/web` has no `.gitignore` at all
+Found 2026-08-22 (3.22a). A fresh clone + `npm install` leaves `node_modules/`,
+`package-lock.json`, `.next/`, and `tsconfig.tsbuildinfo` as **untracked** files
+(`git status` flags all of them) — there's no `.gitignore` anywhere in the repo to
+exclude them. Every session that runs `npm install`/`npm run dev`/`npm run build`
+locally has to remember to `git add` only the specific source files it changed,
+never a broad `git add -A` or `git add .`, or it risks committing the entire
+dependency tree. Not touched in 3.22a (out of scope for a visual-only restyle
+task) — worth a dedicated fix: standard Next.js `.gitignore`
+(`node_modules/`, `.next/`, `*.tsbuildinfo`, `.env*.local`, etc.).
+Status: OPEN.
+
+## 🟡 Public entity payload (`GET /businesses/by-slug/{slug}/public`) has no `updated_at` or per-block `id`/`storage_url`/`original_hash`
+Found 2026-08-22 (3.22a, restyling `/e/[slug]` into the Grid-of-Record language
+`/profile`'s owner-only view already uses). `/profile`'s `AttestationBar` shows a
+"re-checked hourly" timestamp cell sourced from `Business.updated_at`, and its
+`StatementTile`/`BlockDetailModal` need each block's real `id` (to open the
+detail modal), `storage_url` (to show the real uploaded photo instead of a
+placeholder), and `original_hash` (the modal's `signature` row). The public
+by-slug payload's `PublicProfile.blocks[]` carries none of these — only
+`title`/`description`/`media[].{type,c2pa_verified,captured_at,
+bitcoin_confirmed,bitcoin_block}`. 3.22a's restyle adapted by dropping the
+re-check-timestamp cell and keeping blocks non-clickable (no detail modal) —
+same as the original glassmorphism page, which also never made blocks
+clickable, so no functionality regressed. If a future task wants block-level
+detail (click-to-inspect) or a live re-check timestamp on the public page, the
+`/public` endpoint needs those fields added first (`api/app/routes/businesses.py`).
+Status: OPEN (no action needed unless a future task wants the richer public
+block view).
+
 ## 🔴 FIXED 2026-08-05 — home page (`/`) showed logged-in nav to anonymous visitors
 3.16a (2026-07-31, `session/3.16a-home-minimal`) rewrote `web/src/app/page.tsx`
 from scratch and built its own hardcoded nav block (`Search · My page ·

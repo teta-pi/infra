@@ -580,6 +580,44 @@ both before and after removing the test route.
 Next: none — this closes the 3.15-3.17 backlog cluster; 3.18 (Next.js
 upgrade, npm audit) no longer has this as a dependency risk.
 
+## 2026-08-22 · 3.22a · public entity page (`/e/[slug]`) Grid-of-Record restyle
+Done: strictly visual restyle of the public `/e/[slug]` page from its old
+glassmorphism card into the same "Grid of Record" language `/profile` and
+`/search` already use — attestation bar (registry/c2pa/btc, `SealGlyph`/`GR_*`
+tokens reused from `src/components/GridOfRecord.tsx`), identity region, trust
+chips, facts strip, square statement-tile grid, and a trust-sentence footer.
+No functional/API/routing changes: same single `GET
+/businesses/by-slug/{slug}/public` fetch, same `PublicProfile` shape, same
+not-found/loading states and `← Search entities` link. Two data-driven
+adaptations (payload has no `updated_at` or per-block `id`/`storage_url`/
+`original_hash`): no re-check-timestamp cell, and blocks stay non-clickable
+(no block-detail modal) — matches the original page's own behavior, which
+never made blocks clickable either.
+Changed: `teta-pi/web` `src/app/e/[slug]/page.tsx` (full rewrite, only file
+touched). `docs/roadmap.md` (new 3.22 row + 3.22a done-paragraph),
+`docs/known-issues.md` (public-payload field gaps + `web` repo missing a
+`.gitignore`, both logged as follow-ups, not fixed here).
+Risk: low — presentational only, verified `npx tsc --noEmit` clean and every
+pre-existing interactive element (legal-entity link, not-found's "Search
+entities" link) still resolves to the same place. Caught and fixed two real
+bugs before shipping: (1) a copied-from-`/profile` `isPerson` → registry
+`n/a` override that would have hidden real verified registry data for
+person-kind entities (found live on `bob`, a person entity with an attested
+Handelsregister match) — removed, registry cell now always reflects
+`profile.registry.status` as-is; (2) a mobile-only layout bug where the
+identity block's `flex: "1 1 260px"` became a 260px height basis once the
+column switched to `flexDirection: column` under 640px, opening a large blank
+gap — fixed by making that flex-basis desktop-only. Verified against live
+prod data (`hellfire-solutions`, `bob`) via a local dev server (temporary
+`next.config.ts` rewrite proxy for the CORS-blocked direct `api.tetapi.dev`
+call from `localhost`, reverted before commit — same pattern 3.16b already
+used) at desktop and mobile widths. Could not attach literal before/after
+screenshot files to the PR — no working headless browser or screen-capture
+path in this sandboxed environment (Playwright's Chromium/WebKit refuse to
+install on this macOS version; `screencapture` needs interactive permission);
+before/after described in the PR body in text instead.
+Next: 3.22b (`/claim` restyle), same pattern, separate boot.
+
 ## 2026-08-05 · URGENT · home page anonymous-nav auth leak fix
 Done: fixed `app.tetapi.dev/` showing logged-in-looking nav (`Search · My
 page · Settings · Claim your page`) to anonymous visitors. Root cause: 3.16a
