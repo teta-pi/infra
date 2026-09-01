@@ -6,6 +6,56 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-01 · 3.22e · /admin restyled into Grid of Record — closes the 3.22 chain
+Done: Purely visual restyle of `/admin` — the largest and highest-risk
+page in the 3.22 chain — covering all six tabs (Dashboard, Analytics,
+Users, Claims, Entities, Audit log), the login screen, and the
+`UserDetailPanel` slide-in drawer. Same 3.15–3.16 "Grid of Record"
+language as 3.22a-d: square borders, no gradients/shadows/backdrop blur
+(the two intentional modal-scrim blurs kept, same `BlockDetailModal`
+precedent), flat `#fff`/`GR_TINT`/`GR_RAISED` surfaces, mono uppercase
+section labels, `GridOfRecord.tsx` tokens replacing local hex constants.
+Tabs bar and the login mode switch reuse the underline-accent
+segmented-tab pattern from `/search`/`/login`. Small circular status
+dots (health-check, "not available") intentionally kept round, same
+`/claim` progress-rail precedent. `Badge` status chips kept their
+tinted-background recipe, squared with a matching border. Semantic
+non-GR colors (`#3E9B5C` health-ok green, `#B04545` danger red, amber
+suspicion-flags box) deliberately left as literal colors — only their
+border-radius squared, same call as 3.22d.
+Changed: `teta-pi/web` `src/app/admin/page.tsx` (branch
+`session/3.22e-admin`, PR #40). **Claims tab handled with extra care**
+per this task's explicit warning (real admin actions — status changes,
+CSV export — not just forms): the "Mark as…" `<select>` and "Export
+CSV" button had ONLY their `style` attribute touched — same `<option>`s,
+same `onChange`/`onClick` bodies, same blob/`URL.createObjectURL` CSV
+download logic. Verified: a `diff` of every `adminApi.*(`/`authApi.*(`
+call signature between `main` and this branch is **empty** — zero API
+calls added, removed, reordered, or argument-changed. `tsc --noEmit`
+clean.
+Risk: No admin credentials exist in this or any prior 3.22 session's
+environment, so live verification was necessarily partial. Verified:
+the auth gate correctly shows `AdminLogin` (not the dashboard) for an
+unauthenticated visitor; submitting the login form fired a real `POST
+.../auth/email-code` (confirmed in console), CORS-blocked, correctly
+rendering the styled error; a placeholder token seeded into
+`localStorage` (not a real session) reached the dashboard shell past
+the gate, and all six tabs render correctly; clicking "Export CSV" on
+the CORS-empty Claims tab fired a real `GET .../admin/claims/export`,
+correctly falling through to `alert("Export failed")`. **Not
+verified**: data-bearing table rows, the "Mark as…" select against a
+real claim, and Validate/GDPR-export/anonymize against real data —
+diff is styling-only (reviewed line by line, confirmed via the empty
+API-call diff above), so risk is low but genuinely unverified against
+live data.
+Next: The owner does one real admin-account walk of `/admin` on
+`app.tetapi.dev` post-deploy (the boot for this task already flagged
+this as expected, owner-only verification). **This closes the entire
+3.22 restyle chain** — 3.22a `/e/[slug]` → 3.22b `/claim` → 3.22c
+`/login` → 3.22d `/settings` → 3.22e `/admin` — once every PR merges
+and deploys, all of `app.tetapi.dev` shares one "Grid of Record" visual
+language (the 3.15/3.16 chain's language, now applied site-wide).
+
 ## 2026-08-29 · 3.22d · /settings restyled into Grid of Record
 Done: Purely visual restyle of `/settings` (Account/avatar, Password,
 Change email, API key, Resources, Sessions, Danger zone), same 3.15–3.16
