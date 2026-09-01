@@ -6,6 +6,51 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-01 · 3.23 · fix person-registry mismatch between /profile and /e/[slug]
+Done: `/profile`'s owner view hard-overrode the registry attestation cell to
+a fabricated `"registry:n/a — not applicable, individual"` for any
+person-kind entity, hiding real data — owner confirmed live that `bob`
+(`entity_type: person`) has a genuine `registry_status: verified` record
+(Handelsregister, VR 40166) that `/e/bob` already showed correctly (3.22a
+fixed this exact bug on the public page). Removed the `isPerson` override
+in both places `/profile` computed its own registry cell — `AttestationBar`
+(region 2, Edit/Visitor-mode bar) and `AgentView` (region 8, literal
+MCP-response panel) — so both now always reflect the real
+`store.registryStatus`/`store.registryData` regardless of `entity_type`,
+matching `/e/[slug]`'s already-correct logic. The genuine no-data case now
+falls through to the existing `registry:unverified`/"not yet checked"
+state (same one businesses get) — no fabricated `n/a` invented.
+Changed: `teta-pi/web` `src/app/profile/page.tsx`, `src/app/claim/page.tsx`
+(branch `session/3.23-person-registry`). **Product decision, stated
+explicitly per this task's instruction not to decide silently**: opened
+the "Registry" verification tile/panel in `VerifyMenu` to all entity
+kinds — it was gated `isBusinessKind`-only with no backend basis
+(`verifyApi.registry()` takes no entity-kind argument, and the backend
+already produced a real match for `bob`, a person; no design doc records
+a deliberate person-exclusion either, checked `docs/verification-rework.md`
+and `docs/decisions.md`). Document Upload and Legal-Entity-link tiles
+stay business-only — those are genuine business concepts (registration
+certificate, brand→legal-entity link) with no person equivalent. Also
+fixed the same wrong premise on `/claim`'s success-step maturity strip
+(`isPerson ? "C2PA Media" : "Registry / Domain"` → now
+`"Registry / C2PA Media"` for person) and its explanatory copy.
+`tsc --noEmit` and `npm run build` (incl. lint) both clean.
+Risk: Diff is scoped to exactly the described logic (`git diff` reviewed
+line by line) — no unrelated changes. Live-verified with a realistic
+mock matching `bob`'s exact real values (a local mock API server
+standing in for `api.tetapi.dev`, since this sandbox has no `bob`-account
+credentials): `/profile`'s attestation bar now shows `registry:attested ·
+Handelsregister VR 40166 ✓ attested` instead of `n/a`; the Registry tile
+is visible and shows "verified"; clicking it opens "Official Registry
+Match" showing a "verified" pill; Agent-mode's literal panel shows the
+real registry line instead of "not applicable." Not verified: the
+owner's own real `bob` session on `/profile` — no session in this
+project has had `bob`'s credentials, so this needs the owner's own
+check post-deploy (which the task itself asked for as the final step).
+Next: Owner confirms `/profile` (as `bob` or another person-kind entity
+with real registry data) and `/e/bob` show matching registry data
+post-deploy.
+
 ## 2026-09-01 · 3.22e · /admin restyled into Grid of Record — closes the 3.22 chain
 Done: Purely visual restyle of `/admin` — the largest and highest-risk
 page in the 3.22 chain — covering all six tabs (Dashboard, Analytics,
