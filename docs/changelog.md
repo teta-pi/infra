@@ -6,7 +6,6 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
-<<<<<<< HEAD
 ## 2026-08-29 · 3.22d · /settings restyled into Grid of Record
 Done: Purely visual restyle of `/settings` (Account/avatar, Password,
 Change email, API key, Resources, Sessions, Danger zone), same 3.15–3.16
@@ -50,8 +49,6 @@ Next: Real prod walk of `/settings` on `app.tetapi.dev` post-deploy —
 set a password or generate an API key and confirm it persists. Then
 3.22e (`/admin`) is the last page in the 3.22 chain.
 
-=======
->>>>>>> origin/main
 ## 2026-08-28 · 3.22c · /login restyled into Grid of Record
 Done: Purely visual restyle of `/login` (password / email-code sign-in
 tabs), same 3.15–3.16 "Grid of Record" language as 3.22a/3.22b: square
