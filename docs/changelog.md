@@ -6,6 +6,43 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-28 · 3.22c · /login restyled into Grid of Record
+Done: Purely visual restyle of `/login` (password / email-code sign-in
+tabs), same 3.15–3.16 "Grid of Record" language as 3.22a/3.22b: square
+borders, no gradients/box-shadows/backdrop blur, `#fff`/`GR_TINT`/
+`GR_RAISED` surfaces, `GridOfRecord.tsx` tokens replacing local hex
+constants (`INDIGO`/`SUN`/`TEXT`/`TEXT_SEC`/`MUTED`). Mode switch
+(Password/Email code) restyled from a rounded pill toggle into a segmented
+tab bar with an underline accent, reusing `/search`'s trust-filter-tab
+pattern (`inset 0 -2px 0 0 GR_PRIMARY`) instead of inventing a new one.
+Changed: `teta-pi/web` `src/app/login/page.tsx` (branch
+`session/3.22c-login`, PR #38). The boot's premise that this page has a
+Google/OAuth button was wrong — the full 176-line file has no OAuth UI at
+all; the only OAuth stub in the app lives on `/claim` step 2 (already
+restyled in 3.22b). Also checked the "Your session expired" sign-in gate —
+it's `SignedOutPanel`, a separate component defined inside
+`profile/page.tsx`, not shared with this page, so left untouched as
+out of scope for a page-scoped session. `authApi.login`/`sendEmailCode`/
+`verifyCode` calls, mode/error/busy state, and the Enter-to-submit handler
+are untouched. `tsc --noEmit` clean. Live-tested in a local dev server
+pointed at prod's API: submitted invalid credentials on both tabs,
+confirmed via the browser console that a real `POST
+api.tetapi.dev/api/v1/auth/token` (and the send-code equivalent) fired —
+blocked by CORS from `localhost`, the same known sandbox limitation 3.22b
+hit, not a regression — and correctly fell through to the real error copy
+rendered in the new `GR_ORANGE` styling. Verified the tab switch and the
+"Get verified" link's live navigation to the already-restyled `/claim`
+page, plus a mobile-viewport (375×812) check — card/tabs/inputs/button all
+render correctly.
+Risk: Diff is styling-only (reviewed line by line) — real risk is low. Not
+verified from this sandbox: a real successful sign-in end-to-end (needs a
+valid test-account password or a readable inbox for the email-code path,
+plus a CORS-allowed origin).
+Next: Real prod walk of `/login` on `app.tetapi.dev` post-deploy — wrong
+password (expect the same error copy) and, if a test account exists, a
+real successful sign-in redirecting to `/profile`. Then 3.22d (`/settings`)
+and 3.22e (`/admin`) remain to close out the 3.22 chain.
+
 ## 2026-08-25 · 3.22b · /claim wizard restyled into Grid of Record
 Done: Purely visual restyle of the `/claim` multi-step wizard (type picker →
 sub-kind → name → email verify → success), following 3.22a's `/e/[slug]`
