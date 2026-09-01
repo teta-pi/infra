@@ -6,6 +6,49 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-08-29 · 3.22d · /settings restyled into Grid of Record
+Done: Purely visual restyle of `/settings` (Account/avatar, Password,
+Change email, API key, Resources, Sessions, Danger zone), same 3.15–3.16
+"Grid of Record" language as 3.22a-c: square borders, no gradients/
+shadows/backdrop blur, `#fff`/`GR_TINT`/`GR_RAISED` surfaces, mono
+uppercase section labels, `GridOfRecord.tsx` tokens replacing local hex
+constants. Added three small local style helpers (`card`/`inputStyle`/
+`secondaryBtn`/`primaryBtnStyle`) to de-duplicate the original's 5×-
+repeated inline style literals — same idea `/login.tsx` already used
+locally, not a structural change.
+Changed: `teta-pi/web` `src/app/settings/page.tsx` (branch
+`session/3.22d-settings`, PR #39). Avatar changed from a circular
+gradient placeholder to a square `GR_BORDER`-outlined tile matching the
+"avatar" convention already established on `/profile`/`/e/[slug]` — same
+conditional image-or-initial rendering and `authApi.uploadAvatar` handler,
+only the container shape/colors changed. Deliberately kept the API-key
+display box, "Log out everywhere", and "Danger zone" on their existing
+semantic colors (`#3FA97C` success green, `#B04545` danger red) since
+neither is part of the shared `GR_*` token set — only their border-radius
+was squared off. Every state variable, effect, and `authApi` call
+(`me`/`uploadAvatar`/`setPassword`/`changeEmail`/`confirmEmailChange`/
+`personalApiKey`/`logoutAll`/`deleteAccount`) confirmed untouched via
+line-by-line diff review. `tsc --noEmit` clean. Live-tested in a local
+dev server pointed at prod's API: no test-account credentials were
+available in this sandbox to sign in for real (same gap 3.22b/c hit), so
+a placeholder token was seeded directly into `useAuthStore`'s
+`localStorage` key purely to reach the page past its auth gate — not a
+real authenticated session. Submitted a real value on "Set password" and
+clicked "Generate API key"; both confirmed via the browser console that
+real `POST` requests fired to `api.tetapi.dev/api/v1/auth/set-password`
+and `.../personal-api-key`, blocked by CORS from `localhost` (the same
+known sandbox limitation 3.22b/c hit, not a regression), correctly
+falling through to the real error UI (inline "Failed to fetch" text, and
+the `alert()` dialog for the API-key path) in the new styling. All seven
+sections verified visually at full page height.
+Risk: Diff is styling-only (reviewed line by line) — real risk is low.
+Not verified from this sandbox: a real successful save end-to-end (set
+password / change email / generate key actually persisting against the
+live API) — needs a real test-account session and a CORS-allowed origin.
+Next: Real prod walk of `/settings` on `app.tetapi.dev` post-deploy —
+set a password or generate an API key and confirm it persists. Then
+3.22e (`/admin`) is the last page in the 3.22 chain.
+
 ## 2026-08-28 · 3.22c · /login restyled into Grid of Record
 Done: Purely visual restyle of `/login` (password / email-code sign-in
 tabs), same 3.15–3.16 "Grid of Record" language as 3.22a/3.22b: square
