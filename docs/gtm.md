@@ -300,17 +300,23 @@ today.
 Update this list as items land — it's the "registry listings live" metric,
 which isn't a DB row anywhere else.
 
-- [ ] Official MCP Registry (`registry.modelcontextprotocol.io`)
-- [ ] Smithery
-- [ ] Glama (auto after #1, then claim)
-- [ ] mcp.so + PulseMCP
-- [ ] awesome-mcp-servers PR merged
-- [ ] GitHub MCP Registry
-- [ ] TETA+PI self-verified L2 + public proof page live (as the project, no legal-entity name — 2026-07-14 decision)
-- [ ] Bob V. + Mykhailo M. verified as person entities
-- [ ] `llms.txt` live
-- [ ] `agent.json` bumped to v1.1.0 (both landing + app)
-- [ ] Tool descriptions rewritten (agent-query-optimized)
+**Real-state audit 2026-09-06 (session 6.5, pre-GTM full QA — see
+`docs/known-issues.md` §"6.5 pre-GTM full QA" for evidence):**
+
+- [ ] Official MCP Registry (`registry.modelcontextprotocol.io`) — `server.json`
+      artifact exists in `teta-pi/mcp` (2.5 done), but the actual submission
+      hasn't happened: live search for "tetapi" on the registry returns 0
+      results. Owner action.
+- [ ] Smithery — not submitted (owner action)
+- [ ] Glama (auto after #1, then claim) — blocked on #1
+- [ ] mcp.so + PulseMCP — not submitted (owner action)
+- [ ] awesome-mcp-servers PR merged — not submitted (owner action)
+- [ ] GitHub MCP Registry — not submitted (owner action)
+- [ ] TETA+PI self-verified L2 + public proof page live (as the project, no legal-entity name — 2026-07-14 decision) — confirmed not done, no such entity in `/search`
+- [ ] Bob V. + Mykhailo M. verified as person entities — confirmed not done, no such entities in `/search`
+- [x] `llms.txt` live — confirmed live on `tetapi.dev` (200 OK), 2026-09-06
+- [x] `agent.json` bumped to v1.1.0 (both landing + app) — confirmed both at v1.4.0, 2026-09-06
+- [x] Tool descriptions rewritten (agent-query-optimized) — confirmed live-read, all 7 tools agent-query-optimized, 2026-09-06
 
 ---
 
