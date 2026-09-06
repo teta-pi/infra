@@ -3,6 +3,54 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟠 FIXED 2026-09-01 — `/profile` hid a real person-kind entity's registry data (`n/a` override), Registry Match step wrongly gated business-only (roadmap 3.23)
+Owner confirmed live: `bob` (`entity_type: person`) has a genuine
+`registry_status: verified` record (Handelsregister, VR 40166). `/e/bob`
+(the public page) already showed it correctly — 3.22a fixed the identical
+bug there. But `/profile`'s owner view (`AttestationBar`, region 2, and
+`AgentView`, region 8, the literal MCP-response panel) hard-overrode the
+registry cell to a fabricated `"registry:n/a — not applicable, individual"`
+for any person-kind entity, on a stale comment claiming "registry doesn't
+apply to person-kind entities." Real root cause traces back to **roadmap
+3.10 (2026-07-19, web PR #12)**, the session that introduced
+`isBusinessKind` gating on Registry Match / Document Upload / Legal Entity
+"to narrow per entity_type" — that session's own note says it "had no
+persona/business test-account credentials to click through `/profile`
+live, flagged for a manual pass." The gate went unverified against real
+data for over a month until this task's owner-confirmed live check on
+`bob` proved the Registry half of it wrong.
+
+**Fixed**: removed the `isPerson`/`isBusinessKind` override on the registry
+cell in both `AttestationBar` and `AgentView` — both now always reflect
+`store.registryStatus`/`store.registryData`, matching `/e/[slug]`'s
+already-correct logic. The genuine no-data case falls through to the
+existing `registry:unverified`/"not yet checked" state (same one
+businesses get), not a fabricated `n/a`.
+
+**Product decision (stated explicitly, not decided silently)**: opened the
+Registry Match tile/panel in `VerifyMenu` to all entity kinds — no backend
+basis for the gate (`verifyApi.registry()` takes no entity-kind argument,
+and the backend already produced a real match for a person), and no
+design doc records a deliberate exclusion (checked
+`docs/verification-rework.md`, `docs/decisions.md`). Document Upload and
+Legal-Entity-link stay business-only — those are genuine business
+concepts (registration certificate, brand→legal-entity link) with no
+person equivalent, so QA #6's "Legal Entity" scoping from 3.10 is
+unaffected. Also fixed the identical wrong premise on `/claim`'s
+success-step maturity strip.
+
+Live-verified with a mock matching `bob`'s exact real values (this
+sandbox has no `bob`-account credentials, so a local mock API server
+stood in for `api.tetapi.dev`): `/profile`'s attestation bar now shows
+`registry:attested · Handelsregister VR 40166 ✓ attested`, the Registry
+tile is visible and shows "verified," clicking it opens "Official
+Registry Match" with a "verified" pill, and Agent-mode's literal panel
+shows the real line instead of "not applicable." **Not verified**: the
+owner's own real `bob` session on `/profile` — needs the owner's own
+post-deploy check, same gap 3.10 itself left open. `teta-pi/web` branch
+`session/3.23-person-registry`, `src/app/profile/page.tsx`,
+`src/app/claim/page.tsx`.
+
 ## 🔴 FIXED 2026-08-19 — `/search` "My page" nav leak (regression) + `/profile` real unauthenticated data leak (new root cause, supersedes 2026-08-05 note below)
 Owner reported the same nav-leak bug class again, this time on `/search`
 (3.16b), plus re-confirmed (direct question, not a misread) seeing
@@ -786,7 +834,7 @@ items are already addressed. Mapping to sessions:
 |---|---|---|---|
 | 1 | 🔴 | expired session still shows editable profile | **3.9 ✅ closed 2026-08-05 (15.3), web PR #10** — live-verified on prod: stale token now renders a sign-in gate, not the editable grid (S-4) |
 | 2 | 🟠 | Make private → "invalid token" | **3.9 ✅ closed 2026-08-05 (15.3)** — PATCH-500 part fixed in 1.18 (api PR #6, live re-verified); stale-token part covered by the same web PR #10 401 pipeline as #1 above (S-5) |
-| 3 | 🟠 | persona sees business verifier set | **3.10** |
+| 3 | 🟠 | persona sees business verifier set | **3.10**, partially reverted by **3.23 ✅ 2026-09-01** — 3.10's Registry Match gate turned out to have no backend basis and hid real verified data on a real person-kind entity (`bob`); Registry reopened to all kinds, Document Upload/Legal Entity stay business-only |
 | 4 | 🟠 | Business Email "Send Code" dead | **3.9** re-test (Resend was also broken during QA — key rotation + sandbox; may already work) |
 | 5 | 🟡 | Domain Ownership untested | folded into **6.2 re-run** checklist |
 | 6 | 🟡 | "Legal Entity" link unclear/inert | **3.10** |
