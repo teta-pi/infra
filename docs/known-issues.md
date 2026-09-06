@@ -3,6 +3,165 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 6.5 pre-GTM full QA (2026-09-06)
+
+Full E2E QA pass before GTM launch, per `docs/gtm.md` §Execution checklist +
+`docs/security.md` §5. Read-only/authorized-test-account only, our own infra,
+same rules of engagement as `docs/security.md` §"Rules of engagement". This is
+a QA pass, not a fix session — nothing below was fixed here except where
+explicitly marked; new findings go to whoever owns that direction next.
+
+### 🟠 NEW — `teta_verify_endpoint` is permanently broken via MCP (401 on every call)
+Live: MCP session, `teta_verify_endpoint(endpoint_url:"https://example.com/agent")`
+→ `{"isError":true, text:"API 401: {\"detail\":\"Not authenticated\"}"}`. Root
+cause: `api/app/api/routes/endpoint_verification.py:98-101`'s `verify_endpoint`
+requires `current_user: User = Depends(get_current_user)` — added by the S-2
+SSRF fix (api PR #3, 1.7, 2026-07-14) as the auth mitigation for the
+previously-unauthenticated-SSRF finding. `mcp/src/client.ts`'s `apiFetch()`
+never attaches an `Authorization` header (grepped, none exists), and MCP has
+no auth mechanism of its own (S-11) — so no MCP caller can ever satisfy this
+route. Reproduced without a real API key too: a bare unauthenticated
+`POST https://api.tetapi.dev/api/v1/verify-endpoint` also returns
+`{"detail":"Not authenticated"}`.
+**Impact:** one of the 7 core advertised tools — described as trust-critical
+("run this before your agent routes a request or a payment to it") — has been
+100% non-functional for every MCP caller since the SSRF fix shipped
+(2026-07-14), silently. Neither the 7.x MCP audit (2026-08-04) nor the 15.x
+security passes caught it — those verified the API-side auth was added, not
+that MCP could still reach the route afterward.
+**Fix options (product decision needed):** (a) give the MCP server its own
+service-level API key baked into its env so it can authenticate on behalf of
+anonymous callers, or (b) relax `/verify-endpoint`'s auth requirement back to
+unauthenticated-but-rate-limited (like `/v1/tag-ping`/badge) now that the SSRF
+fix's host-validation covers the core risk independent of auth.
+Status: OPEN, HIGH severity, no fix planned this session (QA-only).
+
+### 🟡 NEW — `teta_verify_entity`/`teta_get_proof`/`teta_get_profile`/`teta_verify_claim` proof links point at raw JSON, not the public page
+`teta_search`/`teta_resolve_intent` proof links correctly go to
+`https://app.tetapi.dev/e/{slug}` (`mcp/src/index.ts:448`, `entityPageUrl()`).
+The other four tools' "Proof:" line uses `proofUrlById()`
+(`mcp/src/index.ts:23-25`) → `https://api.tetapi.dev/api/v1/businesses/{id}/proof`,
+a raw JSON API endpoint, at lines 168/207/243/315/593. Root cause:
+`AgentBusinessProfile` (`api/app/schemas/business.py:74-82`, returned by
+`GET /businesses/{id}/preview`) carries no `slug` field even though
+`Business.slug` exists and is used everywhere else for `/e/[slug]`; the MCP
+code's own comment (`index.ts:15-18`) acknowledges this tradeoff.
+**Impact:** GTM doc item 1.2 ("proof_url in every response... so when an
+agent cites the answer, the user sees tetapi.dev") is satisfied for 2 of 6
+applicable tools but not the other 4 — those tools' proof link opens raw JSON
+in a browser, not a TETA+PI-branded page, if a citing agent surfaces it to a
+human.
+**Fix (if ever wanted):** add `slug` to `AgentBusinessProfile` +
+`agent_preview` route, thread through `mcp/src/client.ts`, use
+`entityPageUrl(slug)` in the 4 affected handlers (either replacing or
+alongside the raw-JSON link as a secondary "machine-verifiable evidence" URL).
+Status: OPEN, no fix planned this session.
+
+### ✅ RE-VERIFIED CLOSED — MCP `teta_search`'s `verified_only` filter (known-issues §7.x #5 was stale)
+The `docs/known-issues.md` §"7.x" entry "🟠 5. MCP `teta_search`'s
+`verified_only` filter is a no-op" still said `Status: OPEN` and a GTM-boot
+chip from an older session had this hanging as unresolved. **It is fixed.**
+`git log -S` on `mcp/src/index.ts` traces the fix to commit `3c9cda5`
+("1.13: fix resolve→verify→profile MCP chain (audit #2/#5/#16, preview
+500)") — `searchBusinesses` is now called with
+`level: verified_only ? "registry" : "any"` exactly as the original finding's
+own suggested fix said. Live-verified this session: `teta_search(query:
+"hellfire", verified_only:true)` → "No verified entities found"; same query
+with `verified_only:false` → returns HELLFIRE Solutions (`[NONE]`). The §7.x
+entry above is left as-is for the historical record; this entry is the
+correction — **do not re-open #5 or re-file this in a future GTM boot.**
+Also confirmed live: `teta_search`'s own proof_url is present in every
+result (GTM 2.6 requirement), pointing at the public `/e/[slug]` page.
+
+### 🟡 3.23 (`/profile` ↔ `/e/[slug]` person-registry-data consistency) — fix ready, not yet merged
+`teta-pi/web` PR #41 ("fix(web): 3.23 — /profile no longer hides real
+registry data on person-kind entities") is **OPEN**, no CI checks configured
+on it. Confirmed live that the asymmetry it describes is real today: `/e/bob`
+(public page) correctly shows "REGISTRY · VERIFIED" with real Handelsregister
+data (VR 40166) — fixed earlier by 3.22a — but per the PR body, `/profile`
+(owner view) still hardcodes a fabricated `registry:n/a — not applicable,
+individual` for any person-kind entity in `AttestationBar` and `AgentView`,
+regardless of real data. Root cause traced by the PR to roadmap 3.10 (web PR
+#12), which added the `isBusinessKind`-only gate without live test
+credentials to verify it. The PR also opens the "Registry" verification tile
+to all entity kinds (backend `verifyApi.registry` already takes no
+entity-kind argument). Could not test the authenticated `/profile` side
+directly this session (no test account credentials with real edit rights —
+same limitation prior sessions noted).
+Status: OPEN — flag for owner review/merge of `teta-pi/web` PR #41.
+
+### ✅ RE-VERIFIED live this session (no regressions found)
+- **S-7** (`1.5`/`1.7`/`1.8` reset-on-change logic): re-verified end-to-end on
+  a fresh test entity — `PATCH agent_endpoint` to a URL that then passes
+  `/verify-endpoint`'s three checks → `agent_endpoint_verified` persists
+  `true` on a follow-up `GET` → `PATCH agent_endpoint` to a different URL →
+  both the response and a follow-up `GET` show it reset to `false`. Still
+  correct, `api/app/api/routes/businesses.py:266-270` unchanged. The
+  parallel `name`-change → `registry_status` reset (same lines) was
+  confirmed by code inspection only this pass (would need driving a test
+  entity to `registry_status:"verified"` first via the full async flow to
+  re-prove live end-to-end; not done, out of scope for a spot-check).
+- **S-8** (private-block leak on `GET /businesses/{id}/blocks`): spot-checked
+  against a live test entity unauthenticated — all 7 returned blocks have
+  `is_public: true`, no private block leaked.
+- **S-13/S-14** (MCP rate-limit + idle-session sweep): burst of 65
+  `teta_search` calls on one MCP session → first ~61 returned `200`, then
+  `429` (matches documented 60/min/IP). `sessions` Map idle-sweep code
+  (`mcp/src/index.ts:650-658`, 10 min timeout) still present and unchanged.
+  Structured JSON logging confirmed live via `journalctl -u tetapi-mcp` on
+  prod — one `{ts,tool,session,entity,latency_ms,status}` line per call.
+- **3.21** (L0 entities visible in ranked `/search` results): confirmed live,
+  `HELLFIRE Solutions` (L0) renders directly in the ranked list with a
+  dashed-border "L0 no attestation on record" badge, not hidden behind
+  "Show unverified" (that toggle no longer exists, matches the fix).
+- **2026-08-19 nav-leak fixes** (`/`, `/search`, `/profile`): re-tested in a
+  genuinely clean/unauthenticated browser session — `/search` and the home
+  page show only "Sign in / Create account", `/profile` shows the
+  "Your session expired" sign-in gate, no entity data leaked in any case.
+- **/admin**: unauthenticated visit correctly shows the "Back Office —
+  Admin access only. All actions are audited." email-code gate, no data
+  leaked. Claims/Users/Entities tabs not exercised this session (no admin
+  credentials available).
+
+### 🟡 STILL OPEN, unchanged since last audit (confirmed, not re-explained here)
+- `teta-pi/web` still has **no `.gitignore`** (2026-08-22 entry) — confirmed
+  still missing today.
+- **S-10** (in-memory, single-process-only rate limiters on the API side —
+  `/verify-endpoint`, `/claim`, badge, tag-ping) — unchanged, still OPEN,
+  Redis migration still pending.
+- Bandit finding `api/app/api/routes/badge.py`'s `hashlib.md5(...)` ETag
+  without `usedforsecurity=False` — confirmed still present, still a
+  one-line fix, still not done.
+- **1.11** (bulk pre-verification import) — confirmed **still not started**:
+  no matching route anywhere in `api/app/api/routes/admin.py`, and
+  `docs/roadmap.md`'s own 1.11 row says "Not done". Still the hard blocker
+  for real Phase-2 outreach, as expected — nothing to re-decide here.
+
+### GTM Execution checklist — real state confirmed (see `docs/gtm.md` for the
+### checklist itself, updated alongside this entry)
+- `llms.txt` — **live** on `tetapi.dev` (200 OK). Not present on
+  `app.tetapi.dev` (404, expected — doc only specifies the landing domain).
+- `agent.json` — both `tetapi.dev` and `app.tetapi.dev` report
+  `"version": "1.4.0"` (checklist wanted ≥ 1.1.0 — exceeded).
+- Tool descriptions — live-read all 7; clearly agent-query-optimized
+  ("before your agent routes a request or a payment to it", "before your
+  agent trusts a claim"), not generic "verification protocol server" copy.
+- Badge endpoint (1.10) — **live** at `https://api.tetapi.dev/badge/{id}`
+  (note: unprefixed router, NOT under `/api/v1` — `api/main.py:46`). Returns
+  a real SVG with `Cache-Control`/`ETag`, rate-limited 120/min
+  (`badge.py:18-19`). Impression counter is real and **confirmed
+  incrementing live**: Redis key `badge_impressions:{id}` went `2 → 5` after
+  3 test hits.
+- The 6 registry-listing submissions (official registry, Smithery, Glama,
+  mcp.so/PulseMCP, awesome-mcp-servers, GitHub MCP Registry) — spot-checked;
+  `registry.modelcontextprotocol.io` search for "tetapi" returns 0 results.
+  `server.json` artifact exists in `teta-pi/mcp` (2.5 prep already done) but
+  no actual submission has happened yet — all 6 correctly remain unchecked,
+  owner-executed, not code-blocked.
+- Self-verified L2 + Bob/Mykhailo as person entities — not confirmed as done
+  this session (no entity found under those names in a quick `/search`
+  scan); still appears unchecked, owner action.
+
 ## 🔴 FIXED 2026-08-19 — `/search` "My page" nav leak (regression) + `/profile` real unauthenticated data leak (new root cause, supersedes 2026-08-05 note below)
 Owner reported the same nav-leak bug class again, this time on `/search`
 (3.16b), plus re-confirmed (direct question, not a misread) seeing

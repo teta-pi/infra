@@ -6,6 +6,32 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-06 · 6.5 · pre-GTM full E2E QA pass
+Done: Full E2E QA across web UI, MCP (all 7 tools live), security (S-7/S-8/
+S-10/S-13/S-14 re-verified), and the GTM Execution checklist real-state
+audit, per `docs/gtm.md`/`docs/security.md`/`docs/known-issues.md` as
+instructed — a QA pass, nothing fixed here. Full findings in
+`docs/known-issues.md` §"6.5 pre-GTM full QA".
+Changed: `docs/known-issues.md` (new §6.5 section), `docs/gtm.md` (Execution
+checklist updated to real state — 3 items checked off: llms.txt, agent.json
+v1.4.0, tool descriptions; 6 registry-submission items + self-verification
+items confirmed still not done, annotated with evidence).
+Risk: Found one HIGH-severity live regression — `teta_verify_endpoint` (MCP)
+has been returning 401 on every call since the S-2 SSRF fix added auth to
+`/verify-endpoint` (2026-07-14), because MCP has no way to authenticate.
+One of 7 core tools has been silently dead for ~2 months. Also found the
+`known-issues.md`/`docs/security.md` records for `teta_search`'s
+`verified_only` bug were stale (already fixed by 1.13, mcp commit 3c9cda5) —
+corrected the record so it isn't re-filed. `teta-pi/web` PR #41 (3.23,
+person-registry `/profile` consistency) is ready but unmerged.
+Next: (1) product decision on `teta_verify_endpoint` auth (service key vs.
+relax to rate-limited-anonymous like tag-ping/badge) — this blocks the tool
+being usable at all; (2) owner merge `teta-pi/web` PR #41; (3) owner decides
+whether to add `slug` to `AgentBusinessProfile` so `teta_verify_entity`/
+`teta_get_proof`/`teta_get_profile`/`teta_verify_claim` proof links point at
+the public page instead of raw JSON; (4) `1.11` bulk pre-verification import
+remains the real blocker for GTM Phase 2 outreach — unchanged.
+
 ## 2026-09-01 · 3.22e · /admin restyled into Grid of Record — closes the 3.22 chain
 Done: Purely visual restyle of `/admin` — the largest and highest-risk
 page in the 3.22 chain — covering all six tabs (Dashboard, Analytics,
