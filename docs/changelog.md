@@ -6,6 +6,33 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-10 · 14.5 · camera step revealed in onboarding wizard
+Done: `/claim` wizard's previously-hidden camera step (store step 3,
+`useOnboardingStore`) is now shown as an optional, skip-able screen between
+email verification and the success screen — "Connect your Pi CAM" with
+Connect/Skip, and Skip-after-QR too. Reuses the exact `devices.generateToken()`
+call and QR payload shape (`{token, entity_id, entity_name}`) that
+`PiCamButton` already uses on `/profile` (3.13), so onboarding and `/profile`
+now feed the pi-cam app identical payloads from both sync points. Checked
+`teta-pi/pi-cam`'s `modules/account/index.ts::registerWithQR` — it already
+parses the QR generically (`token`/`entity_id` only), no app-side change
+needed. "I've linked it →" sets `store.paired = true`, surfaced on the
+success screen as "✓ PI Camera linked" (that flag existed but nothing ever
+set it before this). Verified locally: `tsc --noEmit` clean, browser-tested
+render + Connect (network log confirms correct `/devices/generate-token`
+call) + Skip paths.
+Changed: `teta-pi/web` `src/app/claim/page.tsx` (branch
+`session/14.5-camera-sync-web`, PR #42, unmerged — not yet reviewed/merged).
+Risk: low — purely additive UI, gated behind a store step nothing else
+reads early; existing Identify→Verify→Publish flow and progress rail
+untouched. `paired` still has no polling/confirmation from the pi-cam app
+side — "I've linked it" is a manual user click, same trust level as closing
+the QR modal on `/profile` today.
+Next: merge PR #42 once reviewed; live E2E QA (14.2) — pair a real device
+via this new onboarding entry point, confirm `c2pa_verified`/
+`bitcoin_confirmed` land in the DB, then close out 14.5's basic-pairing
+requirement (1).
+
 ## 2026-09-06 · 6.5 · pre-GTM full E2E QA pass
 Done: Full E2E QA across web UI, MCP (all 7 tools live), security (S-7/S-8/
 S-10/S-13/S-14 re-verified), and the GTM Execution checklist real-state
