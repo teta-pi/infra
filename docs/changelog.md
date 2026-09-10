@@ -6,6 +6,30 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-10 · 14.5 · build + regression verification of camera-sync work
+Done: Verified the 14.5 onboarding camera-sync work from earlier today
+(`teta-pi/web` PR #42) against the acceptance checklist: full `npm run
+build` clean (tsc + lint + prerender, all 13 routes) on the PR branch;
+browser-walked the real `/claim` UI click path (Identify → Verify, real
+name-availability check triggers, real inputs) to confirm the new step 3
+doesn't regress the existing Identify/Verify screens or the 3-step
+progress rail; re-confirmed step 3 renders and calls the correct
+`POST /devices/generate-token` endpoint (network log); confirmed
+`src/app/profile/page.tsx` (where `PiCamButton`/block-creation-side
+pairing lives, 3.13) has zero diff from `main` — untouched by this task,
+so its pairing flow is exactly as it was, not independently re-tested
+live (needs real auth session + real device, same gap as 14.2). No code
+changes made this session — everything was already committed/pushed/PR'd
+by the earlier session that did the actual implementation.
+Changed: `docs/roadmap.md` (14.5 row, part (1) detail), `docs/known-issues.md`
+(QA #33, re-verified note). No app code changed.
+Risk: none new — this was a verification pass, not a code change.
+`paired` still has no real-device confirmation; that's explicitly 14.2's
+job, not re-attempted here (no physical Pi CAM hardware in this session).
+Next: `teta-pi/web` PR #42 still needs review + merge; then 14.2's live
+E2E device pairing/capture pass (through either sync entry point) is the
+last thing standing between 14.5 and a full ✅.
+
 ## 2026-09-10 · 14.5 · camera step revealed in onboarding wizard
 Done: `/claim` wizard's previously-hidden camera step (store step 3,
 `useOnboardingStore`) is now shown as an optional, skip-able screen between
