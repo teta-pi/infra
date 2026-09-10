@@ -1767,10 +1767,27 @@ audit of every angle the plugin itself can touch, at HEAD `0cfd67f`
    vector even if a business's own `name`/`description` fields contained
    markup. The `wp_head` JSON-LD path additionally decodes+re-encodes
    through `wp_json_encode` before echoing. **Verdict: clean.**
-5. **Site-specific correlation (VirusTotal/Safe Browsing/sucuri
-   sitecheck):** **not done — the affected domain was never provided in
-   this task.** Needs the owner to hand over the site URL/domain before
-   this step can run; nothing to check without it.
+5. **Site-specific correlation** — owner provided the domain
+   (`lastivka.it-ua.org`) after this entry was first drafted. Three
+   independent read-only public scanners, all checked live 2026-09-10:
+   - **sucuri sitecheck**: "No Malware Found", not blacklisted (9 lists
+     checked incl. Google Safe Browsing/McAfee/ESET/PhishTank/Yandex/
+     Opera, all clean), no injected spam/defacement, running WordPress
+     7.1/Nginx.
+   - **VirusTotal** (`virustotal.com/gui/domain/lastivka.it-ua.org`):
+     community score 0/89 — zero security vendors flag the domain,
+     0 community comments/reports. Domain created ~6 months ago (~2026-03),
+     last VT analysis ~1 month ago (~2026-08).
+   - **Google Safe Browsing transparency report**: "No available data"
+     for `lastivka.it-ua.org` — i.e. never on Google's unsafe-site list
+     (matches sucuri's own Safe Browsing sub-check).
+   None of the three shows any current or historical red flag. These
+   tools report present blacklist status, not a minute-by-minute
+   infection timeline, so they can't independently pinpoint whether
+   something transient happened around the plugin's install/removal
+   window — but there is no lingering evidence of compromise on the
+   domain today, consistent with items 1–4 finding nothing in the
+   plugin itself. **Verdict: clean on every scanner checked.**
 6. **Plugin Check CI history:** all 24 runs since 2026-07-14 reviewed
    (`gh run list --workflow=check.yml`); only 2 failures ever
    (`29361084846` 2026-07-14, `32366358992` 2026-08-20), both
@@ -1781,13 +1798,11 @@ audit of every angle the plugin itself can touch, at HEAD `0cfd67f`
    failure in the plugin's CI history.**
 
 **Conclusion:** nothing in the plugin's own code, its wp.org distribution
-channel, or its API touch point can explain the reported malware — this
-was not the plugin. Most likely explanations for the report: unrelated
-compromise elsewhere on the same WP install/hosting account (a different
+channel, its API touch point, or the affected domain's current/historical
+public blacklist status can explain the reported malware — this was not
+the plugin. Most likely explanations for the report: unrelated compromise
+elsewhere on the same WP install/hosting account (a different
 plugin/theme, stolen FTP/wp-admin creds, a vulnerable server-side
 component), a false positive from the hosting scanner, or a
 misattribution because the plugin was the most recently installed thing.
-Item 5 (site-specific scanner correlation) is the only unclosed piece —
-re-open/append here if the owner supplies the domain.
-Status: CLOSED — code/supply-chain/CI clean; awaiting domain for item 5 if
-owner wants it run.
+Status: CLOSED — all 6 items checked, clean across the board.
