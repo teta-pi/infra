@@ -6,6 +6,38 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 1.11 · bulk pre-verification import (GTM Phase 2 blocker)
+Done: `POST /admin/entities/bulk-preverify` (`teta-pi/api` PR #20) — bulk-creates
+`claim_status=pre_verified_unclaimed` entity profiles from public metadata
+(GitHub org / domain / npm package, the same top-500 dataset
+`scripts/gtm/pull_top500.py` pulls), so `scripts/gtm/outreach_queue.py`'s
+`profile_url`/`opt_out_url`/`badge_url` stop being placeholders and its
+`approve` command can stop refusing every item. New `businesses.claim_status`
+(`self_registered|pre_verified_unclaimed|claimed|opted_out`) +
+`pre_verified_source` jsonb (migration 013), surfaced on the public
+`/e/[slug]` payload/agent-preview/search — never mistaken for a self-claim.
+`verification_level`/`registry_status` untouched (still L0, per
+verification-rework.md). Real-owner claim path (`POST /{id}/claim/domain/
+start`+`/check`) reuses the existing domain-ownership service instead of new
+merge logic; `POST /businesses` 409s onto a pre-verified slug instead of
+duplicating it. One-click unauthenticated `/opt-out?token=…` per the GTM
+guardrail.
+Changed: `teta-pi/api` `routes/admin.py`, `routes/businesses.py`,
+`routes/search.py`, `models/business.py`, `alembic/versions/013_*`,
+`docs/api.md`/`docs/database.md` (both repos).
+Risk: not live-verified on prod/staging — sandbox had no Postgres/Docker
+available, only import + OpenAPI-schema-build tested (see known-issues.md).
+`/e/[slug]`'s visual pre-verified indicator needs a `teta-pi/web` follow-up —
+the API returns `claim_status`/`pre_verified_unclaimed` but nothing renders it
+yet. Pre-verified rows are left visible in default `/search` (deliberate, not
+an oversight) — worth revisiting once there are hundreds of thin rows.
+Next: merge PR #20, run migration 013 on prod, create 2-3 real test entries
+(well-known MCP servers) via the new endpoint, confirm `/e/[slug]` returns the
+pre-verified flag and `/search` surfaces them; then a `teta-pi/web` task to
+actually render the indicator; then flip `outreach_queue.py`'s
+`links_are_placeholders` logic in a small follow-up infra PR once real links
+are confirmed working end to end.
+
 ## 2026-09-11 · 14.x · Pi CAM pairs in-app, web never showed it — root cause + fix
 Done: Investigated owner report "camera pairs in the app but not on the
 web." Checked prod DB directly before touching code: the pairing +
@@ -68,6 +100,8 @@ explicitly confirmed by the owner before executing (auto-mode classifier
 blocked the first attempt as a prod write, re-asked and got explicit yes).
 Next: 1.11 (bulk pre-verification import) boot handed to the owner
 separately — still the real GTM Phase 2 blocker, unaffected by this sweep.
+**Update 2026-09-11 (1.11 session):** done, see the changelog entry above —
+`teta-pi/api` PR #20.
 
 ## 2026-09-10 · 14.5 · build + regression verification of camera-sync work
 Done: Verified the 14.5 onboarding camera-sync work from earlier today

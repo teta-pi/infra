@@ -1709,6 +1709,34 @@ nothing. **Fix:** set `OPENDATABOT_API_KEY` (verifier already implemented in
 `premium.py`).
 Status: OPEN (needs licence key).
 
+## 🟠 1.11 bulk pre-verification import — not live-verified, no frontend indicator yet
+`teta-pi/api` PR #20 (roadmap 1.11) implements `POST /admin/entities/
+bulk-preverify` + `claim_status`/`pre_verified_source` end to end, but two
+things are explicitly not done, not silently skipped:
+1. **No live DB/prod test.** The worker sandbox had no Postgres/Docker
+   available, so migration 013 and the new endpoints were only verified via
+   `py_compile` + a full app import/`openapi()` build (confirms no circular
+   imports, all new routes register correctly) — never exercised against a
+   real database. **Before this is trusted**: run `alembic upgrade head` on
+   staging/prod, call `/admin/entities/bulk-preverify` with 2-3 real public
+   projects, confirm `GET /businesses/by-slug/{slug}/public` returns
+   `claim_status="pre_verified_unclaimed"`/`pre_verified_unclaimed=true`, and
+   that `GET /search` surfaces them.
+2. **`/e/[slug]` has no visual pre-verified indicator yet.** The API now
+   returns the flag in the public payload, but nothing in `teta-pi/web`
+   renders it — a visitor/agent hitting the actual page today can't yet see
+   the difference from a real self-claim, only a direct API caller can. This
+   is a `teta-pi/web` frontend task, out of scope for the backend-only 1.11
+   session (per its own instructions: don't improvise scope beyond the
+   session's repo without owner sign-off).
+Also worth a deliberate look later, not a bug: pre-verified rows are left
+visible in default `/search` (not hidden) since the whole outreach mechanic
+depends on agents finding them — revisit if it turns out to dilute search
+relevance once there are hundreds of thin imported rows.
+Status: OPEN — needs (a) a prod/staging live-verification pass and (b) a
+`teta-pi/web` task for the `/e/[slug]` indicator before Phase 2 outreach
+actually starts sending messages.
+
 ## Audit — things that are FINE (checked, no action)
 - `ENVIRONMENT=production` set; `dev_token` not exposed by `/auth/magic-link`.
 - No secrets in git history (only placeholder SECRET_KEY / minio defaults in
