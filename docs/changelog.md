@@ -6,6 +6,41 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 14.8 · remove fake "Get Pi Certificate" onboarding screen
+Done: Verified 6.6's finding myself before touching code — read
+`modules/certificate/index.ts` and `modules/c2pa/manifest.ts` in full.
+Confirmed `requestCACertificate()` is pure client-side simulation (2s
+delay, fake cert string, no network call) and `manifest.ts:95` hardcodes
+`ca_certificate: null`, so the fake flow never reaches the real
+manifest/backend, matching QA's read. Manager's lean was option (a) —
+remove the screen until a real CA exists — so removed onboarding's
+`CertStep` entirely; `KeyGenStep` now routes straight to
+`/(tabs)/camera`. Rewrote the false "recognized by any C2PA-compatible
+tool" slide-3 copy to describe the real, working producer-profile-link
+feature instead. `teta-pi/pi-cam` PR [#7](https://github.com/teta-pi/pi-cam/pull/7).
+Changed: `teta-pi/pi-cam` `app/onboarding.tsx`. `docs/known-issues.md`
+§6.6's "Get Pi Certificate" finding corrected + marked closed for the
+onboarding entry point (was previously mis-stated as fully UI-only/inert —
+it actually does flip a real "Pi Verified" badge locally via
+`getCertInfo()`, independent of the manifest); `docs/roadmap.md` new
+`14.8` row.
+Risk: **Same fake-cert flow still reachable from Settings**
+(`settings.tsx:134-244` — "Pi Certificate" row + "Upgrade to Pi Verified"
+banner), and Settings' own "Trust Level" row shows "Pi Verified" from
+`isOnline` alone, no certificate involved at all. Either path still hands
+a user a persistent, device-local fake "Pi Verified" badge across
+camera/gallery/preview/verify — this session only closed the onboarding
+entry point, not the underlying capability. Deliberately did not expand
+scope to fix Settings too (bigger surface, several call-sites, deserves
+its own session) — flagged in `known-issues.md` instead of silently
+fixing or silently leaving undocumented.
+Next: New session to pull the Settings "Get Pi Certificate" CTA and the
+`isOnline`-only Trust Level claim the same way this one pulled
+onboarding's, or gate the whole feature behind a real CA (Phase 2,
+`ca.picam.app`).
+
+---
+
 ## 2026-09-11 · 6.6 · UI-button ↔ backend ↔ camera-app sync audit
 Done: Full sweep for the PiCamButton class of bug (a button whose backend
 wiring doesn't match what it claims) — diffed every path in
