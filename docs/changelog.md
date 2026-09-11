@@ -38,6 +38,51 @@ actually render the indicator; then flip `outreach_queue.py`'s
 `links_are_placeholders` logic in a small follow-up infra PR once real links
 are confirmed working end to end.
 
+## 2026-09-11 · 1.11 hotfix · claim_status VARCHAR(20) too short — live 500 on prod
+Done: URGENT hotfix. Roadmap 1.11's `POST /admin/entities/bulk-preverify`
+(just deployed via `teta-pi/api` PR #20) 500'd on every call —
+`businesses.claim_status` (migration 013) was `VARCHAR(20)`, but
+`"pre_verified_unclaimed"` is 22 characters; Postgres raised
+`StringDataRightTruncationError` on INSERT. Confirmed live via
+`journalctl -u tetapi-api`. New migration `014_claim_status_widen.py`
+widens the column to `VARCHAR(30)` (room for future statuses, not sized
+exactly to today's longest value) + matching `app/models/business.py`
+change. Grepped `claim_status` repo-wide — `schemas/business.py` uses a
+bare `str` with no `max_length`, nothing else was tied to the old length.
+Changed: `teta-pi/api` `alembic/versions/014_claim_status_widen.py` (new),
+`app/models/business.py` — PR [#21](https://github.com/teta-pi/api/pull/21).
+`docs/known-issues.md` (new 🔴 entry, closes once verified).
+Risk: No data was corrupted (the failed INSERTs rolled back cleanly) but the
+1.11 feature was completely dead from the moment it deployed until this
+merges. Not yet verified against a live/staging Postgres — sandbox had no
+DB, only an offline `alembic --sql` dry-run + app-import check.
+Next: owner/manager merge + deploy PR #21 ASAP (production outage, not
+normal review cycle), run `alembic upgrade head` on prod, re-verify live
+with a real `bulk-preverify` call, then close the known-issues entry.
+
+## 2026-09-11 · manager · 1.11 merged, hotfixed, live-verified end to end
+Done: Reviewed and merged `teta-pi/api` PR #20 (1.11 backend), then hit the
+live VARCHAR(20) 500 on first real call — merged hotfix PR #21 within the
+same session, waited for deploy, and live-verified the full loop on prod:
+`POST /admin/entities/bulk-preverify` → 200 with real `business_id`/
+`profile_url`/`opt_out_url`/`badge_url`; `GET .../public` → confirmed
+`claim_status="pre_verified_unclaimed"`, `pre_verified_unclaimed=true`;
+`POST /{id}/opt-out?token=…` → 200, used to clean up the test row
+(unpublished, not deleted). `GET /search` for the test name returned `[]`,
+not yet root-caused — flagged in known-issues, not blocking. Resolved two
+rounds of `docs/changelog.md`/`docs/known-issues.md` merge conflicts
+between this session's docs and the parallel 1.11/hotfix worker sessions'
+own docs PRs (#94, #96) — additive both times, per the standing
+infra-docs-merge-conflicts policy.
+Changed: `teta-pi/api` main (PR #20 + #21 merged, migrations 013+014 live
+on prod). `docs/known-issues.md` (1.11 entry consolidated to reflect live
+verification), `docs/changelog.md` (this entry).
+Risk: None new — merge + live-verification of already-reviewed code.
+Next: `teta-pi/web` task for the `/e/[slug]` pre-verified visual indicator
+(GTM honesty guardrail, blocks real Phase 2 outreach until it exists);
+quick look at the `/search` miss noted above; then flip
+`outreach_queue.py`'s `links_are_placeholders` logic once both are done.
+
 ## 2026-09-11 · 14.5 · Pi CAM sync fix merged, deployed, live-verified — 14.5 closes
 Done: Owner explicitly confirmed merge. Merged `teta-pi/api` PR #19
 (`GET /devices`) first, waited for GitHub Actions deploy, then merged
