@@ -6,6 +6,39 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 14.x · Pi CAM pairs in-app, web never showed it — root cause + fix
+Done: Investigated owner report "camera pairs in the app but not on the
+web." Checked prod DB directly before touching code: the pairing +
+capture-upload chain was already fully correct end-to-end (device
+registered for the owner's own business, C2PA-verified capture landed
+in a public "Pi CAM Captures" block, visible via the public blocks API).
+Real bug: no endpoint ever existed for the web to query pairing status —
+`PiCamButton` on `/profile` always showed "Connect Camera" no matter
+what actually happened in the app, since there was only a
+generate-token/register pair, never a `GET`. Added `GET /devices` →
+`{paired, devices[]}` (`teta-pi/api`), wired `PiCamButton` to poll it on
+mount and after the QR modal closes, showing "✓ Camera linked" +
+relabeling the button once true (`teta-pi/web`).
+Changed: `teta-pi/api` `app/api/routes/media.py` (+`GET /devices`),
+`app/schemas/media.py` (+`DeviceListResponse`/`DeviceSummary`) — PR
+[#19](https://github.com/teta-pi/api/pull/19). `teta-pi/web`
+`src/app/profile/page.tsx`, `src/lib/api.ts` (+`devices.list()`) — PR
+[#43](https://github.com/teta-pi/web/pull/43). Both builds verified
+clean (api: syntax/import check, no local Python 3.12 to run the full
+app; web: `npm run build` clean, tsc+lint+prerender all 13 routes).
+Risk: Low — additive endpoint + additive UI state, no existing behavior
+changed. Deploy is auto-on-push-to-main for both repos, so **both PRs
+were deliberately left unmerged** for an explicit owner go-ahead rather
+than self-merged (unlike this project's usual docs-only PRs) — merging
+API #19 deploys the backend, merging web #43 deploys the frontend; they
+should land API-first so the web isn't calling an endpoint that doesn't
+exist yet.
+Next: Owner merges `teta-pi/api` #19, then `teta-pi/web` #43; verify
+live via `curl -H "Authorization: Bearer <token>" https://api.tetapi.dev/api/v1/devices`
+returns `paired: true` for the account with the already-registered
+device, then confirm `/profile` shows "✓ Camera linked" without
+re-scanning.
+
 ## 2026-09-11 · manager · roadmap hygiene sweep + prod cleanup
 Done: Full manager audit of `docs/roadmap.md` against live PR listings across
 all 8 repos (all clean except infra #85, since merged) and the GTM Phase 0
