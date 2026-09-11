@@ -6,6 +6,32 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 14.5 · Pi CAM sync fix merged, deployed, live-verified — 14.5 closes
+Done: Owner explicitly confirmed merge. Merged `teta-pi/api` PR #19
+(`GET /devices`) first, waited for GitHub Actions deploy, then merged
+`teta-pi/web` PR #43 (`PiCamButton` wired to it) — API-before-web order
+kept so the frontend was never calling an endpoint that didn't exist
+yet. Both deploys confirmed via `gh run watch` (green). Live-verified
+on prod: `curl -H "Authorization: Bearer <token>" .../api/v1/devices`
+returns `{"paired":true,"devices":[{"id":"b8ad9e35-...","label":"Pi
+CAM","registered_at":"2026-09-10T12:09:36Z"}]}` — the exact device found
+in the DB during investigation. Confirmed the deployed `/profile` JS
+bundle (fresh chunk hash post-deploy) contains the new "Camera linked"/
+"Link another camera" strings and the `/devices` fetch call, fetched
+and grepped directly rather than guessing from the chunk name. This
+closes 14.5 completely: all three parts (basic pairing, onboarding
+sync, block-creation sync) now confirmed working end-to-end against
+prod with a real paired device, not just code review.
+Changed: `teta-pi/api` main (PR #19 merged), `teta-pi/web` main (PR #43
+merged), `docs/roadmap.md` (14.5 → ✅), `docs/known-issues.md` (bug
+entry → ✅ FIXED, live-verify evidence added).
+Risk: None new — this was merge + deploy + live verification of
+already-reviewed, already-build-clean code. Both PRs were additive
+(new endpoint, new UI state) with no changed existing behavior.
+Next: None outstanding on 14.5. If more Pi CAM devices get paired later,
+the same `GET /devices` now makes their status visible on `/profile`
+without further work.
+
 ## 2026-09-11 · 14.x · Pi CAM pairs in-app, web never showed it — root cause + fix
 Done: Investigated owner report "camera pairs in the app but not on the
 web." Checked prod DB directly before touching code: the pairing +
