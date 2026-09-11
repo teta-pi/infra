@@ -13,6 +13,53 @@ against the live `https://api.tetapi.dev/openapi.json` (68 paths), then did
 the same for `teta-pi/pi-cam`'s API calls. QA only, one small test entity
 created+cleaned up via the real endpoints (documented inline below).
 
+**Follow-up note:** the two findings below marked with fix PRs were picked
+up fast — `teta-pi/api` PR #22 (bulk-preverify URLs) and PR #23
+(`/auth/agent-key` lockdown) were both open within an hour of this section
+landing, both still unmerged as of the addendum below.
+
+### 🔴 NEW (addendum, found on a direct follow-up pass) — no way to revoke a Pi CAM device's key anywhere in the product
+The audit above checked pairing and capture upload; it did not check the
+**other end** of a device's lifecycle — what happens when a camera is lost,
+stolen, sold, or just unlinked. Checked now: there is no revocation path
+anywhere.
+- `teta-pi/pi-cam`'s "Unlink" button (`app/(tabs)/settings.tsx:175` →
+  `modules/account/index.ts::unlinkAccount`) only deletes the device's own
+  local `SecureStore` keys. It makes **zero backend calls** — grepped the
+  whole function, confirmed.
+- The API has no endpoint to revoke one: `devices_router`
+  (`api/app/api/routes/media.py:284-380`) defines exactly three routes —
+  `GET ""` (list), `POST /generate-token`, `POST /register` — no
+  `DELETE`/`PATCH`/revoke of any kind. Confirmed live against
+  `openapi.json` too (68 paths total, none matches).
+- `Device.api_key` (`api/app/models/device.py:21`) is a column entirely
+  separate from `User.api_key` (`api/app/models/user.py:25`, the personal
+  `pk_live_…` key rotated by `/auth/personal-api-key`) — rotating your own
+  personal key does **nothing** to a paired device's key. Grepped
+  `routes/admin.py` for `revoke`/`device` — no match; there is no admin-side
+  kill switch either.
+**Impact:** once a Pi CAM is paired, its write credential
+(`X-Device-Api-Key`, equivalent to A2 in `docs/security.md`'s asset table —
+"bearer-equivalent to a full account" for uploads) is valid **forever**,
+with no revocation mechanism anywhere in the app, the web UI, the public
+API, or the admin back office. Tapping "Unlink" in the app gives a false
+sense of security — the physical device (or anyone who extracts the key
+from it) can keep uploading media to the account indefinitely, and the
+owner has no way — self-serve or via support — to stop it short of a
+manual DB write. Same asset class as A2 in `docs/security.md`, arguably
+worse: a leaked/lost personal `pk_live_` key can at least be rotated by the
+owner; a leaked device key currently cannot be killed by anyone.
+**Fix:** add `DELETE /devices/{device_id}` (owner-checked like everything
+else in `businesses.py`, one query to invalidate the key or delete the
+row), wire "Unlink" in the app to call it before clearing local storage (or
+at least call it with a stored device_id if local state is already gone),
+and add an "unlink"/"revoke" action next to each device row in whatever
+`/profile`/`/settings` UI now lists paired cameras (`GET /devices`,
+shipped 2026-09-11).
+Status: NEW, OPEN, HIGH — this is a real standing-credential exposure, not
+a UI polish issue; recommend treating it with similar urgency to the
+`/auth/agent-key` lockdown already in flight (api PR #23).
+
 ### 🟠 `POST /admin/entities/bulk-preverify` returns broken `profile_url`/`opt_out_url` (wrong domain + no page behind the link)
 `api/app/api/routes/admin.py`'s bulk-preverify response builds both URLs on
 `tetapi.dev` (the static landing site), not `app.tetapi.dev` (the Next.js
