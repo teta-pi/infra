@@ -3,7 +3,7 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
-## 🟠 Pi CAM pairs in-app but web never showed it (2026-09-11)
+## ✅ Pi CAM pairs in-app but web never showed it — FIXED 2026-09-11
 
 Owner report: "камера не сінхронізується з аккаунтом на вебі. в додатку є"
 — pairing works from the Pi CAM app, but `/profile` never reflects it.
@@ -25,10 +25,13 @@ Fix: `teta-pi/api` PR [#19](https://github.com/teta-pi/api/pull/19) —
 (same owner-lookup as `generate-token`). Companion `teta-pi/web` PR
 [#43](https://github.com/teta-pi/web/pull/43) wires `PiCamButton` to poll
 it on mount + after the QR modal closes, showing "✓ Camera linked" once
-true. **Both PRs open, unmerged** — merging deploys to prod on push to
-`main` per each repo's auto-deploy, so left for explicit owner go-ahead
-rather than self-merged like the docs-only PRs this project usually
-self-merges.
+true. **Both merged 2026-09-11 with explicit owner go-ahead, deployed,
+live-verified:** `curl` against prod `GET /devices` with the account's
+own token returns `{"paired":true,"devices":[{"id":"b8ad9e35-...",
+"label":"Pi CAM","registered_at":"2026-09-10T12:09:36Z"}]}` — the exact
+device from the DB check above; deployed `/profile` JS bundle confirmed
+to contain the new "Camera linked"/"Link another camera" strings and the
+`/devices` call.
 
 ## 6.5 pre-GTM full QA (2026-09-06)
 
