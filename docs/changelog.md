@@ -6,6 +6,37 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 6.6 · UI-button ↔ backend ↔ camera-app sync audit
+Done: Full sweep for the PiCamButton class of bug (a button whose backend
+wiring doesn't match what it claims) — diffed every path in
+`teta-pi/web/src/lib/api.ts` against live `openapi.json` (68 paths), and
+checked `teta-pi/pi-cam`'s API calls against the same. QA only, nothing
+fixed; findings in `docs/known-issues.md` §"6.6 — UI-button ↔ backend ↔
+camera-app sync audit".
+Changed: `docs/known-issues.md` (new §6.6, 5 new findings + a confirmed-OK
+list).
+Risk: Two HIGH findings directly threaten GTM Phase 2, which was just
+unblocked by `1.11` shipping today: (1) `bulk-preverify`'s own
+`profile_url`/`opt_out_url` point at the wrong domain and a nonexistent
+opt-out page — breaks the "instant opt-out" guardrail `docs/gtm.md` calls
+non-negotiable; (2) `/claim` has no UI path to actually claim a
+pre-verified profile even though the backend 409/`claim_url` mechanism
+works — so `1.11`'s backend is ready but the loop it exists to close can't
+close yet. Also found `POST /auth/agent-key`, an unauthenticated,
+unrate-limited, undocumented account+key-mint endpoint live since the first
+commit, unused by any of our own clients. In `teta-pi/pi-cam`: the "Get Pi
+Certificate" onboarding/settings feature is fully simulated (self-labeled
+in source, not disclosed to users) and makes a false claim to every new
+user ("recognized by any C2PA-compatible tool") — confirmed it cannot
+currently poison real capture data (the fake flag never reaches
+`manifest.ts`'s builder), so blast radius is UI-only, but it's a
+trust-signal integrity problem for a verification product.
+Next: (1) fix `bulk-preverify`'s URLs before any real Phase-2 outreach goes
+out; (2) wire `/claim`'s 409 handling to the domain-claim flow; (3) product
+decision on `/auth/agent-key` (wire it up or remove/rate-limit it); (4)
+product decision on pi-cam's fake CA-certificate feature (finish it or pull
+it from onboarding/settings/preview).
+
 ## 2026-09-11 · 1.11 · bulk pre-verification import (GTM Phase 2 blocker)
 Done: `POST /admin/entities/bulk-preverify` (`teta-pi/api` PR #20) — bulk-creates
 `claim_status=pre_verified_unclaimed` entity profiles from public metadata
