@@ -3,6 +3,156 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 6.6 — UI-button ↔ backend ↔ camera-app sync audit (2026-09-11)
+
+Prompted by the PiCamButton root cause above (a button that couldn't reflect
+real state because no endpoint existed for it) — a full sweep for the same
+class of bug: every button/CTA whose backend wiring doesn't match what it
+claims to do. Method: diffed every path string in `teta-pi/web/src/lib/api.ts`
+against the live `https://api.tetapi.dev/openapi.json` (68 paths), then did
+the same for `teta-pi/pi-cam`'s API calls. QA only, one small test entity
+created+cleaned up via the real endpoints (documented inline below).
+
+### 🟠 `POST /admin/entities/bulk-preverify` returns broken `profile_url`/`opt_out_url` (wrong domain + no page behind the link)
+`api/app/api/routes/admin.py`'s bulk-preverify response builds both URLs on
+`tetapi.dev` (the static landing site), not `app.tetapi.dev` (the Next.js
+app that actually serves `/e/[slug]`). Live-verified by creating one real
+test item: `profile_url: https://tetapi.dev/e/qa-sync-test-co` → `404`;
+the same slug on the right domain, `https://app.tetapi.dev/e/qa-sync-test-co`
+→ `200` (correct page). `opt_out_url:
+https://tetapi.dev/e/qa-sync-test-co/opt-out?token=...` → also `404`, and
+doubly wrong: there is no `/e/[slug]/opt-out` frontend route at all
+(`teta-pi/web/src/app` grepped, nothing) — the real backend route is a bare
+`POST /api/v1/businesses/{id}/opt-out?token=...` with no page behind it
+whatsoever (confirmed working when called directly — used it to clean up
+the test entity, 200 OK, unpublished).
+**Impact:** breaks `docs/gtm.md`'s own non-negotiable Phase-2 guardrail —
+*"Instant claim AND instant opt-out/removal... A community backlash would
+invert the loop — these guardrails are not optional."* Every outreach
+message `scripts/gtm/outreach_queue.py` builds from these URLs sends a
+stranger a dead link for both the profile view and the one-click opt-out,
+at exactly the moment (cold outreach) reputational risk is highest.
+**Fix:** (a) build `profile_url` on `app.tetapi.dev`; (b) either point
+`opt_out_url` at a direct API call (ugly but functional) or add a real
+`/e/[slug]/opt-out` (or `/opt-out/[token]`) page in `teta-pi/web` that calls
+the backend and shows a human-readable confirmation — a bare 200 JSON
+response is not something to send a non-technical stranger.
+Status: OPEN, not fixed this session (QA-only).
+
+### 🟠 `/claim` wizard has no path to claim a pre-verified-unclaimed profile (1.11's frontend half doesn't exist)
+Backend (`1.11`, shipped since the last QA pass) correctly 409s
+`POST /businesses` when the name matches an existing `claim_status=
+pre_verified_unclaimed` row, with a real, actionable body — live-verified:
+`{"message":"A pre-verified, unclaimed profile already exists for this
+name. Claim it instead of creating a duplicate.","business_id":"...",
+"slug":"...","claim_url":"/businesses/{id}/claim/domain/start"}`. But
+`teta-pi/web/src/app/claim/page.tsx:189-191` calls `businessApi.create` and
+its `.catch()` swallows **any** error into one generic message: *"Could not
+save your profile — you can retry from your dashboard."* The 409's
+`claim_url`/`business_id` are discarded; grepped all of `teta-pi/web` for
+`claim/domain/start`/`claim/domain/check` — zero references anywhere.
+**Impact:** this is the core mechanic GTM Phase 2 depends on (*"Claimed
+profile unlocks... badge... Loop closes"* — `docs/gtm.md` Phase 2 table). A
+real MCP-server author who receives outreach and clicks through to claim
+their pre-verified profile — the only claim flow the product has — hits a
+dead-end generic error instead of the domain-verification claim step that
+already exists and works on the backend.
+**Fix:** special-case a 409 from `businessApi.create` in `/claim`, read
+`claim_url`/`business_id` from the body, and route into a domain-ownership
+claim step (reuse the existing `/verify/domain/start`+`/check` UI — same
+underlying service, `domain_ownership.py`).
+Status: OPEN, HIGH — GTM Phase 2's core loop mechanic doesn't exist on the
+frontend yet, even though the backend is ready.
+
+### 🟠 `POST /auth/agent-key` — unauthenticated, unlimited, undocumented account+key mint, called by nothing
+`api/app/api/routes/auth.py:347-358` (`create_agent_key`) has no auth
+dependency and no rate limiter of any kind (grepped the file). Live-tested:
+a bare `POST https://api.tetapi.dev/api/v1/auth/agent-key` with zero
+headers/body returns `200` and a fresh, immediately-usable JWT — every
+single call silently creates a new `User` row (`is_agent=True`, a random
+`pk_live_...` key) with no verification, no cost, no limit. Grepped
+`teta-pi/web`, `teta-pi/mcp`, and `teta-pi/pi-cam` in full — **zero
+references anywhere**; this endpoint has existed since the very first
+commit (`83d5fba`, "Add full-stack TETA+PI system") and has never been
+wired to any of our own clients or documented in `docs/api.md`'s Auth
+table. It surfaced in this audit precisely because it's an orphaned
+endpoint no button drives.
+**Impact:** anyone can mint unlimited free accounts + valid bearer tokens,
+unrate-limited — a resource-exhaustion / fake-account vector, and a way to
+sidestep any per-account limiting elsewhere by minting a fresh identity per
+request.
+**Fix (product decision):** wire it up properly behind admin/internal auth
+if it serves a real purpose (agent-account provisioning?), or remove it if
+dead. At minimum, rate-limit it like `/claim`/`/badge`/`/verify-endpoint`
+before it stays reachable from the open internet.
+Status: OPEN, security-relevant, no fix this session.
+
+### 🟡 `DELETE /media/{media_id}` has no UI trigger anywhere
+Backend supports deleting one media item independently of its block
+(confirmed live in `openapi.json`), but grepped `teta-pi/web/src/` in
+full — no call to it anywhere, no "delete photo/file" affordance in
+`BlockDetailModal`/`MediaDisplay`. An owner who uploads the wrong file to a
+block can only delete the whole block (`DELETE /blocks/{id}`, which is
+wired), not just the media.
+Status: OPEN, LOW priority — product gap, not a live bug.
+
+### 🟠 `teta-pi/pi-cam`'s "Get Pi Certificate" is a fully fake feature shown to every new user, and its result never even reaches the real capture pipeline
+`modules/certificate/index.ts` is self-labeled in its own header: *"Phase
+1: симуляція для тестування UI. Phase 2: реальний запит до
+https://ca.picam.app/v1/"*. `requestCACertificate()` does a fake 2-second
+delay, then stores a literal `'SIMULATED_CERT_' + <partial pubkey>` string
+in `SecureStore` as if it were a real certificate, with a fabricated 1-year
+expiry; `registerDevice()` in the same file is a pure stub returning
+`{deviceId:'simulated-device-id', jwtToken:'simulated-jwt'}`. Nothing calls
+`ca.picam.app` except the unreachable `requestCASign`.
+**Front and center, not buried:** the onboarding flow — every new user's
+first run, `app/onboarding.tsx:174-226` — has a "Get Pi Certificate 🟢"
+button with the copy *"Online? We add a Pi Certificate Authority stamp —
+recognized by any C2PA-compatible tool."* This is false today in every
+respect: there is no real CA, nothing is "recognized by" anything. The same
+fake state is shown again in Settings, and the photo-preview screen
+(`app/preview.tsx:236-251`) renders a trust badge gated on it —
+`'Pi Verified · L2 trust'` vs `'Device Signed · L1 trust'` — plus a
+`CA CERTIFICATE: Pi CA · Active` detail row.
+**Mitigating factor found while tracing it:** the wiring is broken in both
+directions — `modules/c2pa/manifest.ts:95` hardcodes `ca_certificate: null`
+unconditionally on every real capture manifest; it never reads the fake
+cert back from `SecureStore`. So in practice `trustLevel` can never resolve
+to `'ca'` on a real capture today — the fake flow is fully disconnected
+from the real pipeline and **cannot currently poison the public trust
+graph, badges, or backend data**. The real device-signature + C2PA +
+upload pipeline (`modules/c2pa`, `modules/account.uploadMedia` →
+`POST /media/device-upload`) is genuine and confirmed working end-to-end
+this session and in the 6.5 pass.
+**Why it's still a real finding:** it's a materially false claim made to
+every new user on their very first run, with a persistent fake "active
+certificate" badge shown afterward, and zero UI indication anywhere that
+it's simulated — the "Phase 1" framing exists only in a source comment no
+user will ever see. For a product whose entire pitch is "don't trust
+claims, trust cryptographic proof," shipping a fabricated crypto-trust
+badge — even one that's currently inert — directly contradicts the
+product's own premise.
+**Fix:** either (a) finish Phase 2 (a real `ca.picam.app` CA service)
+before re-enabling this, or (b) until then, pull the onboarding/settings
+CTA and the L2/CA-certificate UI entirely (Device-Signed L1 is real and
+already good on its own), or at minimum label it "(preview feature, not
+yet verifiable)" so it can't be mistaken for a real trust signal.
+Status: OPEN, HIGH priority for product trust/integrity even though
+current blast radius is UI-only.
+
+### ✅ Confirmed correct, no regressions (checked this pass)
+- Web `/settings` (password/email change, API-key generate, avatar upload,
+  logout-all, delete-account) — all 6 buttons map 1:1 to real
+  `/auth/*` endpoints, verified against `api.ts` + live `openapi.json`.
+- Web `/admin` (Dashboard/Analytics/Users/Claims incl. CSV export + status
+  change/Entities incl. validate/Audit log) — every action in
+  `src/app/admin/page.tsx` maps to a real `adminApi.*` call and a real
+  endpoint; nothing found stubbed.
+- `teta-pi/pi-cam` pairing (`registerWithQR` → `POST /devices/register`)
+  and capture upload (`uploadMedia` → `POST /media/device-upload`,
+  `X-Device-Api-Key` header) — both match the live API exactly, field for
+  field, header name included.
+
 ## ✅ Pi CAM pairs in-app but web never showed it — FIXED 2026-09-11
 
 Owner report: "камера не сінхронізується з аккаунтом на вебі. в додатку є"
