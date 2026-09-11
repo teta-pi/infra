@@ -1712,6 +1712,26 @@ nothing. **Fix:** set `OPENDATABOT_API_KEY` (verifier already implemented in
 `premium.py`).
 Status: OPEN (needs licence key).
 
+## 🔴 1.11 bulk pre-verification import — claim_status VARCHAR(20) too short, live 500
+Found live on prod immediately after PR #20 deployed (2026-09-11): every
+`POST /admin/entities/bulk-preverify` call 500'd with
+`StringDataRightTruncationError` — migration 013 sized
+`businesses.claim_status` as `VARCHAR(20)`, but the value
+`"pre_verified_unclaimed"` is 22 characters. Confirmed via
+`journalctl -u tetapi-api` on prod. Transaction rolled back cleanly each
+time — no corrupted rows — but the feature was completely non-functional
+from the moment it deployed.
+**Fix:** migration `014_claim_status_widen.py` (`teta-pi/api` PR #21) —
+`ALTER COLUMN claim_status TYPE VARCHAR(30)` + matching
+`app/models/business.py` change. Verified via `alembic upgrade 013:014 --sql`
+dry-run (exact expected `ALTER TABLE` statement) and a clean app
+import/OpenAPI build; not exercised against a live/staging Postgres (no DB
+in the worker sandbox) — needs prod verification right after merge+deploy.
+Status: 🔴 PR #21 open, requesting immediate merge — this is an active
+production outage of the just-shipped 1.11 feature, not a normal-cycle fix.
+Manager: re-verify live with a real `bulk-preverify` call once deployed,
+then flip this to CLOSED.
+
 ## Audit — things that are FINE (checked, no action)
 - `ENVIRONMENT=production` set; `dev_token` not exposed by `/auth/magic-link`.
 - No secrets in git history (only placeholder SECRET_KEY / minio defaults in

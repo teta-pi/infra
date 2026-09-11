@@ -6,6 +6,28 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 1.11 hotfix · claim_status VARCHAR(20) too short — live 500 on prod
+Done: URGENT hotfix. Roadmap 1.11's `POST /admin/entities/bulk-preverify`
+(just deployed via `teta-pi/api` PR #20) 500'd on every call —
+`businesses.claim_status` (migration 013) was `VARCHAR(20)`, but
+`"pre_verified_unclaimed"` is 22 characters; Postgres raised
+`StringDataRightTruncationError` on INSERT. Confirmed live via
+`journalctl -u tetapi-api`. New migration `014_claim_status_widen.py`
+widens the column to `VARCHAR(30)` (room for future statuses, not sized
+exactly to today's longest value) + matching `app/models/business.py`
+change. Grepped `claim_status` repo-wide — `schemas/business.py` uses a
+bare `str` with no `max_length`, nothing else was tied to the old length.
+Changed: `teta-pi/api` `alembic/versions/014_claim_status_widen.py` (new),
+`app/models/business.py` — PR [#21](https://github.com/teta-pi/api/pull/21).
+`docs/known-issues.md` (new 🔴 entry, closes once verified).
+Risk: No data was corrupted (the failed INSERTs rolled back cleanly) but the
+1.11 feature was completely dead from the moment it deployed until this
+merges. Not yet verified against a live/staging Postgres — sandbox had no
+DB, only an offline `alembic --sql` dry-run + app-import check.
+Next: owner/manager merge + deploy PR #21 ASAP (production outage, not
+normal review cycle), run `alembic upgrade head` on prod, re-verify live
+with a real `bulk-preverify` call, then close the known-issues entry.
+
 ## 2026-09-11 · 14.5 · Pi CAM sync fix merged, deployed, live-verified — 14.5 closes
 Done: Owner explicitly confirmed merge. Merged `teta-pi/api` PR #19
 (`GET /devices`) first, waited for GitHub Actions deploy, then merged
