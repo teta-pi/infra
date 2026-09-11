@@ -3,6 +3,33 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟠 Pi CAM pairs in-app but web never showed it (2026-09-11)
+
+Owner report: "камера не сінхронізується з аккаунтом на вебі. в додатку є"
+— pairing works from the Pi CAM app, but `/profile` never reflects it.
+
+**Root cause, confirmed via prod DB before touching code:** the backend
+pairing chain (`POST /devices/register` from the app, `POST
+/media/device-upload` for captures) was already fully working — a device
+registered 2026-09-10 12:09 for the owner's own business (`tetakta`), with
+a C2PA-verified capture landing in a public "Pi CAM Captures" block a
+minute later, visible via `GET /businesses/{id}/blocks`. The actual bug:
+**no endpoint ever existed for the web to ask "is a camera already
+paired?"** — `PiCamButton` on `/profile` always rendered "Connect Camera"
+regardless of real state, because it had nothing to check against; there
+was only `POST /devices/generate-token` (start a new pairing) and `POST
+/devices/register` (app-side), no `GET`.
+
+Fix: `teta-pi/api` PR [#19](https://github.com/teta-pi/api/pull/19) —
+`GET /devices` returns `{paired, devices[]}` for the caller's business
+(same owner-lookup as `generate-token`). Companion `teta-pi/web` PR
+[#43](https://github.com/teta-pi/web/pull/43) wires `PiCamButton` to poll
+it on mount + after the QR modal closes, showing "✓ Camera linked" once
+true. **Both PRs open, unmerged** — merging deploys to prod on push to
+`main` per each repo's auto-deploy, so left for explicit owner go-ahead
+rather than self-merged like the docs-only PRs this project usually
+self-merges.
+
 ## 6.5 pre-GTM full QA (2026-09-06)
 
 Full E2E QA pass before GTM launch, per `docs/gtm.md` §Execution checklist +
