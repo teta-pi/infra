@@ -85,7 +85,22 @@ request.
 if it serves a real purpose (agent-account provisioning?), or remove it if
 dead. At minimum, rate-limit it like `/claim`/`/badge`/`/verify-endpoint`
 before it stays reachable from the open internet.
-Status: OPEN, security-relevant, no fix this session.
+Status: ✅ **CLOSED 2026-09-11** (session 15.4, tracked as `docs/security.md`
+S-15) — endpoint **deleted outright**, [api PR #23](https://github.com/teta-pi/api/pull/23).
+Re-confirmed independently of this audit's own grep: zero call-sites in
+fresh `web`/`mcp`/`pi-cam`/WP-plugin checkouts, unchanged since the repo's
+first commit (`83d5fba`), and `is_agent` has no admin-provisioning flow to
+gate behind — so removal (not `require_admin`) was the clean fix, same call
+already made for the analogous dead `/auth/register` endpoint above. The two
+probe accounts this audit's own live test created
+(`agent-e4f27342559dced1@teta-pi.agent` 15:06,
+`agent-df2830672772c722@teta-pi.agent` 15:14) were deactivated
+(`is_active=false`, rows kept per append-only discipline) after owner
+confirmation. A third `is_agent` row, `agent@tetapi.dev` (2026-07-04,
+`role=admin`), was checked and confirmed **legitimate** — seeded in migration
+`007_roles_admin_audit.py` as the founder-designated "operations agent"
+admin account, unrelated, left untouched. Live-verify after deploy: the
+endpoint should 404, not 200.
 
 ### 🟡 `DELETE /media/{media_id}` has no UI trigger anywhere
 Backend supports deleting one media item independently of its block
