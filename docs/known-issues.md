@@ -1712,25 +1712,46 @@ nothing. **Fix:** set `OPENDATABOT_API_KEY` (verifier already implemented in
 `premium.py`).
 Status: OPEN (needs licence key).
 
-## 🔴 1.11 bulk pre-verification import — claim_status VARCHAR(20) too short, live 500
-Found live on prod immediately after PR #20 deployed (2026-09-11): every
+## ✅ 1.11 bulk pre-verification import — VARCHAR(20) live-500 CLOSED, frontend indicator still open
+Two issues tracked together since they landed in the same feature window:
+
+**1. `claim_status VARCHAR(20)` too short — CLOSED 2026-09-11 (manager
+live-verified).** Migration 013 sized `businesses.claim_status` as
+`VARCHAR(20)`, but `"pre_verified_unclaimed"` is 22 characters — every
 `POST /admin/entities/bulk-preverify` call 500'd with
-`StringDataRightTruncationError` — migration 013 sized
-`businesses.claim_status` as `VARCHAR(20)`, but the value
-`"pre_verified_unclaimed"` is 22 characters. Confirmed via
-`journalctl -u tetapi-api` on prod. Transaction rolled back cleanly each
-time — no corrupted rows — but the feature was completely non-functional
-from the moment it deployed.
-**Fix:** migration `014_claim_status_widen.py` (`teta-pi/api` PR #21) —
-`ALTER COLUMN claim_status TYPE VARCHAR(30)` + matching
-`app/models/business.py` change. Verified via `alembic upgrade 013:014 --sql`
-dry-run (exact expected `ALTER TABLE` statement) and a clean app
-import/OpenAPI build; not exercised against a live/staging Postgres (no DB
-in the worker sandbox) — needs prod verification right after merge+deploy.
-Status: 🔴 PR #21 open, requesting immediate merge — this is an active
-production outage of the just-shipped 1.11 feature, not a normal-cycle fix.
-Manager: re-verify live with a real `bulk-preverify` call once deployed,
-then flip this to CLOSED.
+`StringDataRightTruncationError` from the moment PR #20 deployed (confirmed
+via `journalctl -u tetapi-api` on prod). Transaction rolled back cleanly
+each time, no corrupted rows. Fixed by migration `014_claim_status_widen.py`
+(`teta-pi/api` PR #21, `ALTER COLUMN … TYPE VARCHAR(30)` + matching
+`app/models/business.py` change), merged and deployed 2026-09-11. **Manager
+live-verified post-deploy**: column confirmed `VARCHAR(30)` via prod psql;
+`POST /admin/entities/bulk-preverify` with a real test item → `200`, real
+`business_id`/`profile_url`/`opt_out_url`/`badge_url` returned;
+`GET /businesses/by-slug/{slug}/public` confirmed `claim_status:
+"pre_verified_unclaimed"`, `pre_verified_unclaimed: true`; `POST
+/{id}/opt-out?token=…` confirmed `200 {"status":"opted_out"}` (used to
+remove the manager's own test row — unpublished, not deleted, matches the
+audit-trail design). `GET /search?q=…` for the test row's name returned
+`[]` — not yet root-caused (could be query-matching behavior unrelated to
+1.11, not re-tested with a real top-500-style name); worth a quick check
+before Phase 2 outreach actually starts, not a blocker for this entry.
+
+**2. `/e/[slug]` has no visual pre-verified indicator yet — still OPEN.**
+The API returns `claim_status`/`pre_verified_unclaimed` in every relevant
+payload (public profile, agent preview, search), but nothing in
+`teta-pi/web` renders it — a visitor/agent hitting the actual page can't
+yet see the difference from a real self-claim, only a direct API caller
+can. Needs its own `teta-pi/web` frontend task before Phase 2 outreach
+sends real messages (an unclaimed profile with no visible disclosure would
+violate the GTM honesty guardrail).
+
+Also worth a deliberate look later, not a bug: pre-verified rows are left
+visible in default `/search` (not hidden) since the whole outreach mechanic
+depends on agents finding them — revisit if it dilutes search relevance
+once there are hundreds of thin imported rows.
+Status: backend feature (endpoint + schema + live 500) fully closed and
+prod-verified. Remaining before Phase 2 outreach: (a) `teta-pi/web` task
+for the `/e/[slug]` indicator, (b) quick look at the `/search` miss above.
 
 ## Audit — things that are FINE (checked, no action)
 - `ENVIRONMENT=production` set; `dev_token` not exposed by `/auth/magic-link`.

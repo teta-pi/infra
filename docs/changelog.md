@@ -6,6 +6,38 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 1.11 · bulk pre-verification import (GTM Phase 2 blocker)
+Done: `POST /admin/entities/bulk-preverify` (`teta-pi/api` PR #20) — bulk-creates
+`claim_status=pre_verified_unclaimed` entity profiles from public metadata
+(GitHub org / domain / npm package, the same top-500 dataset
+`scripts/gtm/pull_top500.py` pulls), so `scripts/gtm/outreach_queue.py`'s
+`profile_url`/`opt_out_url`/`badge_url` stop being placeholders and its
+`approve` command can stop refusing every item. New `businesses.claim_status`
+(`self_registered|pre_verified_unclaimed|claimed|opted_out`) +
+`pre_verified_source` jsonb (migration 013), surfaced on the public
+`/e/[slug]` payload/agent-preview/search — never mistaken for a self-claim.
+`verification_level`/`registry_status` untouched (still L0, per
+verification-rework.md). Real-owner claim path (`POST /{id}/claim/domain/
+start`+`/check`) reuses the existing domain-ownership service instead of new
+merge logic; `POST /businesses` 409s onto a pre-verified slug instead of
+duplicating it. One-click unauthenticated `/opt-out?token=…` per the GTM
+guardrail.
+Changed: `teta-pi/api` `routes/admin.py`, `routes/businesses.py`,
+`routes/search.py`, `models/business.py`, `alembic/versions/013_*`,
+`docs/api.md`/`docs/database.md` (both repos).
+Risk: not live-verified on prod/staging — sandbox had no Postgres/Docker
+available, only import + OpenAPI-schema-build tested (see known-issues.md).
+`/e/[slug]`'s visual pre-verified indicator needs a `teta-pi/web` follow-up —
+the API returns `claim_status`/`pre_verified_unclaimed` but nothing renders it
+yet. Pre-verified rows are left visible in default `/search` (deliberate, not
+an oversight) — worth revisiting once there are hundreds of thin rows.
+Next: merge PR #20, run migration 013 on prod, create 2-3 real test entries
+(well-known MCP servers) via the new endpoint, confirm `/e/[slug]` returns the
+pre-verified flag and `/search` surfaces them; then a `teta-pi/web` task to
+actually render the indicator; then flip `outreach_queue.py`'s
+`links_are_placeholders` logic in a small follow-up infra PR once real links
+are confirmed working end to end.
+
 ## 2026-09-11 · 1.11 hotfix · claim_status VARCHAR(20) too short — live 500 on prod
 Done: URGENT hotfix. Roadmap 1.11's `POST /admin/entities/bulk-preverify`
 (just deployed via `teta-pi/api` PR #20) 500'd on every call —
@@ -27,6 +59,29 @@ DB, only an offline `alembic --sql` dry-run + app-import check.
 Next: owner/manager merge + deploy PR #21 ASAP (production outage, not
 normal review cycle), run `alembic upgrade head` on prod, re-verify live
 with a real `bulk-preverify` call, then close the known-issues entry.
+
+## 2026-09-11 · manager · 1.11 merged, hotfixed, live-verified end to end
+Done: Reviewed and merged `teta-pi/api` PR #20 (1.11 backend), then hit the
+live VARCHAR(20) 500 on first real call — merged hotfix PR #21 within the
+same session, waited for deploy, and live-verified the full loop on prod:
+`POST /admin/entities/bulk-preverify` → 200 with real `business_id`/
+`profile_url`/`opt_out_url`/`badge_url`; `GET .../public` → confirmed
+`claim_status="pre_verified_unclaimed"`, `pre_verified_unclaimed=true`;
+`POST /{id}/opt-out?token=…` → 200, used to clean up the test row
+(unpublished, not deleted). `GET /search` for the test name returned `[]`,
+not yet root-caused — flagged in known-issues, not blocking. Resolved two
+rounds of `docs/changelog.md`/`docs/known-issues.md` merge conflicts
+between this session's docs and the parallel 1.11/hotfix worker sessions'
+own docs PRs (#94, #96) — additive both times, per the standing
+infra-docs-merge-conflicts policy.
+Changed: `teta-pi/api` main (PR #20 + #21 merged, migrations 013+014 live
+on prod). `docs/known-issues.md` (1.11 entry consolidated to reflect live
+verification), `docs/changelog.md` (this entry).
+Risk: None new — merge + live-verification of already-reviewed code.
+Next: `teta-pi/web` task for the `/e/[slug]` pre-verified visual indicator
+(GTM honesty guardrail, blocks real Phase 2 outreach until it exists);
+quick look at the `/search` miss noted above; then flip
+`outreach_queue.py`'s `links_are_placeholders` logic once both are done.
 
 ## 2026-09-11 · 14.5 · Pi CAM sync fix merged, deployed, live-verified — 14.5 closes
 Done: Owner explicitly confirmed merge. Merged `teta-pi/api` PR #19
@@ -116,6 +171,8 @@ explicitly confirmed by the owner before executing (auto-mode classifier
 blocked the first attempt as a prod write, re-asked and got explicit yes).
 Next: 1.11 (bulk pre-verification import) boot handed to the owner
 separately — still the real GTM Phase 2 blocker, unaffected by this sweep.
+**Update 2026-09-11 (1.11 session):** done, see the changelog entry above —
+`teta-pi/api` PR #20.
 
 ## 2026-09-10 · 14.5 · build + regression verification of camera-sync work
 Done: Verified the 14.5 onboarding camera-sync work from earlier today

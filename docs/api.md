@@ -41,6 +41,21 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
     legal entity (`businesses.legal_entity_id`); requires the caller to own
     both entities and the legal entity to already be `registry_status=verified`.
     Publicly disclosed via `legal_entity` in the public/preview payloads, not hidden.
+  - `POST /{id}/claim/domain/start` + `/claim/domain/check` (roadmap 1.11) —
+    claim path for a `claim_status=pre_verified_unclaimed` entity (bulk-imported,
+    see `/admin/entities/bulk-preverify` below): no owner check (the current
+    owner is the system import account), gated on `claim_status` instead;
+    reuses the same `domain_ownership` service as the normal
+    `/verify/domain/*` flow. On success transfers `owner_id` to the caller,
+    sets `claim_status=claimed`, writes `domain_verified` + `claimed`
+    verification_events. `POST /businesses` itself 409s (with the existing
+    entity's id/slug) instead of creating a duplicate when the slug already
+    belongs to a `pre_verified_unclaimed` row.
+  - `POST /{id}/opt-out?token=…` — unauthenticated one-click removal for a
+    pre-verified profile (GTM Phase 2 guardrail: no form, no login). Token is
+    the `opt_out_token` minted at import time; on match, unpublishes
+    (`is_published=is_public=false`, `claim_status=opted_out`) rather than
+    deleting.
   - `POST /{id}/publish` no longer gates on registry verification (entities are
     already published at creation).
   - `verification_level` (`none|registry|email|domain|partial|full`) is derived
@@ -64,6 +79,29 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
 `POST /claim` (201 + position, 409 idempotent, rate-limit 5/min/IP),
 `GET /claim/stats` (total / pay_ready / pct).
 
+## Universal Tag — `routes/tag.py` (12.5b, `docs/universal-tag.md`, `docs/security.md` B5)
+Anonymous, unauthenticated, public — not under `/api/v1` (registered without a
+prefix, same as `badge.router`).
+- `POST /v1/tag-ping` — beacon fired once per page load by `tag.js` (Part A).
+  Body `{entity_id, page_url, page_title?, referrer?}`. Always `204`, even for
+  an unknown `entity_id` — never discloses whether an entity exists. In-memory
+  IP rate limiter (same pattern as `routes/badge.py`; Redis migration for
+  multi-worker tracked as S-10). On a known published+public entity, appends
+  `page_url` (+ title) to a Redis sorted set `tag_pages:{business_id}`, capped
+  at 200 members via `ZREMRANGEBYRANK`, and increments
+  `tag_impressions:{business_id}` — no new Postgres table, no per-hit DB row
+  (12.5b storage-shape decision: Redis, not a DB table; same (a)/(b) choice as
+  2.4).
+- `GET /wk/{entity_id}/agent.json` — schema.org JSON-LD, same shape `tag.js`
+  injects client-side. Public+published entities only, `404` otherwise.
+- `GET /wk/{entity_id}/agent-card.json` — richer agent-facing payload (trust
+  level, proof/profile URLs, public blocks), mirrors
+  `/businesses/{id}/preview`.
+- `GET /wk/{entity_id}/llms.txt` — plain-text summary, `llms.txt` convention.
+- All three `wk` routes: `Cache-Control: public, max-age=300` (spec: "cache
+  ~5 min"). Reverse-proxied from the entity's own domain via
+  `verify.tetapi.dev` once 12.5c ships the nginx vhost + DNS-record checker.
+
 ## Admin (back office) — `routes/admin.py`, all `require_admin` + audited
 `GET /admin/stats`, `GET /admin/analytics` (GoatCounter traffic bridge, see
 `docs/analytics.md`), `GET /admin/product-metrics` (growth trends, entity_type
@@ -73,6 +111,19 @@ mix, claim→verified funnel — see `docs/analytics.md`), `/admin/users`
 (disposable email / dup registry_id / country mismatch), `POST
 /admin/entities/{id}/validate` (re-check registry → append-only event),
 `/admin/claims`, `/admin/entities`, `/admin/audit-log`.
+
+`POST /admin/entities/bulk-preverify` (roadmap 1.11, GTM Phase 2 blocker) —
+body `{items: [{name, entity_type?, country?, description?, domain?,
+github_org?, npm_package?}]}`. Each item needs at least one public anchor
+(`domain`/`github_org`/`npm_package`) — never creates an entity from a bare
+name. Creates `claim_status=pre_verified_unclaimed` rows owned by the system
+account `bulk-import@tetapi.dev` (created lazily), reuses
+`routes/businesses.py::_slugify` and skips (doesn't duplicate) an existing
+slug. Writes a `pre_verified_imported` verification_event per row plus one
+`admin_audit_log` entry for the whole batch. Returns per-item
+`profile_url`/`opt_out_url`/`badge_url` (real links, not the placeholders
+`scripts/gtm/outreach_queue.py` in `teta-pi/infra` has been building until
+now) so the outreach queue's `approve` command can stop refusing them.
 
 ## Services (`api/app/services/`)
 `ai.py` (OpenAI embeddings + categories), `bitcoin.py` (OpenTimestamps, not

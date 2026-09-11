@@ -185,15 +185,20 @@ broken claim form kills the loop at step 2.** Claim flow shipped in
 > backlash would invert the loop — these guardrails are not optional.
 
 **Session mapping:**
-- **`1.7 backend · bulk pre-verification import`** (new) — step 1 needs a
-  way to create L1 entity profiles programmatically from the Phase-1
-  dataset without going through the human claim UI per-entity. Check first
-  whether the existing entity-creation API (used by `3.4`'s claim flow)
-  already supports this via a script hitting it 500 times, or whether it
-  needs a dedicated admin bulk-import endpoint (`require_admin` +
-  `admin_audit_log`, same pattern as everything else in `routes/admin.py`).
-  Scope this properly before building — likely a small new endpoint, not a
-  big one.
+- **`1.11 backend · bulk pre-verification import`** (renumbered from the
+  `1.7` placeholder above once it got its own roadmap row, 2026-08-xx
+  housekeeping) — step 1 needs a way to create L1 entity profiles
+  programmatically from the Phase-1 dataset without going through the human
+  claim UI per-entity. **Done 2026-09-11**, `teta-pi/api` PR #20: went with a
+  dedicated admin bulk-import endpoint (`POST /admin/entities/
+  bulk-preverify`, `require_admin` + `admin_audit_log`, same pattern as the
+  rest of `routes/admin.py`) rather than a script hitting the normal
+  entity-creation API 500 times — the resulting profiles need a distinct
+  `claim_status=pre_verified_unclaimed` flag the normal creation path
+  doesn't set, so a thin wrapper script would've had nothing to wrap. Not
+  live-verified yet — see `docs/known-issues.md` "1.11 bulk pre-verification
+  import" and `docs/roadmap.md` row 1.11 for what's still open before real
+  outreach starts.
 - Step 2 (outreach) — **owner: Bob**, one message per author, using the
   guardrail language above verbatim. Not automatable without owner review
   of every message (this is exactly the kind of "acting on the plan"
@@ -325,7 +330,7 @@ which isn't a DB row anywhere else.
 | n.m | Task | Status | Files |
 |---|---|---|---|
 | 1.10 | backend · badge SVG endpoint + impression counter | ⚪ queued, needed before 0.2 | new route, likely `routes/badge.py` |
-| 1.11 | backend · bulk pre-verification import | ⚪ queued, after 1.10/2.6, before Phase 2 outreach | new admin endpoint or script against existing API |
+| 1.11 | backend · bulk pre-verification import | 🔄 code done 2026-09-11 (`teta-pi/api` PR #20), not yet prod-verified — see `docs/known-issues.md` | new admin endpoint (`POST /admin/entities/bulk-preverify`), migration 013 |
 | 2.5 | mcp · MCP ecosystem listings prep (server.json, metadata pack, tool description rewrite, agent.json bump) | ⚪ queued, unblocks Phase 0 submissions | `mcp/src/index.ts`, `mcp/server.json` (new), both `agent.json` files |
 | 2.6 | mcp · proof_url in every tool response | ⚪ queued, small | `mcp/src/index.ts` |
 | 8.4 | analytics · pre-verified/claimed profile + badge impression metrics | ⚪ after 1.10 + 1.11 exist | `routes/admin.py` product-metrics, `admin/page.tsx` |
