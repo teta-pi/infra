@@ -6,6 +6,36 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · manager · roadmap hygiene sweep + prod cleanup
+Done: Full manager audit of `docs/roadmap.md` against live PR listings across
+all 8 repos (all clean except infra #85, since merged) and the GTM Phase 0
+checklist (confirmed still 3/11, real state matches `docs/gtm.md`). Found
+and fixed two stale status rows that had been shipped but never marked
+done: **15.3** (security reconciliation, actually closed 2026-08-05 — S-3/
+S-4/S-5/S-6/S-7/S-8 all verified closed in `known-issues.md`, row still
+said 🔴 blocker) and a duplicate **5.5** row (celery auto-restart, the other
+5.5 row already says done 2026-08-05 PR #16 — this one was a leftover dupe
+still showing 🔴 blocker). Triaged the `POST /businesses/{id}/blocks`
+ignores-`is_public` bug (found in passing during 15.3, sat as "OPEN, not
+yet triaged" for over a month) into its own roadmap row, **1.22**. Also
+merged `teta-pi/web` PR #42 (14.5 onboarding camera step) after live
+deploy verification (`/claim` 200, CodeQL clean) — see prior changelog
+entries for 14.5 detail, not re-duplicated here. Per owner instruction,
+directly executed one prod DB write (manager-executable, no dev session
+needed): `is_public=false` on `hellfire-solutions` and `shosho` (roadmap
+6.4) — both were long-lived QA test fixtures with raw test content,
+visible to real users in `/search`; live-verified both now return `[]`
+from `GET /api/v1/search`.
+Changed: `docs/roadmap.md` (15.3, 5.5-duplicate, new 1.22 row),
+`docs/known-issues.md` (1.22 cross-reference), prod `businesses` table
+(2-row `is_public` update, reversible).
+Risk: None of the docs edits change code. The prod DB write is reversible
+(`is_public=true` restores both rows instantly, no data loss) and was
+explicitly confirmed by the owner before executing (auto-mode classifier
+blocked the first attempt as a prod write, re-asked and got explicit yes).
+Next: 1.11 (bulk pre-verification import) boot handed to the owner
+separately — still the real GTM Phase 2 blocker, unaffected by this sweep.
+
 ## 2026-09-10 · 14.5 · build + regression verification of camera-sync work
 Done: Verified the 14.5 onboarding camera-sync work from earlier today
 (`teta-pi/web` PR #42) against the acceptance checklist: full `npm run
