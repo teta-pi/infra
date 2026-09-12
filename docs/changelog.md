@@ -6,6 +6,48 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-12 · 1.24/2.10 · fix teta_verify_endpoint 401 — MCP service-key auth
+Done: closed a 🟠 HIGH finding open since the 6.5 QA pass (2026-09-06) —
+`teta_verify_endpoint`, one of the 7 advertised MCP tools and the one
+described as trust-critical ("run this before your agent routes a request
+or a payment to it"), had returned 401 on every single call since
+2026-07-14 (the 1.7 SSRF fix added `Depends(get_current_user)` to
+`/verify-endpoint`; MCP has never had an auth mechanism of its own, S-11).
+Two months, silently. Owner was asked directly and chose: give MCP its own
+service-level key, not relax the route back to anonymous. Turned out to
+need **zero API code change** — `get_current_user` already accepts any
+active account's `pk_live_` key generically, and the route's `current_user`
+param is never read in the body (a pure "any active account" gate, not an
+ownership check) — so a single dedicated service account does the job
+without building the full 2.2 scoped-key system for one internal caller.
+Minted `mcp-service@tetapi.dev` directly in prod Postgres (`is_agent=true`,
+no password, owns nothing), wired its key into `tetapi-mcp.service`'s
+`Environment=TETA_PI_SERVICE_API_KEY`, restarted. `mcp/src/client.ts`'s
+`verifyEndpoint()` sends it only on that one call. Also fixed a latent
+`apiFetch` header-merge bug this surfaced (`...init` spread after the
+computed `headers` would've clobbered `Content-Type` for any caller
+passing its own headers — none had before now).
+Changed: `teta-pi/mcp` `src/client.ts`, `src/index.ts`, `package.json`,
+`server.json` (1.5.3 → 1.5.4, PR #9, merged, deployed) · `teta-pi/api`
+`app/api/routes/endpoint_verification.py` (comment only, PR #24, merged) ·
+`docs/decisions.md` (full rationale), `docs/known-issues.md` (closed),
+`docs/roadmap.md` (1.24/2.10 row) · prod: one `users` row +
+`/etc/systemd/system/tetapi-mcp.service` (not in git), both done with
+explicit owner go-ahead per step.
+Risk: low — the service account owns no businesses/claims, so a leaked key's
+blast radius is "can call any-account-gated routes," equivalent to a free
+signup, not a privilege escalation. Live-verified end to end: a real
+`teta_verify_endpoint` MCP call against prod now returns a structured
+verdict (`FAILED — endpoint did not respond`, for a non-agent test URL)
+instead of `API 401: Not authenticated`.
+Next: found in passing, spawned as a separate task, not fixed here —
+`POST /auth/agent-key` (singular, different from 2.2's planned
+`/auth/agent-keys`) is unauthenticated, unlimited, and mints a new
+account+key on every call with zero rate-limiting; already tracked in
+known-issues.md, worth a dedicated security session.
+
+---
+
 ## 2026-09-12 · 3.frontend (1.11 chain) · pre-verified-unclaimed disclosure on /e/[slug] + /search
 Done: closes the last open piece of 1.11 (GTM honesty guardrail) — a
 bulk-imported pre-verified profile can no longer be mistaken for a

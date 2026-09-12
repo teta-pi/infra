@@ -216,7 +216,7 @@ same rules of engagement as `docs/security.md` §"Rules of engagement". This is
 a QA pass, not a fix session — nothing below was fixed here except where
 explicitly marked; new findings go to whoever owns that direction next.
 
-### 🟠 NEW — `teta_verify_endpoint` is permanently broken via MCP (401 on every call)
+### ✅ CLOSED 2026-09-12 (session 1.24/2.10) — `teta_verify_endpoint` is permanently broken via MCP (401 on every call)
 Live: MCP session, `teta_verify_endpoint(endpoint_url:"https://example.com/agent")`
 → `{"isError":true, text:"API 401: {\"detail\":\"Not authenticated\"}"}`. Root
 cause: `api/app/api/routes/endpoint_verification.py:98-101`'s `verify_endpoint`
@@ -239,7 +239,18 @@ service-level API key baked into its env so it can authenticate on behalf of
 anonymous callers, or (b) relax `/verify-endpoint`'s auth requirement back to
 unauthenticated-but-rate-limited (like `/v1/tag-ping`/badge) now that the SSRF
 fix's host-validation covers the core risk independent of auth.
-Status: OPEN, HIGH severity, no fix planned this session (QA-only).
+**CLOSED 2026-09-12** — owner chose (a). `teta-pi/mcp` PR #9 +
+`teta-pi/api` PR #24 (comment only, no API code change needed —
+`get_current_user` already accepts any active account's `pk_live_` key
+generically). One dedicated `mcp-service@tetapi.dev` service account +
+`pk_live_` key minted directly in prod Postgres, wired into
+`tetapi-mcp.service`'s `Environment=` as `TETA_PI_SERVICE_API_KEY`. Full
+rationale in `docs/decisions.md` (2026-09-11 entry) — including why this
+skips the full 2.2 scoped-key system for now. **Live-verified**: a real
+`teta_verify_endpoint` MCP call against prod now returns a structured
+verdict (`FAILED — endpoint did not respond`, for a non-agent test URL) —
+no more 401, no more `Not authenticated`.
+Status: CLOSED.
 
 ### 🟡 NEW — `teta_verify_entity`/`teta_get_proof`/`teta_get_profile`/`teta_verify_claim` proof links point at raw JSON, not the public page
 `teta_search`/`teta_resolve_intent` proof links correctly go to
