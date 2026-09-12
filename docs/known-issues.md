@@ -3,6 +3,23 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+### ✅ `teta-pi/pi-cam` Gallery tab never refreshed after a new photo (14.9, 2026-09-12)
+Owner report: "gallery doesn't work, photos aren't added." Root cause:
+`app/(tabs)/gallery.tsx`'s photo-load `useEffect` ran once on mount
+(deps `[permission, loadPhotos]`), and expo-router `Tabs` keep every
+screen mounted (no `unmountOnBlur`) — so a photo taken on Camera and
+correctly saved to the device library never appeared in an already-open
+Gallery tab. Only a full app restart remounted the screen and surfaced
+the backlog, which reads exactly like "the feature doesn't work."
+`camera.tsx` already solved the identical class of problem for its own
+settings read (`useFocusEffect` re-reading on tab focus) — Gallery just
+never had the equivalent for its own photo list.
+**Fix:** `useFocusEffect(() => loadPhotos())`, `teta-pi/pi-cam` PR
+[#8](https://github.com/teta-pi/pi-cam/pull/8). `tsc --noEmit` clean;
+not build-verified locally (sandbox can't reach `dl.google.com`, see
+14.4) — owner to confirm via EAS build.
+Status: CLOSED 2026-09-12.
+
 ## 6.6 — UI-button ↔ backend ↔ camera-app sync audit (2026-09-11)
 
 Prompted by the PiCamButton root cause above (a button that couldn't reflect
