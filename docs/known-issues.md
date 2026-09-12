@@ -90,6 +90,13 @@ claim step (reuse the existing `/verify/domain/start`+`/check` UI — same
 underlying service, `domain_ownership.py`).
 Status: OPEN, HIGH — GTM Phase 2's core loop mechanic doesn't exist on the
 frontend yet, even though the backend is ready.
+**Update 2026-09-12** (`teta-pi/web` PR #44): `/e/[slug]` now shows a
+"Is this you? Claim this profile" CTA on pre-verified-unclaimed profiles,
+but it's a placeholder (expands a "coming soon" note) — same root gap as
+this entry, not a fix for it. Whoever picks this up should wire both
+entry points (the `/claim` 409 case above, and this CTA) into the same
+real domain-ownership claim step in one pass rather than building it
+twice.
 
 ### 🟠 `POST /auth/agent-key` — unauthenticated, unlimited, undocumented account+key mint, called by nothing
 `api/app/api/routes/auth.py:347-358` (`create_agent_key`) has no auth
@@ -1897,7 +1904,7 @@ nothing. **Fix:** set `OPENDATABOT_API_KEY` (verifier already implemented in
 `premium.py`).
 Status: OPEN (needs licence key).
 
-## ✅ 1.11 bulk pre-verification import — VARCHAR(20) live-500 CLOSED, frontend indicator still open
+## ✅ 1.11 bulk pre-verification import — CLOSED (VARCHAR(20) live-500 + frontend indicator)
 Two issues tracked together since they landed in the same feature window:
 
 **1. `claim_status VARCHAR(20)` too short — CLOSED 2026-09-11 (manager
@@ -1917,26 +1924,39 @@ live-verified post-deploy**: column confirmed `VARCHAR(30)` via prod psql;
 /{id}/opt-out?token=…` confirmed `200 {"status":"opted_out"}` (used to
 remove the manager's own test row — unpublished, not deleted, matches the
 audit-trail design). `GET /search?q=…` for the test row's name returned
-`[]` — not yet root-caused (could be query-matching behavior unrelated to
-1.11, not re-tested with a real top-500-style name); worth a quick check
-before Phase 2 outreach actually starts, not a blocker for this entry.
+`[]` at the time — not root-caused then. **Retested 2026-09-12** with a
+real top-500-style name (`Session 1.11 Test Server`) while verifying the
+frontend indicator below: `GET /search?q=Session%201.11%20Test%20Server`
+returned the row correctly. Whatever caused the earlier `[]` looks
+query-specific, not a standing bug — no longer treated as an open item,
+but flag it if it recurs with a different query shape.
 
-**2. `/e/[slug]` has no visual pre-verified indicator yet — still OPEN.**
-The API returns `claim_status`/`pre_verified_unclaimed` in every relevant
-payload (public profile, agent preview, search), but nothing in
-`teta-pi/web` renders it — a visitor/agent hitting the actual page can't
-yet see the difference from a real self-claim, only a direct API caller
-can. Needs its own `teta-pi/web` frontend task before Phase 2 outreach
-sends real messages (an unclaimed profile with no visible disclosure would
-violate the GTM honesty guardrail).
+**2. `/e/[slug]` has no visual pre-verified indicator — CLOSED 2026-09-12,
+`teta-pi/web` PR #44.** `PublicProfile`/`SearchResult` types gained
+`claim_status`/`pre_verified_unclaimed`; `/e/[slug]` now renders an
+explicit mono "PRE-VERIFIED · UNCLAIMED" banner directly under
+`AttestationBar` (dashed border, `GR_MUTED` — deliberately not
+seal-colored, since the flag means less certainty, not more) with a short
+explanation and an "Is this you? Claim this profile" CTA; `/search`
+result rows (mobile + desktop) carry a matching small dashed tag.
+Live-verified against prod: created a temp `pre_verified_unclaimed` row
+via `bulk-preverify`, confirmed the banner and search tag render on both
+desktop and mobile, then removed the row via `/opt-out`. **CTA is a
+placeholder only** — clicking it expands a "coming soon" note rather than
+starting a real domain-ownership claim: the public payload doesn't expose
+the entity id `POST /{id}/claim/domain/start` needs, and this repo's own
+`/claim` page is the self-registration wizard, not a claim flow for an
+*existing* entity. Tracked as a deliberate follow-up (see roadmap.md
+1.11), not silently skipped.
 
 Also worth a deliberate look later, not a bug: pre-verified rows are left
 visible in default `/search` (not hidden) since the whole outreach mechanic
 depends on agents finding them — revisit if it dilutes search relevance
 once there are hundreds of thin imported rows.
-Status: backend feature (endpoint + schema + live 500) fully closed and
-prod-verified. Remaining before Phase 2 outreach: (a) `teta-pi/web` task
-for the `/e/[slug]` indicator, (b) quick look at the `/search` miss above.
+Status: fully closed — backend (endpoint + schema + live 500) and frontend
+(visual indicator on `/e/[slug]` + `/search`) both prod-verified. Only
+remaining follow-up before Phase 2 outreach: the real domain-ownership
+claim UI for an existing pre-verified entity (point 2 above).
 
 ## Audit — things that are FINE (checked, no action)
 - `ENVIRONMENT=production` set; `dev_token` not exposed by `/auth/magic-link`.
