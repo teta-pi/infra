@@ -37,7 +37,17 @@ at exactly the moment (cold outreach) reputational risk is highest.
 `/e/[slug]/opt-out` (or `/opt-out/[token]`) page in `teta-pi/web` that calls
 the backend and shows a human-readable confirmation — a bare 200 JSON
 response is not something to send a non-technical stranger.
-Status: OPEN, not fixed this session (QA-only).
+**CLOSED 2026-09-11 (1.23, `teta-pi/api` PR #22)** — backend half: all
+three links now built from `settings.app_url` / `settings.api_url`
+(`profile_url` → `app.tetapi.dev/e/{slug}`, `opt_out_url` →
+`app.tetapi.dev/e/{slug}/opt-out?token=…`, `badge_url` →
+`api.tetapi.dev/badge/{slug}` — badge domain confirmed by live curl, the
+old `tetapi.dev/badge/…` also 404'd). Same settings now back `tag.py`,
+`intent.py`, `resolver.py`, `auth.py` links, so no `tetapi.dev/e/…` literal
+is left anywhere in `app/`. **Still open as a frontend dependency:** the
+`/e/[slug]/opt-out` page in `teta-pi/web` does not exist (404) — tracked
+as 3.x, must call `POST /businesses/{id}/opt-out?token=` after resolving
+the slug via `GET /businesses/by-slug/{slug}/public`.
 
 ### 🟠 `/claim` wizard has no path to claim a pre-verified-unclaimed profile (1.11's frontend half doesn't exist)
 Backend (`1.11`, shipped since the last QA pass) correctly 409s
