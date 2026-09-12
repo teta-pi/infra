@@ -6,6 +6,30 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-12 · 6.7 · "block creation/upload/pi-camera doesn't work" — diagnosed + fixed
+Done: Owner reported block creation, photo upload, and pi-camera block
+creation all broken. Live-verified block creation and file upload both work
+fine (`POST /businesses/{id}/blocks` 201, `POST /media/upload` 200,
+tested directly against prod). Root-caused the real complaint: `/profile`'s
+"Upload from PI Camera" button was pure UI simulation since 1.20-web
+(web PR #17, 2026-07-27) — `setTimeout` + fake "done" state, never called
+the backend, never persisted. Traced why it could never be finished as
+originally planned: the real device-upload pipeline always writes into one
+find-or-create "Pi CAM Captures" block per entity, so a button that let a
+user "pull a capture into this specific block" was never architecturally
+possible — not a wiring gap, a premise mismatch. Removed it.
+Changed: `teta-pi/web` PR #45 (`src/app/profile/page.tsx` —
+`handleFileUpload` simplified to file-only, fake button + dead branch
+removed, one-line note added). `docs/known-issues.md` new entry.
+Risk: Low — removes a component confirmed to never write real data; the
+real file-upload path and the real `PiCamButton` (pairing) are untouched.
+Not live-click-through-verified (no test-account credentials this
+session, recurring limitation) — reasoning from source + live API checks
+is unambiguous, but flag for a click-through once deployed.
+Next: merge PR #45, live-verify post-deploy; consider whether `/profile`
+should surface the "Pi CAM Captures" block more prominently once it exists
+(discoverability), separate from this fix.
+
 ## 2026-09-12 · 14.9 · gallery never refreshes after taking a photo
 Done: Owner reported the Gallery tab "doesn't work, photos aren't
 added." Read `app/(tabs)/gallery.tsx` and `app/(tabs)/camera.tsx` in

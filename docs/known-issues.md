@@ -3,6 +3,47 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+### ✅ FIXED 2026-09-12 — Owner report "block creation, photo upload, block creation via pi camera doesn't work at all"
+Investigated live against prod before touching any code:
+- `POST /businesses/{id}/blocks` → `201`, works correctly.
+- `POST /media/upload` (real file upload) → `200`, works correctly.
+- **`/profile`'s "Upload from PI Camera" button (inside `BlockDetailModal`'s
+  empty-media state) was 100% fake** — confirmed by reading
+  `handleFileUpload` in `teta-pi/web/src/app/profile/page.tsx`: a
+  `setTimeout` marked the block `"done"` with `source:"pi_camera"` and zero
+  real fields (no `id`/`storage_url`/`original_hash`). It never called the
+  backend and was never persisted — a page reload silently discarded it,
+  and in the meantime `MediaDisplay` showed a permanent striped placeholder
+  with no real photo. This stub dates back to web PR #17 (1.20-web,
+  2026-07-27), self-commented at the time as *"Pi CAM pairing isn't wired
+  yet (tracked separately, 14.x)"* — a fair note then, but 14.x (14.4/14.5)
+  has since shipped real pairing + capture (2026-09-10/11) and nobody went
+  back to this specific button.
+**Why it could never be "wired up" as originally planned, only removed:**
+the real device-upload pipeline (`POST /media/device-upload`,
+`api/app/api/routes/media.py::device_upload_media`) always find-or-creates
+a single **"Pi CAM Captures"** block per entity — it has no concept of
+attaching a capture to whichever block a human happens to have open in the
+web editor. The button's premise (pick a block, then "pull in" a camera
+photo) doesn't match how captures actually land server-side, so "properly
+wire it" was never actually an option once 14.x's real architecture
+existed — unlike this repo's other, real `PiCamButton` (pairing QR +
+`GET /devices` status), which was correct and unaffected by this bug.
+**Fixed:** `teta-pi/web` PR [#45](https://github.com/teta-pi/web/pull/45) —
+removed the fake button and its dead `pi_camera` branch entirely
+(`handleFileUpload` is now single-arg, real-file-upload-only); added a
+one-line note pointing people at the real "Pi CAM Captures" block instead.
+`npx tsc --noEmit` and `npm run build` both clean (all 13 routes).
+**Not verified this session:** a live authenticated click-through of
+`/profile` (no test-account sign-in credentials available, same recurring
+limitation as prior sessions) — the real block-create and file-upload
+backend calls were re-verified directly against prod instead (both
+healthy), and the removed code path's fakeness was confirmed by full
+source trace, not just inference. Flag for a live click-through once
+merged+deployed.
+Status: FIX OPEN (PR #45, not yet merged) — root cause fully diagnosed and
+addressed; block creation and real file upload were never actually broken.
+
 ### ✅ `teta-pi/pi-cam` Gallery tab never refreshed after a new photo (14.9, 2026-09-12)
 Owner report: "gallery doesn't work, photos aren't added." Root cause:
 `app/(tabs)/gallery.tsx`'s photo-load `useEffect` ran once on mount
