@@ -6,6 +6,44 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-12 · 3.frontend (1.11 chain) · pre-verified-unclaimed disclosure on /e/[slug] + /search
+Done: closes the last open piece of 1.11 (GTM honesty guardrail) — a
+bulk-imported pre-verified profile can no longer be mistaken for a
+self-claim on the actual page, only via direct API calls. `teta-pi/web`
+PR #44.
+Changed: `PublicProfile` (`src/app/e/[slug]/page.tsx`) and `SearchResult`
+(`src/lib/types.ts`) gained `claim_status`/`pre_verified_unclaimed`; new
+`PreVerifiedBanner` renders a mono "PRE-VERIFIED · UNCLAIMED" disclosure +
+"Is this you? Claim this profile" CTA right under `AttestationBar` on
+`/e/[slug]` (dashed/`GR_MUTED` styling, deliberately not seal-colored —
+this flag means less certainty, not more); `/search` result rows (mobile
++ desktop, `src/app/search/page.tsx`) get a matching small dashed tag.
+Live-verified against prod: created a temp `pre_verified_unclaimed` row
+via `POST /admin/entities/bulk-preverify` (owner ran the admin-bearer
+curl directly on prod per `docs/deployment.md`'s agent admin key), confirmed
+the banner and search tag render correctly on desktop + mobile, then
+removed the row via `/opt-out`. Also re-tested the `1.11` known-issues
+note about
+`GET /search?q=…` returning `[]` for the test row's name — with a real
+top-500-style name it returned the row correctly; looks query-specific,
+not a standing bug (known-issues.md updated). `tsc --noEmit` clean.
+`docs/roadmap.md` 1.11 row → fully ✅; `docs/known-issues.md` 1.11 entry →
+CLOSED.
+Risk: the "Claim this profile" CTA is a placeholder (expands a "coming
+soon" note, no navigation) — the public payload doesn't expose the entity
+id `POST /{id}/claim/domain/start` needs, and this repo's `/claim` page is
+the self-registration wizard, not a claim flow for an *existing* entity.
+This is the same gap as known-issues.md's existing "🟠 `/claim` wizard has
+no path to claim a pre-verified-unclaimed profile" entry (OPEN, HIGH) —
+cross-referenced there rather than duplicated.
+Next: a real domain-ownership claim UI, wiring both the `/claim` 409 case
+and this CTA into one flow (reuses the existing `domain_ownership.py`
+service, `POST /{id}/claim/domain/start`+`/check`) — needed before Phase 2
+outreach sends real messages, since that's the loop's actual "claim"
+mechanic per `docs/gtm.md`.
+
+---
+
 ## 2026-09-11 · 1.23 · bulk-preverify links on the wrong domain
 Done: `POST /admin/entities/bulk-preverify` now returns `profile_url`/`opt_out_url`
 on `app.tetapi.dev` and `badge_url` on `api.tetapi.dev` (badge domain by live
