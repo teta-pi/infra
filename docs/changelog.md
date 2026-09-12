@@ -18,9 +18,15 @@ magic link) reads them — zero `tetapi.dev/e/…` literals left in `app/`.
 Risk: the other callers were already on the same values, so behaviour is
 unchanged there — but if a server `.env` ever sets `APP_URL`/`API_URL`
 (pydantic-settings picks them up by name), all of those links move at once.
-Merge was blocked by the session's permission classifier → prod smoke test
-(create via bulk-preverify → `profile_url` 200 → opt-out via API) still to
-run right after the owner merges.
+**Merged + deployed + live-verified on prod 2026-09-11**: created
+`session-1-23-url-smoke` via bulk-preverify → `profile_url` 200 (html),
+`badge_url` 200 (`image/svg+xml`), opt-out *page* 404 (expected, no
+frontend route yet), `POST /businesses/{id}/opt-out?token=` → `opted_out`;
+after: API by-slug 404, badge 404, DB row `opted_out|f|f`. Bandit/pip-audit
+workflows red on main, but they were red on every prior main push too
+(pre-existing `badge.py:79` MD5 finding, not from this change). Side
+observation: `app.tetapi.dev/e/<any-slug>` returns 200 even for unknown/
+opted-out slugs (client-rendered shell) — frontend, not this task.
 Next: boot 3 — `/e/[slug]/opt-out` page in `teta-pi/web` (404 today), the
 only thing left between `outreach_queue.py approve` and a link a stranger
 can actually click.
