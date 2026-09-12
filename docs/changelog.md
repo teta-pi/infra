@@ -6,6 +6,36 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-12 · 14.9 · gallery never refreshes after taking a photo
+Done: Owner reported the Gallery tab "doesn't work, photos aren't
+added." Read `app/(tabs)/gallery.tsx` and `app/(tabs)/camera.tsx` in
+full to trace it rather than guessing. Root cause: Gallery's photo-load
+`useEffect` had `[permission, loadPhotos]` as deps — ran once on first
+mount, never again, because expo-router `Tabs` keep every screen
+mounted (no `unmountOnBlur`). Confirmed the actual photo-save path in
+`camera.tsx` is fine (`MediaLibrary.createAssetAsync`, gated correctly
+by the "Save to Photos" setting) — the bug was purely in Gallery never
+re-reading the library. `teta-pi/pi-cam` PR
+[#8](https://github.com/teta-pi/pi-cam/pull/8).
+Changed: `teta-pi/pi-cam` `app/(tabs)/gallery.tsx` — split the
+permission-request effect from the photo-load effect, added
+`useFocusEffect(() => loadPhotos())` (same pattern `camera.tsx` already
+uses for its own settings re-read on tab focus). `docs/roadmap.md` new
+`14.9` row; `docs/known-issues.md` new closed entry.
+Risk: Low — additive-only change (an extra re-fetch on tab focus), no
+behavior removed. `tsc --noEmit` clean. Not build-verified locally
+(sandbox can't reach `dl.google.com`, see 14.4); owner to confirm on a
+real device via EAS: take a photo, switch to Gallery without
+restarting the app, confirm it appears immediately.
+Next: None — this was a self-contained fix. If the owner still doesn't
+see photos after this lands, the next thing to check is whether
+`MediaLibrary` permission or the "Save to Photos" toggle itself is off
+on their device (that path fails silently in `camera.tsx` today with no
+user-facing error — worth a follow-up if it turns out to be the actual
+cause).
+
+---
+
 ## 2026-09-11 · 14.8 · remove fake "Get Pi Certificate" onboarding screen
 Done: Verified 6.6's finding myself before touching code — read
 `modules/certificate/index.ts` and `modules/c2pa/manifest.ts` in full.
