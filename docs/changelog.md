@@ -6,6 +6,33 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-11 · 1.23 · bulk-preverify links on the wrong domain
+Done: `POST /admin/entities/bulk-preverify` now returns `profile_url`/`opt_out_url`
+on `app.tetapi.dev` and `badge_url` on `api.tetapi.dev` (badge domain by live
+curl: 200 svg there, 404 on landing + app). `teta-pi/api` PR #22.
+Changed: new `settings.app_url` / `settings.api_url` in `app/core/config.py`;
+every outbound link the API mints (`admin.py`, `tag.py` — dropped its private
+`_APP_URL`/`_API_URL`, `intent.py`, `intent_graph/resolver.py`, `auth.py`
+magic link) reads them — zero `tetapi.dev/e/…` literals left in `app/`.
+`docs/api.md` updated. Known-issues §6.6 item → CLOSED (backend half).
+Risk: the other callers were already on the same values, so behaviour is
+unchanged there — but if a server `.env` ever sets `APP_URL`/`API_URL`
+(pydantic-settings picks them up by name), all of those links move at once.
+**Merged + deployed + live-verified on prod 2026-09-11**: created
+`session-1-23-url-smoke` via bulk-preverify → `profile_url` 200 (html),
+`badge_url` 200 (`image/svg+xml`), opt-out *page* 404 (expected, no
+frontend route yet), `POST /businesses/{id}/opt-out?token=` → `opted_out`;
+after: API by-slug 404, badge 404, DB row `opted_out|f|f`. Bandit/pip-audit
+workflows red on main, but they were red on every prior main push too
+(pre-existing `badge.py:79` MD5 finding, not from this change). Side
+observation: `app.tetapi.dev/e/<any-slug>` returns 200 even for unknown/
+opted-out slugs (client-rendered shell) — frontend, not this task.
+Next: boot 3 — `/e/[slug]/opt-out` page in `teta-pi/web` (404 today), the
+only thing left between `outreach_queue.py approve` and a link a stranger
+can actually click.
+
+---
+
 ## 2026-09-11 · 6.6 · UI-button ↔ backend ↔ camera-app sync audit
 Done: Full sweep for the PiCamButton class of bug (a button whose backend
 wiring doesn't match what it claims) — diffed every path in
