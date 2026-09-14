@@ -3,6 +3,54 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟠 FIXED 2026-09-01 — `/profile` hid a real person-kind entity's registry data (`n/a` override), Registry Match step wrongly gated business-only (roadmap 3.23)
+Owner confirmed live: `bob` (`entity_type: person`) has a genuine
+`registry_status: verified` record (Handelsregister, VR 40166). `/e/bob`
+(the public page) already showed it correctly — 3.22a fixed the identical
+bug there. But `/profile`'s owner view (`AttestationBar`, region 2, and
+`AgentView`, region 8, the literal MCP-response panel) hard-overrode the
+registry cell to a fabricated `"registry:n/a — not applicable, individual"`
+for any person-kind entity, on a stale comment claiming "registry doesn't
+apply to person-kind entities." Real root cause traces back to **roadmap
+3.10 (2026-07-19, web PR #12)**, the session that introduced
+`isBusinessKind` gating on Registry Match / Document Upload / Legal Entity
+"to narrow per entity_type" — that session's own note says it "had no
+persona/business test-account credentials to click through `/profile`
+live, flagged for a manual pass." The gate went unverified against real
+data for over a month until this task's owner-confirmed live check on
+`bob` proved the Registry half of it wrong.
+
+**Fixed**: removed the `isPerson`/`isBusinessKind` override on the registry
+cell in both `AttestationBar` and `AgentView` — both now always reflect
+`store.registryStatus`/`store.registryData`, matching `/e/[slug]`'s
+already-correct logic. The genuine no-data case falls through to the
+existing `registry:unverified`/"not yet checked" state (same one
+businesses get), not a fabricated `n/a`.
+
+**Product decision (stated explicitly, not decided silently)**: opened the
+Registry Match tile/panel in `VerifyMenu` to all entity kinds — no backend
+basis for the gate (`verifyApi.registry()` takes no entity-kind argument,
+and the backend already produced a real match for a person), and no
+design doc records a deliberate exclusion (checked
+`docs/verification-rework.md`, `docs/decisions.md`). Document Upload and
+Legal-Entity-link stay business-only — those are genuine business
+concepts (registration certificate, brand→legal-entity link) with no
+person equivalent, so QA #6's "Legal Entity" scoping from 3.10 is
+unaffected. Also fixed the identical wrong premise on `/claim`'s
+success-step maturity strip.
+
+Live-verified with a mock matching `bob`'s exact real values (this
+sandbox has no `bob`-account credentials, so a local mock API server
+stood in for `api.tetapi.dev`): `/profile`'s attestation bar now shows
+`registry:attested · Handelsregister VR 40166 ✓ attested`, the Registry
+tile is visible and shows "verified," clicking it opens "Official
+Registry Match" with a "verified" pill, and Agent-mode's literal panel
+shows the real line instead of "not applicable." **Not verified**: the
+owner's own real `bob` session on `/profile` — needs the owner's own
+post-deploy check, same gap 3.10 itself left open. `teta-pi/web` branch
+`session/3.23-person-registry`, `src/app/profile/page.tsx`,
+`src/app/claim/page.tsx`.
+
 ### ✅ FIXED 2026-09-12 — Owner report "block creation, photo upload, block creation via pi camera doesn't work at all"
 Investigated live against prod before touching any code:
 - `POST /businesses/{id}/blocks` → `201`, works correctly.
@@ -1295,7 +1343,7 @@ items are already addressed. Mapping to sessions:
 |---|---|---|---|
 | 1 | 🔴 | expired session still shows editable profile | **3.9 ✅ closed 2026-08-05 (15.3), web PR #10** — live-verified on prod: stale token now renders a sign-in gate, not the editable grid (S-4) |
 | 2 | 🟠 | Make private → "invalid token" | **3.9 ✅ closed 2026-08-05 (15.3)** — PATCH-500 part fixed in 1.18 (api PR #6, live re-verified); stale-token part covered by the same web PR #10 401 pipeline as #1 above (S-5) |
-| 3 | 🟠 | persona sees business verifier set | **3.10** |
+| 3 | 🟠 | persona sees business verifier set | **3.10**, partially reverted by **3.23 ✅ 2026-09-01** — 3.10's Registry Match gate turned out to have no backend basis and hid real verified data on a real person-kind entity (`bob`); Registry reopened to all kinds, Document Upload/Legal Entity stay business-only |
 | 4 | 🟠 | Business Email "Send Code" dead | **3.9** re-test (Resend was also broken during QA — key rotation + sandbox; may already work) |
 | 5 | 🟡 | Domain Ownership untested | folded into **6.2 re-run** checklist |
 | 6 | 🟡 | "Legal Entity" link unclear/inert | **3.10** |
@@ -2129,3 +2177,131 @@ boot check, not a silent dependency-audit fix. None of the remaining CVEs are
 in app runtime code (all build/CLI tooling).
 Status: OPEN — needs a dedicated `expo` 54→57 upgrade session (new roadmap task,
 budget for `expo-doctor` + device boot verification, ties into 14.4's history).
+
+## 15.6 security regression net — two live gaps found building the probe (2026-09-14)
+
+While building `scripts/security/probe.py` (the automated §6.2 re-audit), two
+live findings surfaced that the manual passes and static scanners had missed.
+Both confirmed read-only against prod; tracked in `docs/security.md` §5.
+
+### 🟠 S-16 — `POST /verify-endpoint` SSRF: auth added, host validation never was
+`api/app/api/routes/endpoint_verification.py` `_verify_active` (line ~55) and
+`_verify_consistency` (~78) do `client.get(url, timeout=8.0, follow_redirects=True)`
+on the caller-supplied `endpoint_url` with **no** private/loopback/link-local
+guard. S-2 (api PR #3, 1.7) "fixed" the unauthenticated SSRF by adding
+`Depends(get_current_user)` — but any active account's `pk_live_` key (a free
+signup, or the MCP service key wired in 1.24/2.10) satisfies that, and the fetch
+itself is unguarded. Live-confirmed 2026-09-14: with the test key,
+`{"endpoint_url":"http://127.0.0.1:8000/health"}` → `200 {"is_active":true}` —
+the prod server fetched its **own** API port (a loopback port oracle). Same via
+MCP `teta_verify_endpoint`. Contrast `services/verification/domain_ownership.py::
+_resolves_to_public_ip`, which has blocked exactly this since S-9. **Fix (15.5):**
+port that guard onto `/verify-endpoint` before the two `client.get`s. Probe
+asserts it (`ssrf_canaries`, `mcp[verify_endpoint_ssrf]`) — honestly red until
+15.5 merges.
+Status: OPEN → 15.5.
+
+### 🟡 S-17 — private entity fully readable by UUID (only private *blocks* were scoped)
+`routes/businesses.py::get_business` (~245), `agent_preview` (~653) and
+`get_proof` (~704) have no auth dependency and no `is_public` filter — an
+anonymous caller who knows a UUID gets a `is_public=false`/`is_published=false`
+entity's name, description and blocks. S-8 (api PR #10) closed the analogous
+*block* leak on `GET /businesses/{id}/blocks`, but the entity row itself and the
+agent preview/proof were never scoped. `by-slug/{slug}/public` IS correctly
+scoped (`is_published==True, is_public==True`), which is why this went unnoticed.
+Live-confirmed 2026-09-14 against the 15.3 fixture (`e5b79aaa-…`, private):
+base + `/preview` both return the entity, `/proof` returns its proof scaffold.
+**Owner decision:** either filter these three on `is_public` for non-owners
+(matching S-8), or document "any entity readable by its UUID" as intended for
+anonymous agents. Recorded in `scripts/security/public_allowlist.json` →
+`pending_owner_decision`; probe check `private_entity_exposure` asserts it.
+Status: OPEN — owner decision (backend).
+
+### Two owner questions the probe raised but does not decide
+- **Security headers** absent on app./api./mcp.tetapi.dev (no HSTS anywhere;
+  only landing sets nosniff + frame-options). Fix is nginx/Cloudflare = devops
+  (`docs/security.md` §6.3). Probe `headers` check red until then.
+- **`/docs` + `/redoc`** (interactive OpenAPI UI) are publicly reachable on
+  prod. `security.md` has no ruling; the probe flags it as a SKIP owner-question,
+  it does not fail the run.
+
+### ✅ WordPress plugin (`teta-pi/wordpress-plugin`, wp.org slug `tetapi`) malware-report incident — full audit, CLEAN on all code/supply-chain fronts
+Found 2026-09-10 (roadmap 15.x standing red-team, direction 15 security). A
+user installed the plugin on one WP site, the host/user then reported
+"virus attacks" (malware) and the user removed the plugin. Full read-only
+audit of every angle the plugin itself can touch, at HEAD `0cfd67f`
+(release 1.1.1):
+1. **Code review (line-by-line, all 9 `.php` files + 2 `.css` files, no
+   JS shipped at all):** no `eval`/`base64_decode`-as-obfuscation/
+   `gzinflate`/`create_function`/`assert`-as-exec/`preg_replace` `/e`/
+   `system`/`exec`/`shell_exec`/backdoor patterns. The one `base64_decode`
+   hit (`includes/class-tetapi-settings.php:47`) pairs with
+   `openssl_decrypt` — it's the API-key-at-rest cipher (`wp_salt('auth')`
+   key), not obfuscation. No `file_put_contents`/`fwrite` anywhere. Every
+   external call (`wp_remote_get`/`wp_remote_post`) targets only
+   `api.tetapi.dev`, all three base URL constants are hardcoded in
+   `teta-pi.php`. Every `$_GET`/`$_POST` use is sanitized
+   (`sanitize_key`/`sanitize_text_field`) before use; every admin action
+   handler checks `current_user_can('manage_options')` +
+   `check_admin_referer()`; every echoed value is `esc_html`/`esc_attr`/
+   `esc_url`/`wp_json_encode`'d. **Verdict: clean.**
+2. **Supply chain, GitHub vs wp.org SVN:** checked out
+   `plugins.svn.wordpress.org/tetapi` `trunk` and `tags/1.1.1`, diffed
+   byte-for-byte against GitHub `main` — identical (only difference is
+   `.github/`+`CLAUDE.md`, which never ship to SVN by design). All 4
+   screenshot PNGs MD5-match too. `svn log -v` on trunk: every one of the
+   5 releases (1.0.0→1.1.1) committed by `tetapi` only, no foreign SVN
+   committer. **Verdict: clean — no wp.org account compromise, no
+   release-process drift.**
+3. **Dependencies:** none — no `composer.json`, `package.json`, `vendor/`,
+   or bundled libraries anywhere in the repo. **Verdict: N/A, nothing to
+   check.**
+4. **Server-side touch point (`api.tetapi.dev`'s `/wk/{entity_id}/*`,
+   proxied verbatim by `class-tetapi-agent.php`'s `maybe_serve_file()`):**
+   read `api/app/api/routes/tag.py` — all three routes
+   (`agent.json`/`agent-card.json`/`llms.txt`) hardcode their own
+   `media_type` (`application/json` or `text/plain`) server-side; the
+   plugin can never be made to pass through an HTML/JS content-type, so
+   the unescaped body echo at `class-tetapi-agent.php:87` is not an XSS
+   vector even if a business's own `name`/`description` fields contained
+   markup. The `wp_head` JSON-LD path additionally decodes+re-encodes
+   through `wp_json_encode` before echoing. **Verdict: clean.**
+5. **Site-specific correlation** — owner provided the domain
+   (`lastivka.it-ua.org`) after this entry was first drafted. Three
+   independent read-only public scanners, all checked live 2026-09-10:
+   - **sucuri sitecheck**: "No Malware Found", not blacklisted (9 lists
+     checked incl. Google Safe Browsing/McAfee/ESET/PhishTank/Yandex/
+     Opera, all clean), no injected spam/defacement, running WordPress
+     7.1/Nginx.
+   - **VirusTotal** (`virustotal.com/gui/domain/lastivka.it-ua.org`):
+     community score 0/89 — zero security vendors flag the domain,
+     0 community comments/reports. Domain created ~6 months ago (~2026-03),
+     last VT analysis ~1 month ago (~2026-08).
+   - **Google Safe Browsing transparency report**: "No available data"
+     for `lastivka.it-ua.org` — i.e. never on Google's unsafe-site list
+     (matches sucuri's own Safe Browsing sub-check).
+   None of the three shows any current or historical red flag. These
+   tools report present blacklist status, not a minute-by-minute
+   infection timeline, so they can't independently pinpoint whether
+   something transient happened around the plugin's install/removal
+   window — but there is no lingering evidence of compromise on the
+   domain today, consistent with items 1–4 finding nothing in the
+   plugin itself. **Verdict: clean on every scanner checked.**
+6. **Plugin Check CI history:** all 24 runs since 2026-07-14 reviewed
+   (`gh run list --workflow=check.yml`); only 2 failures ever
+   (`29361084846` 2026-07-14, `32366358992` 2026-08-20), both
+   `WordPress.WP.I18n.TextDomainMismatch` / stale `Tested up to` /
+   non-prefixed-global metadata issues, zero were on a `security`-category
+   rule (`late_escaping`, `safe_redirect`, `direct_db`, etc. — all listed
+   as scanned, none triggered). **Verdict: clean, no security-rule
+   failure in the plugin's CI history.**
+
+**Conclusion:** nothing in the plugin's own code, its wp.org distribution
+channel, its API touch point, or the affected domain's current/historical
+public blacklist status can explain the reported malware — this was not
+the plugin. Most likely explanations for the report: unrelated compromise
+elsewhere on the same WP install/hosting account (a different
+plugin/theme, stolen FTP/wp-admin creds, a vulnerable server-side
+component), a false positive from the hosting scanner, or a
+misattribution because the plugin was the most recently installed thing.
+Status: CLOSED — all 6 items checked, clean across the board.

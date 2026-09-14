@@ -64,6 +64,17 @@ in the workflow or it 404s in production.
 `api/certs/*.key.pem` (C2PA signing key) must **never** be synced/committed — the
 rsync excludes it. Agent admin API key is stored at `/root/tetapi-agent-admin.key`.
 
+## GitHub Actions secrets (`teta-pi/infra`)
+- `DEPLOY_SSH_KEY` — the deploy/unban SSH key (see `unban-ip.yml`).
+- **`SEC_PROBE_API_KEY`** — a test `pk_live_` key the daily security probe
+  (`security-probe.yml`, 15.6) uses for its authenticated checks (SSRF canary,
+  `verify-endpoint` rate limit). **Owner must add this manually** — Claude
+  sessions never paste keys into chat or the GitHub UI:
+  **Settings → Secrets and variables → Actions → New repository secret**,
+  name `SEC_PROBE_API_KEY`, value = the key in your local `~/.tetapi/test_api_key`.
+  Until it's set those two checks SKIP (honestly) instead of running; every
+  unauthenticated check still runs. The key is never logged by the probe.
+
 ## Not yet configured (see known-issues / roadmap)
 - `OPENAI_API_KEY` — unset → TWIRA semantic (I) ranking off, keyword fallback used.
 - Resend domain `tetapi.dev` not verified → emails deliver only to

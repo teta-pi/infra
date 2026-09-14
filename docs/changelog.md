@@ -6,6 +6,93 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-14 · 15.6 · security regression net (automated §6.2 re-audit)
+Done: built the automated replacement for docs/security.md §6.2's old
+"monthly manual" re-audit — a deterministic daily probe that re-asserts every
+CLOSED §5 finding stayed closed and that no new unauthenticated public surface
+appeared. This is the bug class static scanners (CodeQL/bandit, 15.2) never
+see: S-2/S-15/S-16 + the VARCHAR(20)-500 were all found by hand, by luck, over
+two months. Ran the full net against prod before the PR (report in PR body):
+all closed findings PASS (S-1 traversal, S-8 private-blocks, S-15 agent-key
+gone, auth-surface contract, secrets, verify-endpoint rate-limit). Three live
+gaps surfaced honestly red, none of them regressions of a closed item:
+**S-16** (loopback SSRF in /verify-endpoint — auth was added by S-2 but host
+validation never was; prod fetched its own 127.0.0.1:8000, a port oracle;
+awaiting 15.5), **S-17** (private entity readable by UUID via base/preview/proof
+— only private *blocks* were ever scoped, new finding, owner decision), and
+missing security headers on app/api/mcp (devops, §6.3). Two owner questions
+flagged as SKIP not decided: /docs+/redoc public on prod, and the S-17
+filter-vs-document call.
+Changed: new `scripts/security/probe.py` (Python 3.12, stdlib + httpx, one
+check per closed S-*), `scripts/security/public_allowlist.json` (the
+auth-surface contract — the test that would have caught S-15 day one; has
+`public`, `must_not_exist` for deleted routes, `pending_owner_decision`),
+`scripts/security/fixtures.json`, `scripts/security/README.md`,
+`.github/workflows/security-probe.yml` (daily cron 06:17 UTC +
+workflow_dispatch; on FAIL opens/updates ONE `security`-labelled issue, silent
+on PASS; needs the SEC_PROBE_API_KEY repo secret). Docs: `docs/security.md`
+(§6.2 rewritten monthly→automaton + the "every closed S-* gets an assert in
+the same PR" rule; §5 gains S-16, S-17; §4 SSRF line reopened),
+`docs/known-issues.md` (S-16/S-17 file:line), `docs/decisions.md` (report-only
+rationale), `docs/deployment.md` (SEC_PROBE_API_KEY — owner adds manually),
+`docs/roadmap.md` (15.6).
+Risk: low, all read-only. The probe respects the verify-endpoint 5/min limiter
+(≤3 SSRF canaries, paused) and gates >100-req rate-limit tests behind
+--include-heavy so cron never loads prod. One caveat: in a single run the SSRF
+canary and the verify-endpoint rate-limit check share the 5/min window — the
+canary runs first on a fresh window (fine in isolated cron), but if the window
+is already warm from a prior run the canary SKIPs (rate-limited) rather than
+falsely passing. No writes, no accounts created.
+Next: **owner action** — (1) add the `SEC_PROBE_API_KEY` GitHub secret
+(docs/deployment.md) so the auth'd checks run in CI, else they SKIP; (2) decide
+S-17 (filter vs document) and the /docs+/redoc question; (3) 15.5 to close
+S-16 — the probe will flip that check green when it merges.
+
+## 2026-09-01 · 3.23 · fix person-registry mismatch between /profile and /e/[slug]
+Done: `/profile`'s owner view hard-overrode the registry attestation cell to
+a fabricated `"registry:n/a — not applicable, individual"` for any
+person-kind entity, hiding real data — owner confirmed live that `bob`
+(`entity_type: person`) has a genuine `registry_status: verified` record
+(Handelsregister, VR 40166) that `/e/bob` already showed correctly (3.22a
+fixed this exact bug on the public page). Removed the `isPerson` override
+in both places `/profile` computed its own registry cell — `AttestationBar`
+(region 2, Edit/Visitor-mode bar) and `AgentView` (region 8, literal
+MCP-response panel) — so both now always reflect the real
+`store.registryStatus`/`store.registryData` regardless of `entity_type`,
+matching `/e/[slug]`'s already-correct logic. The genuine no-data case now
+falls through to the existing `registry:unverified`/"not yet checked"
+state (same one businesses get) — no fabricated `n/a` invented.
+Changed: `teta-pi/web` `src/app/profile/page.tsx`, `src/app/claim/page.tsx`
+(branch `session/3.23-person-registry`). **Product decision, stated
+explicitly per this task's instruction not to decide silently**: opened
+the "Registry" verification tile/panel in `VerifyMenu` to all entity
+kinds — it was gated `isBusinessKind`-only with no backend basis
+(`verifyApi.registry()` takes no entity-kind argument, and the backend
+already produced a real match for `bob`, a person; no design doc records
+a deliberate person-exclusion either, checked `docs/verification-rework.md`
+and `docs/decisions.md`). Document Upload and Legal-Entity-link tiles
+stay business-only — those are genuine business concepts (registration
+certificate, brand→legal-entity link) with no person equivalent. Also
+fixed the same wrong premise on `/claim`'s success-step maturity strip
+(`isPerson ? "C2PA Media" : "Registry / Domain"` → now
+`"Registry / C2PA Media"` for person) and its explanatory copy.
+`tsc --noEmit` and `npm run build` (incl. lint) both clean.
+Risk: Diff is scoped to exactly the described logic (`git diff` reviewed
+line by line) — no unrelated changes. Live-verified with a realistic
+mock matching `bob`'s exact real values (a local mock API server
+standing in for `api.tetapi.dev`, since this sandbox has no `bob`-account
+credentials): `/profile`'s attestation bar now shows `registry:attested ·
+Handelsregister VR 40166 ✓ attested` instead of `n/a`; the Registry tile
+is visible and shows "verified"; clicking it opens "Official Registry
+Match" showing a "verified" pill; Agent-mode's literal panel shows the
+real registry line instead of "not applicable." Not verified: the
+owner's own real `bob` session on `/profile` — no session in this
+project has had `bob`'s credentials, so this needs the owner's own
+check post-deploy (which the task itself asked for as the final step).
+Next: Owner confirms `/profile` (as `bob` or another person-kind entity
+with real registry data) and `/e/bob` show matching registry data
+post-deploy.
+
 ## 2026-09-12 · 6.7 · "block creation/upload/pi-camera doesn't work" — diagnosed + fixed
 Done: Owner reported block creation, photo upload, and pi-camera block
 creation all broken. Live-verified block creation and file upload both work
