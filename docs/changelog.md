@@ -30,6 +30,123 @@ Next: merge PR #45, live-verify post-deploy; consider whether `/profile`
 should surface the "Pi CAM Captures" block more prominently once it exists
 (discoverability), separate from this fix.
 
+## 2026-09-14 · 14.10 · fake Pi Certificate — closed everywhere (Settings, HUD, verify.tsx)
+Done: Continuation of 14.8 (which removed the fake CA-cert onboarding
+screen but left the same flow reachable from Settings, flagged in its
+own writeup). Re-verified the picture first — read
+`modules/certificate/index.ts` and `modules/c2pa/manifest.ts` again in
+full; confirmed the real signing pipeline still never imported the
+fake module. Traced every remaining call site (`settings.tsx`,
+`camera.tsx`, `preview.tsx`) rather than fixing Settings in isolation,
+which surfaced two more independent instances of the same problem not
+in the original brief: the camera HUD/`SigningToast` said "Pi
+Verified"/ran a fake "certifying → verified" sequence purely from
+`isOnline`, and **`app/verify.tsx`'s "Verify external content" never
+looked at the picked file at all** — always showed a hardcoded fake
+"Content Authentic" result with made-up device/key/hash, regardless of
+input. `teta-pi/pi-cam` PR [#9](https://github.com/teta-pi/pi-cam/pull/9).
+Changed: `teta-pi/pi-cam` — removed Settings' CTA/Trust
+Level/Auto-CA-Upgrade rows; deleted `modules/certificate/` (zero call
+sites left); dropped the fake `'ca'` HUD/badge/toast states in
+`camera.tsx`, `preview.tsx`, `SigningToast.tsx`, `VerificationBadge.tsx`;
+rewired `verify.tsx` to the real `modules/c2pa` `verifyMedia()` instead
+of ignoring the file, removed the "TRY A SAMPLE" fake-outcome buttons;
+retired `'ca'` from `modules/c2pa`'s shared types with a legacy-data
+coercion in `loadTrustIndex()`; corrected `README.md`/`CLAUDE.md`.
+`docs/roadmap.md` new `14.10` row + 14.8 note pointing here;
+`docs/known-issues.md` finding now CLOSED (was reopened after 14.8).
+Risk: Low — this only removes UI/state that read a fake local flag;
+the real on-device C2PA signing pipeline (Secure Enclave/Keystore →
+`c2pa_verified` on the backend) was not touched, confirmed independent
+both before and after the edits. `tsc --noEmit` clean; `expo-doctor`
+17/18 (same pre-existing unrelated patch mismatch as 14.8). Not
+build-verified locally (14.4, sandbox can't reach `dl.google.com`) —
+owner to confirm via EAS: Settings no longer shows any
+"Pi Certificate"/"Trust Level" row, and verifying a real Pi CAM photo
+in "Verify external content" shows real captured-time/device/hash data
+instead of the old canned "iPhone 16 Pro" result.
+Next: A real CA-backed trust tier (Phase 2, `ca.picam.app`) is now a
+clean-slate future task — no leftover fake scaffolding to build on top
+of or confuse with. If cross-device verification (not just this-device
+captures) is ever wanted for `verify.tsx`, it needs a real backend
+lookup — not attempted here, kept in scope.
+Numbering note: used **14.10** instead of the assigned 14.9 — that slot
+was already taken by the gallery-refresh fix (PR #8, merged 2026-09-12)
+before this session started; flagged so the roadmap stays unambiguous.
+
+---
+
+## 2026-09-12 · 1.24/2.10 · fix teta_verify_endpoint 401 — MCP service-key auth
+Done: closed a 🟠 HIGH finding open since the 6.5 QA pass (2026-09-06) —
+`teta_verify_endpoint`, one of the 7 advertised MCP tools and the one
+described as trust-critical ("run this before your agent routes a request
+or a payment to it"), had returned 401 on every single call since
+2026-07-14 (the 1.7 SSRF fix added `Depends(get_current_user)` to
+`/verify-endpoint`; MCP has never had an auth mechanism of its own, S-11).
+Two months, silently. Owner was asked directly and chose: give MCP its own
+service-level key, not relax the route back to anonymous. Turned out to
+need **zero API code change** — `get_current_user` already accepts any
+active account's `pk_live_` key generically, and the route's `current_user`
+param is never read in the body (a pure "any active account" gate, not an
+ownership check) — so a single dedicated service account does the job
+without building the full 2.2 scoped-key system for one internal caller.
+Minted `mcp-service@tetapi.dev` directly in prod Postgres (`is_agent=true`,
+no password, owns nothing), wired its key into `tetapi-mcp.service`'s
+`Environment=TETA_PI_SERVICE_API_KEY`, restarted. `mcp/src/client.ts`'s
+`verifyEndpoint()` sends it only on that one call. Also fixed a latent
+`apiFetch` header-merge bug this surfaced (`...init` spread after the
+computed `headers` would've clobbered `Content-Type` for any caller
+passing its own headers — none had before now).
+Changed: `teta-pi/mcp` `src/client.ts`, `src/index.ts`, `package.json`,
+`server.json` (1.5.3 → 1.5.4, PR #9, merged, deployed) · `teta-pi/api`
+`app/api/routes/endpoint_verification.py` (comment only, PR #24, merged) ·
+`docs/decisions.md` (full rationale), `docs/known-issues.md` (closed),
+`docs/roadmap.md` (1.24/2.10 row) · prod: one `users` row +
+`/etc/systemd/system/tetapi-mcp.service` (not in git), both done with
+explicit owner go-ahead per step.
+Risk: low — the service account owns no businesses/claims, so a leaked key's
+blast radius is "can call any-account-gated routes," equivalent to a free
+signup, not a privilege escalation. Live-verified end to end: a real
+`teta_verify_endpoint` MCP call against prod now returns a structured
+verdict (`FAILED — endpoint did not respond`, for a non-agent test URL)
+instead of `API 401: Not authenticated`.
+Next: found in passing, spawned as a separate task — `POST /auth/agent-key`
+(singular, different from 2.2's planned `/auth/agent-keys`) was
+unauthenticated, unlimited, and minted a new account+key on every call
+with zero rate-limiting. **Already closed same-day by session 15.4 below**
+(deleted outright, not gated — zero call-sites anywhere in the codebase).
+
+---
+## 2026-09-11 · 15.4 · agent-key lockdown (URGENT, live exploit on prod)
+Done: Closed the `POST /auth/agent-key` hole found in 6.6 — unauthenticated,
+unrate-limited, minted a fresh account + live `pk_live_` key + JWT on every
+call, confirmed live on prod (`200` from a bare empty-body curl). Deleted
+the endpoint outright rather than gating it: independently re-grepped fresh
+`web`/`mcp`/`pi-cam`/WP-plugin checkouts (not just trusting the audit's own
+framing) — zero call-sites anywhere, unchanged since the repo's first
+commit (`83d5fba`), and `is_agent` (the flag it set) has no
+admin-provisioning flow to gate behind, so `require_admin` would have
+protected a feature that doesn't exist. [api PR #23](https://github.com/teta-pi/api/pull/23).
+Deactivated the two prod accounts created by live probing
+(`agent-e4f27342559dced1@teta-pi.agent` 15:06,
+`agent-df2830672772c722@teta-pi.agent` 15:14) via `is_active=false` (rows
+kept, append-only discipline) — done via prod `psql` only after explicit
+owner confirmation, per session instructions. Checked for other `is_agent`
+rows of unknown origin: found one, `agent@tetapi.dev` (2026-07-04), and
+confirmed it's legitimate — the founder-seeded "operations agent" admin
+account from migration `007_roles_admin_audit.py`, unrelated, left
+untouched.
+Changed: `teta-pi/api` `app/api/routes/auth.py` (endpoint removed) ·
+`docs/security.md` (new S-15) · `docs/known-issues.md` (§6.6 agent-key
+finding → CLOSED) · `docs/roadmap.md` (new row 15.4) · prod DB (`users.is_active`
+on 2 rows).
+Risk: None expected — the route is gone (should 404), and the only two
+accounts that ever exploited it are deactivated. Live re-verify after
+deploy: `POST /auth/agent-key` should return `404`, not `200`.
+Next: none — closed. If agent-account provisioning ever becomes a real
+product feature, it needs a fresh, deliberately-designed endpoint behind
+`require_admin`, not a revival of this one.
+
 ## 2026-09-12 · 14.9 · gallery never refreshes after taking a photo
 Done: Owner reported the Gallery tab "doesn't work, photos aren't
 added." Read `app/(tabs)/gallery.tsx` and `app/(tabs)/camera.tsx` in

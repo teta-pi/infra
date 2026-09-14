@@ -160,7 +160,22 @@ request.
 if it serves a real purpose (agent-account provisioning?), or remove it if
 dead. At minimum, rate-limit it like `/claim`/`/badge`/`/verify-endpoint`
 before it stays reachable from the open internet.
-Status: OPEN, security-relevant, no fix this session.
+Status: ✅ **CLOSED 2026-09-11** (session 15.4, tracked as `docs/security.md`
+S-15) — endpoint **deleted outright**, [api PR #23](https://github.com/teta-pi/api/pull/23).
+Re-confirmed independently of this audit's own grep: zero call-sites in
+fresh `web`/`mcp`/`pi-cam`/WP-plugin checkouts, unchanged since the repo's
+first commit (`83d5fba`), and `is_agent` has no admin-provisioning flow to
+gate behind — so removal (not `require_admin`) was the clean fix, same call
+already made for the analogous dead `/auth/register` endpoint above. The two
+probe accounts this audit's own live test created
+(`agent-e4f27342559dced1@teta-pi.agent` 15:06,
+`agent-df2830672772c722@teta-pi.agent` 15:14) were deactivated
+(`is_active=false`, rows kept per append-only discipline) after owner
+confirmation. A third `is_agent` row, `agent@tetapi.dev` (2026-07-04,
+`role=admin`), was checked and confirmed **legitimate** — seeded in migration
+`007_roles_admin_audit.py` as the founder-designated "operations agent"
+admin account, unrelated, left untouched. Live-verify after deploy: the
+endpoint should 404, not 200.
 
 ### 🟡 `DELETE /media/{media_id}` has no UI trigger anywhere
 Backend supports deleting one media item independently of its block
@@ -171,7 +186,7 @@ block can only delete the whole block (`DELETE /blocks/{id}`, which is
 wired), not just the media.
 Status: OPEN, LOW priority — product gap, not a live bug.
 
-### ✅ `teta-pi/pi-cam`'s "Get Pi Certificate" onboarding screen — fake feature, CLOSED for onboarding; broader "Pi Verified" badge issue reopened below (14.8, 2026-09-11)
+### ✅ `teta-pi/pi-cam`'s "Get Pi Certificate" fake feature — CLOSED everywhere (14.8 onboarding + 14.10 Settings/HUD/verify.tsx, 2026-09-11 / 2026-09-14)
 `modules/certificate/index.ts` is self-labeled in its own header: *"Phase
 1: симуляція для тестування UI. Phase 2: реальний запит до
 https://ca.picam.app/v1/"*. `requestCACertificate()` does a fake 2-second
@@ -208,20 +223,34 @@ independent false-trust path.
 until a real CA exists) and rewrote the false "recognized by any
 C2PA-compatible tool" slide copy to describe the real, working
 producer-profile-link feature instead.
-**Still open — NOT fixed this session, same root cause, different entry
-points:** Settings still has the identical "Get Pi Certificate" upgrade
-flow (`settings.tsx:134-244`, "Pi Certificate" row + "Upgrade to Pi
-Verified — Free" banner) reachable one tap away, and Settings'
-"Trust Level" row shows "Pi Verified" from `isOnline` alone. Either one
-still hands a user a persistent, device-local fake "Pi Verified" badge
-across camera/gallery/preview/verify. Needs its own session: pull the
-Settings CTA + the `isOnline`-only Trust Level claim the same way 14.8
-pulled onboarding's, or gate all of it behind a real CA (Phase 2).
-Status: OPEN (Settings + isOnline paths), HIGH priority — same reasoning
-as before: for a product whose pitch is "trust cryptographic proof, not
-claims," a fabricated crypto-trust badge in the user's own app directly
-contradicts the premise, even though it still can't reach the public
-trust graph or backend data.
+**Fix completed this session (14.10, `teta-pi/pi-cam` PR #9):** removed
+Settings' "Get Pi Certificate" CTA, "Pi Certificate" row, the
+`isOnline`-only "Trust Level" row, and the equally fake "Auto CA
+Upgrade" toggle (never read anywhere in the capture path). Deleted
+`modules/certificate/` entirely — zero call sites remained once
+`settings.tsx`/`camera.tsx`/`preview.tsx` were fixed. Tracing every
+call site surfaced two more instances of the same problem, both fixed:
+the camera HUD (3 variants) and `SigningToast` said "Pi Verified"/ran a
+"certifying → verified" sequence purely from `isOnline`, unrelated to
+any real cert; and **`app/verify.tsx`'s "Verify external content" never
+looked at the picked file at all** — it unconditionally showed a
+hardcoded fake "Content Authentic" result (made-up device/key/hash)
+regardless of what was chosen, arguably the most severe instance of
+this pattern found across the whole audit. Rewired it to the real,
+already-working `modules/c2pa` `verifyMedia()`; removed the "TRY A
+SAMPLE" buttons (same fabricated-outcome problem, just relocated);
+results now show real data from the actual manifest, with an honest
+limitation noted instead of overclaiming (local-manifest-only — can't
+verify a file captured on another device, no backend lookup wired yet).
+Retired the `'ca'` trust-level value from `modules/c2pa`'s shared
+types and `VerificationBadge`'s public API; `loadTrustIndex()` coerces
+any legacy `'ca'` entry from before this fix down to `'device'` so an
+existing install can't still render a stale fake badge. Confirmed
+independent (again): `manifest.ts`'s real on-device C2PA signing never
+imported `modules/certificate`, untouched throughout.
+Status: CLOSED 2026-09-14 — no known path left anywhere in the app that
+can show a fake "Pi Verified"/CA-trust claim. A real CA-backed tier
+(Phase 2, `ca.picam.app`) is future work, not tracked as a defect.
 
 ### ✅ Confirmed correct, no regressions (checked this pass)
 - Web `/settings` (password/email change, API-key generate, avatar upload,
@@ -274,7 +303,7 @@ same rules of engagement as `docs/security.md` §"Rules of engagement". This is
 a QA pass, not a fix session — nothing below was fixed here except where
 explicitly marked; new findings go to whoever owns that direction next.
 
-### 🟠 NEW — `teta_verify_endpoint` is permanently broken via MCP (401 on every call)
+### ✅ CLOSED 2026-09-12 (session 1.24/2.10) — `teta_verify_endpoint` is permanently broken via MCP (401 on every call)
 Live: MCP session, `teta_verify_endpoint(endpoint_url:"https://example.com/agent")`
 → `{"isError":true, text:"API 401: {\"detail\":\"Not authenticated\"}"}`. Root
 cause: `api/app/api/routes/endpoint_verification.py:98-101`'s `verify_endpoint`
@@ -297,7 +326,18 @@ service-level API key baked into its env so it can authenticate on behalf of
 anonymous callers, or (b) relax `/verify-endpoint`'s auth requirement back to
 unauthenticated-but-rate-limited (like `/v1/tag-ping`/badge) now that the SSRF
 fix's host-validation covers the core risk independent of auth.
-Status: OPEN, HIGH severity, no fix planned this session (QA-only).
+**CLOSED 2026-09-12** — owner chose (a). `teta-pi/mcp` PR #9 +
+`teta-pi/api` PR #24 (comment only, no API code change needed —
+`get_current_user` already accepts any active account's `pk_live_` key
+generically). One dedicated `mcp-service@tetapi.dev` service account +
+`pk_live_` key minted directly in prod Postgres, wired into
+`tetapi-mcp.service`'s `Environment=` as `TETA_PI_SERVICE_API_KEY`. Full
+rationale in `docs/decisions.md` (2026-09-11 entry) — including why this
+skips the full 2.2 scoped-key system for now. **Live-verified**: a real
+`teta_verify_endpoint` MCP call against prod now returns a structured
+verdict (`FAILED — endpoint did not respond`, for a non-agent test URL) —
+no more 401, no more `Not authenticated`.
+Status: CLOSED.
 
 ### 🟡 NEW — `teta_verify_entity`/`teta_get_proof`/`teta_get_profile`/`teta_verify_claim` proof links point at raw JSON, not the public page
 `teta_search`/`teta_resolve_intent` proof links correctly go to
