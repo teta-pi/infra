@@ -1,5 +1,7 @@
 # TETA+PI Infra
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Canonical docs + deploy configuration for **TETA+PI** — Trust Infrastructure
 for Digital Entities. This repo holds no application code.
 
