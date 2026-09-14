@@ -1,0 +1,98 @@
+name: Security probe (regression net)
+
+# Roadmap 15.6 / docs/security.md §6.2 — the automated replacement for the old
+# "monthly manual" read-only re-audit. Runs scripts/security/probe.py against
+# prod once a day and on demand: re-asserts every CLOSED docs/security.md §5
+# finding stayed closed, and that no new unauthenticated public surface appeared.
+#
+# Read-only against our own infra only (§ Rules of engagement). Report-only:
+# on FAIL the run goes red and ONE tracking issue is opened/updated — never an
+# auto-fix (fixes are the owner's call, docs/decisions.md 2026-09-14). On PASS
+# it is silent and closes nothing automatically.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"   # 06:17 UTC daily — off-peak, avoids top-of-hour noise
+  workflow_dispatch:
+    inputs:
+      include_heavy:
+        description: "Also run high-volume rate-limit checks (>100 req/min against prod)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: security-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install "httpx==0.28.*"
+
+      - name: Run security probe
+        id: probe
+        env:
+          SEC_PROBE_API_KEY: ${{ secrets.SEC_PROBE_API_KEY }}
+        run: |
+          set +e
+          HEAVY=""
+          if [ "${{ inputs.include_heavy }}" = "true" ]; then HEAVY="--include-heavy"; fi
+          python3 scripts/security/probe.py $HEAVY | tee probe_report.txt
+          echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo '## Security probe report'
+            echo '```'
+            cat probe_report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update tracking issue on FAIL
+        if: always() && steps.probe.outputs.exit != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Security probe: regression net FAIL"
+          BODY_FILE=issue_body.md
+          {
+            echo "The daily security probe (\`scripts/security/probe.py\`, 15.6) reported one or more FAILs."
+            echo ""
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo '```'
+            cat probe_report.txt
+            echo '```'
+            echo ""
+            echo "_No auto-fix — triage per docs/security.md §5. When a finding is a live gap awaiting a mapped fix (e.g. S-16 → 15.5), that FAIL is expected until the fix merges._"
+          } > "$BODY_FILE"
+
+          # One issue, not one per run: find an open issue with this exact title
+          # and the `security` label, then comment on it; otherwise create it.
+          NUM=$(gh issue list --state open --label security --search "in:title \"$TITLE\"" \
+                  --json number,title --jq ".[] | select(.title==\"$TITLE\") | .number" | head -n1)
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body-file "$BODY_FILE"
+            echo "Commented on existing issue #$NUM"
+          else
+            gh label create security --color B60205 --description "Security regression net" 2>/dev/null || true
+            gh issue create --title "$TITLE" --label security --body-file "$BODY_FILE"
+          fi
+
+      - name: Fail the job if the probe failed
+        if: always() && steps.probe.outputs.exit != '0'
+        run: exit 1

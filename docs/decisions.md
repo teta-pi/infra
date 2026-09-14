@@ -543,3 +543,35 @@ fixed here:** `POST /auth/agent-key` (singular — different from 2.2's planned
 flagged as a problem to close, not a mechanism to build on) and deliberately
 not fixed in this session (out of the requested scope — MCP's
 `teta_verify_endpoint` fix only).
+
+## 2026-09-14 — 15.6 security regression net: report-only, no auto-fix
+The daily security probe (`scripts/security/probe.py`,
+`.github/workflows/security-probe.yml`) **reports and stops** — it never
+changes code, config, or data in response to a finding.
+
+**Why report-only:**
+- Every §5 finding's fix has so far been a real decision, not a mechanical one:
+  S-15 was "delete vs `require_admin` vs rate-limit" (owner chose delete); the
+  `teta_verify_endpoint` 401 was "service key vs relax to anonymous" (owner
+  chose service key). An auto-fixer would have picked wrong on both.
+- Rules of engagement (§ Rules of engagement) already forbid this direction from
+  touching code/infra; an auto-fix step would violate that outright.
+- A red workflow + one tracking issue puts the decision in front of the owner
+  with full evidence, which is the point.
+
+**Why one issue, updated, not one-per-run:** a daily red that spawns a new issue
+every morning trains everyone to ignore it. The workflow finds the open
+`security`-labelled issue with the fixed title and comments on it instead.
+
+**Why some checks are honestly red from day one** (S-16 SSRF, S-17 private
+entity, missing headers): a regression net that only asserts already-green
+things can't prove it bites. A FAIL that maps to a known, not-yet-merged fix
+(S-16 → 15.5) is the probe working, not noise — it flips green when the fix
+lands and would flip red again if it regressed.
+
+**Why high-volume rate-limit checks are opt-in** (`--include-heavy`, not in
+cron): tripping the badge (120/min) or tag-ping (240/min) limiters needs >100
+requests — sustained load against a maxed prod droplet, which the rules of
+engagement (§6.3) rule out for a daily automated job. The low-volume,
+security-critical limiter (`verify-endpoint`, 5/min = 6 tiny calls) does run
+daily.

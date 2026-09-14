@@ -2027,3 +2027,50 @@ boot check, not a silent dependency-audit fix. None of the remaining CVEs are
 in app runtime code (all build/CLI tooling).
 Status: OPEN — needs a dedicated `expo` 54→57 upgrade session (new roadmap task,
 budget for `expo-doctor` + device boot verification, ties into 14.4's history).
+
+## 15.6 security regression net — two live gaps found building the probe (2026-09-14)
+
+While building `scripts/security/probe.py` (the automated §6.2 re-audit), two
+live findings surfaced that the manual passes and static scanners had missed.
+Both confirmed read-only against prod; tracked in `docs/security.md` §5.
+
+### 🟠 S-16 — `POST /verify-endpoint` SSRF: auth added, host validation never was
+`api/app/api/routes/endpoint_verification.py` `_verify_active` (line ~55) and
+`_verify_consistency` (~78) do `client.get(url, timeout=8.0, follow_redirects=True)`
+on the caller-supplied `endpoint_url` with **no** private/loopback/link-local
+guard. S-2 (api PR #3, 1.7) "fixed" the unauthenticated SSRF by adding
+`Depends(get_current_user)` — but any active account's `pk_live_` key (a free
+signup, or the MCP service key wired in 1.24/2.10) satisfies that, and the fetch
+itself is unguarded. Live-confirmed 2026-09-14: with the test key,
+`{"endpoint_url":"http://127.0.0.1:8000/health"}` → `200 {"is_active":true}` —
+the prod server fetched its **own** API port (a loopback port oracle). Same via
+MCP `teta_verify_endpoint`. Contrast `services/verification/domain_ownership.py::
+_resolves_to_public_ip`, which has blocked exactly this since S-9. **Fix (15.5):**
+port that guard onto `/verify-endpoint` before the two `client.get`s. Probe
+asserts it (`ssrf_canaries`, `mcp[verify_endpoint_ssrf]`) — honestly red until
+15.5 merges.
+Status: OPEN → 15.5.
+
+### 🟡 S-17 — private entity fully readable by UUID (only private *blocks* were scoped)
+`routes/businesses.py::get_business` (~245), `agent_preview` (~653) and
+`get_proof` (~704) have no auth dependency and no `is_public` filter — an
+anonymous caller who knows a UUID gets a `is_public=false`/`is_published=false`
+entity's name, description and blocks. S-8 (api PR #10) closed the analogous
+*block* leak on `GET /businesses/{id}/blocks`, but the entity row itself and the
+agent preview/proof were never scoped. `by-slug/{slug}/public` IS correctly
+scoped (`is_published==True, is_public==True`), which is why this went unnoticed.
+Live-confirmed 2026-09-14 against the 15.3 fixture (`e5b79aaa-…`, private):
+base + `/preview` both return the entity, `/proof` returns its proof scaffold.
+**Owner decision:** either filter these three on `is_public` for non-owners
+(matching S-8), or document "any entity readable by its UUID" as intended for
+anonymous agents. Recorded in `scripts/security/public_allowlist.json` →
+`pending_owner_decision`; probe check `private_entity_exposure` asserts it.
+Status: OPEN — owner decision (backend).
+
+### Two owner questions the probe raised but does not decide
+- **Security headers** absent on app./api./mcp.tetapi.dev (no HSTS anywhere;
+  only landing sets nosniff + frame-options). Fix is nginx/Cloudflare = devops
+  (`docs/security.md` §6.3). Probe `headers` check red until then.
+- **`/docs` + `/redoc`** (interactive OpenAPI UI) are publicly reachable on
+  prod. `security.md` has no ruling; the probe flags it as a SKIP owner-question,
+  it does not fail the run.

@@ -6,6 +6,48 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-14 · 15.6 · security regression net (automated §6.2 re-audit)
+Done: built the automated replacement for docs/security.md §6.2's old
+"monthly manual" re-audit — a deterministic daily probe that re-asserts every
+CLOSED §5 finding stayed closed and that no new unauthenticated public surface
+appeared. This is the bug class static scanners (CodeQL/bandit, 15.2) never
+see: S-2/S-15/S-16 + the VARCHAR(20)-500 were all found by hand, by luck, over
+two months. Ran the full net against prod before the PR (report in PR body):
+all closed findings PASS (S-1 traversal, S-8 private-blocks, S-15 agent-key
+gone, auth-surface contract, secrets, verify-endpoint rate-limit). Three live
+gaps surfaced honestly red, none of them regressions of a closed item:
+**S-16** (loopback SSRF in /verify-endpoint — auth was added by S-2 but host
+validation never was; prod fetched its own 127.0.0.1:8000, a port oracle;
+awaiting 15.5), **S-17** (private entity readable by UUID via base/preview/proof
+— only private *blocks* were ever scoped, new finding, owner decision), and
+missing security headers on app/api/mcp (devops, §6.3). Two owner questions
+flagged as SKIP not decided: /docs+/redoc public on prod, and the S-17
+filter-vs-document call.
+Changed: new `scripts/security/probe.py` (Python 3.12, stdlib + httpx, one
+check per closed S-*), `scripts/security/public_allowlist.json` (the
+auth-surface contract — the test that would have caught S-15 day one; has
+`public`, `must_not_exist` for deleted routes, `pending_owner_decision`),
+`scripts/security/fixtures.json`, `scripts/security/README.md`,
+`.github/workflows/security-probe.yml` (daily cron 06:17 UTC +
+workflow_dispatch; on FAIL opens/updates ONE `security`-labelled issue, silent
+on PASS; needs the SEC_PROBE_API_KEY repo secret). Docs: `docs/security.md`
+(§6.2 rewritten monthly→automaton + the "every closed S-* gets an assert in
+the same PR" rule; §5 gains S-16, S-17; §4 SSRF line reopened),
+`docs/known-issues.md` (S-16/S-17 file:line), `docs/decisions.md` (report-only
+rationale), `docs/deployment.md` (SEC_PROBE_API_KEY — owner adds manually),
+`docs/roadmap.md` (15.6).
+Risk: low, all read-only. The probe respects the verify-endpoint 5/min limiter
+(≤3 SSRF canaries, paused) and gates >100-req rate-limit tests behind
+--include-heavy so cron never loads prod. One caveat: in a single run the SSRF
+canary and the verify-endpoint rate-limit check share the 5/min window — the
+canary runs first on a fresh window (fine in isolated cron), but if the window
+is already warm from a prior run the canary SKIPs (rate-limited) rather than
+falsely passing. No writes, no accounts created.
+Next: **owner action** — (1) add the `SEC_PROBE_API_KEY` GitHub secret
+(docs/deployment.md) so the auth'd checks run in CI, else they SKIP; (2) decide
+S-17 (filter vs document) and the /docs+/redoc question; (3) 15.5 to close
+S-16 — the probe will flip that check green when it merges.
+
 ## 2026-09-12 · 1.24/2.10 · fix teta_verify_endpoint 401 — MCP service-key auth
 Done: closed a 🟠 HIGH finding open since the 6.5 QA pass (2026-09-06) —
 `teta_verify_endpoint`, one of the 7 advertised MCP tools and the one

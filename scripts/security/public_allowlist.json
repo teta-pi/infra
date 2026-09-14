@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "CONTRACT: every route the API may answer with 2xx to an UNAUTHENTICATED caller.",
+    "probe.py (check `auth_surface`) calls every path+method in the live openapi.json",
+    "without Authorization; a 2xx on any route NOT listed here fails the run. This is",
+    "the test that would have caught S-15 (/auth/agent-key) on day one.",
+    "Keys are `METHOD <openapi path template>`. Each entry cites docs/api.md (or the",
+    "route's own docstring) as the reason it is public BY DESIGN — do not add a route",
+    "here to make the probe green; add it because the docs say it is public.",
+    "`must_not_exist` = routes that were deleted as security fixes; they must be absent",
+    "from openapi.json AND answer 404/405 live (regression net for deleted surface)."
+  ],
+  "public": {
+    "GET /health": "liveness; docs/deployment.md 'Verifying a deploy'",
+    "GET /": "FastAPI root banner, no data",
+    "POST /api/v1/auth/token": "password sign-in; docs/api.md Auth table (credentials in body)",
+    "POST /api/v1/auth/magic-link": "legacy sign-in link; docs/api.md Auth table",
+    "POST /api/v1/auth/email-code": "sends 6-digit code, 60s cooldown; docs/api.md Auth table",
+    "POST /api/v1/auth/verify-code": "code -> JWT, creates user if new; docs/api.md Auth table",
+    "GET /api/v1/businesses/by-slug/{slug}/public": "published+public only, powers /e/[slug]; docs/api.md",
+    "GET /api/v1/businesses/{business_id}/preview": "agent JSON; docs/api.md",
+    "GET /api/v1/businesses/{business_id}/proof": "cryptographic proof; docs/api.md",
+    "GET /api/v1/businesses/{business_id}/blocks": "optional bearer: anonymous callers get is_public blocks only (S-8, api PR #10)",
+    "POST /api/v1/businesses/{business_id}/opt-out": "one-click unauthenticated opt-out gated by ?token=; docs/api.md (GTM Phase 2 guardrail)",
+    "POST /api/v1/media/device-upload": "Pi CAM upload, auth is X-Device-Api-Key header not Bearer; docs/api.md routes/media.py",
+    "GET /api/v1/media/local/{file_id}/{filename}": "serves stored media, path contained to UPLOAD_DIR (S-1); docs/api.md",
+    "GET /api/v1/media/{media_id}/verify": "public C2PA/OTS status for a media id; routes/media.py::verify_media",
+    "POST /api/v1/devices/register": "Pi CAM pairing, gated by the QR registration token in the body; routes/media.py::register_device",
+    "GET /api/v1/search": "keyword+level search over published entities; docs/api.md",
+    "POST /api/v1/resolve-intent": "TWIRA-ranked intent routing, MCP flagship; docs/api.md",
+    "GET /api/v1/registry/search": "official registry lookup; docs/api.md + docs/registries.md",
+    "POST /api/v1/claim": "waitlist signup, 5/min/IP; docs/api.md Claims",
+    "GET /api/v1/claim/stats": "waitlist counters; docs/api.md Claims",
+    "GET /badge/{entity_id}": "public SVG badge, 120/min/IP; routes/badge.py",
+    "POST /v1/tag-ping": "anonymous tag.js beacon, always 204, 240/min/IP; docs/api.md Universal Tag + security.md B5",
+    "GET /wk/{entity_id}/agent.json": "Universal Tag Part B; docs/api.md",
+    "GET /wk/{entity_id}/agent-card.json": "Universal Tag Part B; docs/api.md",
+    "GET /wk/{entity_id}/llms.txt": "Universal Tag Part B; docs/api.md"
+  },
+  "pending_owner_decision": {
+    "_comment": "Live 2xx-to-anonymous surface that the docs do not sanction. Surfaced by dedicated probe checks (not by auth_surface, which uses dummy ids and so only catches endpoints that 2xx with junk input, the way /auth/agent-key did). Resolve each by fixing the route (then remove the entry) or by adding it to `public` with a docs/api.md citation.",
+    "private_entity_read": "GET /businesses/{id}, /businesses/{id}/preview and /businesses/{id}/proof all return a is_public=false / is_published=false entity's name+description to an anonymous caller who knows the UUID (confirmed 2026-09-14 against the 15.3 fixture e5b79aaa). Only private BLOCKS were ever scoped (S-8, api PR #10); the entity row itself and the agent preview/proof were not. docs/api.md marks by-slug/{slug}/public as 'published+public only' but says businesses CRUD is owner-checked. Owner decision: filter these three on is_public for non-owners, or document 'any entity readable by UUID' as intended for agents. Probe check `private_entity_exposure` asserts this."
+  },
+  "must_not_exist": {
+    "POST /api/v1/auth/agent-key": "S-15: unauthenticated account+pk_live_ mint, deleted in api PR #23 (2026-09-11)",
+    "POST /api/v1/auth/register": "unverified account creation, deleted 2026-07-06 (known-issues '/auth/register is public')"
+  }
+}
