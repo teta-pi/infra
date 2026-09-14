@@ -145,7 +145,7 @@ block can only delete the whole block (`DELETE /blocks/{id}`, which is
 wired), not just the media.
 Status: OPEN, LOW priority — product gap, not a live bug.
 
-### ✅ `teta-pi/pi-cam`'s "Get Pi Certificate" onboarding screen — fake feature, CLOSED for onboarding; broader "Pi Verified" badge issue reopened below (14.8, 2026-09-11)
+### ✅ `teta-pi/pi-cam`'s "Get Pi Certificate" fake feature — CLOSED everywhere (14.8 onboarding + 14.10 Settings/HUD/verify.tsx, 2026-09-11 / 2026-09-14)
 `modules/certificate/index.ts` is self-labeled in its own header: *"Phase
 1: симуляція для тестування UI. Phase 2: реальний запит до
 https://ca.picam.app/v1/"*. `requestCACertificate()` does a fake 2-second
@@ -182,20 +182,34 @@ independent false-trust path.
 until a real CA exists) and rewrote the false "recognized by any
 C2PA-compatible tool" slide copy to describe the real, working
 producer-profile-link feature instead.
-**Still open — NOT fixed this session, same root cause, different entry
-points:** Settings still has the identical "Get Pi Certificate" upgrade
-flow (`settings.tsx:134-244`, "Pi Certificate" row + "Upgrade to Pi
-Verified — Free" banner) reachable one tap away, and Settings'
-"Trust Level" row shows "Pi Verified" from `isOnline` alone. Either one
-still hands a user a persistent, device-local fake "Pi Verified" badge
-across camera/gallery/preview/verify. Needs its own session: pull the
-Settings CTA + the `isOnline`-only Trust Level claim the same way 14.8
-pulled onboarding's, or gate all of it behind a real CA (Phase 2).
-Status: OPEN (Settings + isOnline paths), HIGH priority — same reasoning
-as before: for a product whose pitch is "trust cryptographic proof, not
-claims," a fabricated crypto-trust badge in the user's own app directly
-contradicts the premise, even though it still can't reach the public
-trust graph or backend data.
+**Fix completed this session (14.10, `teta-pi/pi-cam` PR #9):** removed
+Settings' "Get Pi Certificate" CTA, "Pi Certificate" row, the
+`isOnline`-only "Trust Level" row, and the equally fake "Auto CA
+Upgrade" toggle (never read anywhere in the capture path). Deleted
+`modules/certificate/` entirely — zero call sites remained once
+`settings.tsx`/`camera.tsx`/`preview.tsx` were fixed. Tracing every
+call site surfaced two more instances of the same problem, both fixed:
+the camera HUD (3 variants) and `SigningToast` said "Pi Verified"/ran a
+"certifying → verified" sequence purely from `isOnline`, unrelated to
+any real cert; and **`app/verify.tsx`'s "Verify external content" never
+looked at the picked file at all** — it unconditionally showed a
+hardcoded fake "Content Authentic" result (made-up device/key/hash)
+regardless of what was chosen, arguably the most severe instance of
+this pattern found across the whole audit. Rewired it to the real,
+already-working `modules/c2pa` `verifyMedia()`; removed the "TRY A
+SAMPLE" buttons (same fabricated-outcome problem, just relocated);
+results now show real data from the actual manifest, with an honest
+limitation noted instead of overclaiming (local-manifest-only — can't
+verify a file captured on another device, no backend lookup wired yet).
+Retired the `'ca'` trust-level value from `modules/c2pa`'s shared
+types and `VerificationBadge`'s public API; `loadTrustIndex()` coerces
+any legacy `'ca'` entry from before this fix down to `'device'` so an
+existing install can't still render a stale fake badge. Confirmed
+independent (again): `manifest.ts`'s real on-device C2PA signing never
+imported `modules/certificate`, untouched throughout.
+Status: CLOSED 2026-09-14 — no known path left anywhere in the app that
+can show a fake "Pi Verified"/CA-trust claim. A real CA-backed tier
+(Phase 2, `ca.picam.app`) is future work, not tracked as a defect.
 
 ### ✅ Confirmed correct, no regressions (checked this pass)
 - Web `/settings` (password/email change, API-key generate, avatar upload,
