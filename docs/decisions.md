@@ -479,3 +479,67 @@ that changes (e.g. the list needs to survive a Redis restart or exceed 200
 entries), revisit as a real backlog item — don't silently grow the cap.
 
 Implemented in `teta-pi/api` PR #12 (`app/api/routes/tag.py`).
+
+## 2026-09-11 — MCP service-key auth for `teta_verify_endpoint` (fix, not the 2.2 scoped-key system)
+
+`teta_verify_endpoint` had been 401ing on every MCP call since 2026-07-14 (the
+1.7 SSRF fix added `Depends(get_current_user)` to `/verify-endpoint`, and MCP
+has no auth mechanism of its own — S-11). Filed as OPEN with two fix options
+in `docs/known-issues.md` since the 6.5 QA pass (2026-09-06): (a) give MCP its
+own service-level key, or (b) relax the route back to anonymous+rate-limited
+now that the SSRF fix's host-validation covers the core risk independent of
+auth. **Owner chose (a).**
+
+**Decision:** mint one dedicated service `User` row (`is_agent=true`, no
+password, `pk_live_…` key) for the MCP server to authenticate as — not the
+full scoped-key system designed in 2.2 (`/auth/agent-keys`, per-caller-owned,
+revocable, scoped). Reasons:
+- `get_current_user` already accepts any active account's `pk_live_` key
+  generically (`app/api/deps.py:22`) — **zero API code change needed** to
+  accept it, only to document why.
+- `verify_endpoint`'s `current_user` param is never read in the function body
+  — it's a pure "is this any active account" gate, not an ownership check.
+  Any account's key satisfies it identically; a shared service account isn't
+  a weaker credential than a real user's key would be here.
+- The account owns nothing (no businesses, no claims) — if the key leaked,
+  the blast radius is "can call routes that only require *some* logged-in
+  account," the same as if someone just signed up for a free account, not a
+  privilege escalation.
+- Building the full 2.2 scoped-key system (issuance endpoint, scope
+  validation, revocation, `admin_audit_log` wiring) for exactly one internal
+  caller would be solving a multi-tenant problem TETA+PI doesn't have yet.
+  Revisit if/when a second external caller needs its own scoped key — 2.2's
+  design doc is unchanged and still the plan for that.
+
+**Explicitly NOT chosen:** option (b), relaxing the route back to anonymous.
+Kept auth required so `/verify-endpoint` still can't be hit by the open
+internet without at least one credential in front of it, consistent with the
+1.7 fix's intent; only MCP (a known, single caller) gets the credential.
+
+**What changed:**
+- `teta-pi/mcp` `src/client.ts`: `verifyEndpoint()` sends
+  `Authorization: Bearer ${TETA_PI_SERVICE_API_KEY}` when that env var is
+  set (unset in local/dev — same 401 as before, no worse). Also fixed a
+  latent header-merge bug in `apiFetch` that this change would otherwise
+  have hit: `...init` was spread *after* the computed `headers` object, so
+  any caller passing its own `headers` (verifyEndpoint, now) would have
+  silently clobbered the `Content-Type` default instead of merging with it.
+  No existing caller set `init.headers` before this, so nothing else changes.
+- `teta-pi/api` `app/api/routes/endpoint_verification.py`: comment only,
+  explaining why `current_user` is required-but-unused and pointing here.
+- Server-side (prod, done with explicit owner go-ahead, not in either repo):
+  one `users` row inserted directly (`email: mcp-service@tetapi.dev`,
+  `auth_provider: api_key`, `is_agent: true`, a freshly generated
+  `pk_live_…` key in the same format `routes/auth.py` already uses), and
+  `TETA_PI_SERVICE_API_KEY=…` added to `tetapi-mcp.service`'s `Environment=`
+  lines (`/etc/systemd/system/tetapi-mcp.service`, not in git — see
+  `docs/deployment.md`).
+
+**Known pre-existing, unrelated issue surfaced while reading this code, not
+fixed here:** `POST /auth/agent-key` (singular — different from 2.2's planned
+`/auth/agent-keys`) is unauthenticated, unlimited, and mints a new account +
+`pk_live_` key on every call with zero rate-limiting — already tracked in
+`docs/known-issues.md`. Deliberately not reused or touched for this fix (it's
+flagged as a problem to close, not a mechanism to build on) and deliberately
+not fixed in this session (out of the requested scope — MCP's
+`teta_verify_endpoint` fix only).

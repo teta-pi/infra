@@ -4,7 +4,7 @@ TypeScript server exposing TETA+PI to AI agents via the Model Context Protocol.
 Source: `mcp/src/index.ts` (tools + HTTP bootstrap) + `mcp/src/client.ts` (API
 client, 15s timeout per call). Tool handlers are stateless — every call hits
 `api.tetapi.dev` over HTTP. Deployed as systemd `tetapi-mcp` on port 3002,
-public at `mcp.tetapi.dev`. **Version 1.5.3.**
+public at `mcp.tetapi.dev`. **Version 1.5.4.**
 
 ## Transport & manifest
 - HTTP + SSE via `@modelcontextprotocol/sdk` `StreamableHTTPServerTransport`,
@@ -134,6 +134,21 @@ rest) — both tasks shipped with explicit limits, not "should be fine":
   worker — run manually or from a scheduled off-box session.
 - Version bumped **1.5.2 → 1.5.3** — hardening + one log field, no tool
   schema or behaviour change for callers.
+
+## 1.24/2.10 teta_verify_endpoint service-key fix (2026-09-12)
+`teta_verify_endpoint` had 401'd on every MCP call since 2026-07-14 (the 1.7
+SSRF fix required `get_current_user` on `/verify-endpoint`; MCP had no auth
+of its own — S-11). Owner chose a dedicated service account over relaxing
+the route back to anonymous. **No API-side code change** — `get_current_user`
+already accepts any active account's `pk_live_` key generically, and the
+route never reads `current_user` (a pure "any active account" gate, not
+ownership). `mcp/src/client.ts`'s `verifyEndpoint()` now sends
+`Authorization: Bearer $TETA_PI_SERVICE_API_KEY` (a dedicated
+`mcp-service@tetapi.dev` account's key, set via `tetapi-mcp.service`'s
+`Environment=`, not in git) — only on this one call, every other tool stays
+unauthenticated by design. Full rationale, including why this skips the
+full 2.2 scoped-key system for now: `docs/decisions.md` (2026-09-11).
+Version bumped **1.5.3 → 1.5.4**.
 
 ## Tools (7)
 | Tool | Purpose | Backend |
