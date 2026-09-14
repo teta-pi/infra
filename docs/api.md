@@ -63,7 +63,17 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   - `GET /businesses/{id}/preview` (agent JSON), `GET /businesses/{id}/proof`,
     `GET /businesses/by-slug/{slug}/public` (published+public only, public
     blocks only — powers `/e/[slug]`; includes the `legal_entity` disclosure).
-- `routes/blocks.py` — block CRUD, owner-checked via parent business.
+  - **404 for private entities to non-owners** (S-17, 1.25): `GET /businesses/{id}`,
+    `/preview` and `/proof` take an *optional* bearer (`deps.get_optional_user`).
+    The owner always gets 200; anyone else — anonymous, another account, the
+    MCP service key — gets 404 (never 403, so a guessed UUID confirms nothing)
+    when `is_public=false` **or** `is_published=false`. `/preview` and `/proof`
+    also omit non-public blocks (and their media ids) for non-owners, same as
+    `by-slug/public`. Helper: `businesses.py::_get_visible_business`.
+- `routes/blocks.py` — block CRUD, owner-checked via parent business. Reads
+  (`GET /businesses/{id}/blocks`, `GET /blocks/{block_id}`) apply the same
+  S-8 + S-17 rule: non-owners see only public blocks of public+published
+  entities, everything else 404s.
 - `routes/media.py` — `/media/upload` (JWT), `/media/device-upload` (api_key),
   local storage under `UPLOAD_DIR`, served at `/media/local/{id}/{name}`.
 

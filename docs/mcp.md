@@ -161,6 +161,14 @@ Version bumped **1.5.3 → 1.5.4**.
 | `teta_get_profile` | public profile + public blocks (split from verify) | `/businesses/{id}/preview` |
 | `teta_verify_claim` | check a claim against an entity's verified blocks | `/businesses/{id}/preview` |
 
+Since api S-17 (2026-09-14, `docs/api.md`) every `/businesses/{id}*` read
+404s for a private (`is_public=false`) or unpublished entity unless the caller
+is its owner — the MCP calls these anonymously, so `teta_verify_entity`,
+`teta_get_profile`, `teta_verify_claim` and `teta_get_proof` on such an id
+surface `API 404: Business not found`, exactly like a non-existent id. That is
+by design: the tool descriptions promise *public* content and ids "from
+`teta_search`", which only ever returns published+public entities.
+
 **Proof depth** (`teta_get_proof` → `proof_depth`) is read straight from
 `verification_events` (the Temporal Moat) — no new tables or workers:
 - `ots_status` — strongest OTS state across the entity's events

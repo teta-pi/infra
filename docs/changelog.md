@@ -6,6 +6,43 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-14 · 1.25 (booted as "1.24") · S-17 private entity readable by UUID — CLOSED
+Done: closed S-17 the way the manager decided (filter, same rule as S-8).
+[api PR #26](https://github.com/teta-pi/api/pull/26): `GET /businesses/{id}`,
+`/preview`, `/proof`, `/businesses/{id}/blocks`, `/blocks/{block_id}` now 404
+for anyone but the owner when `is_public=false` OR `is_published=false` (404,
+never 403). Found in passing and fixed in the same PR: `/preview` and `/proof`
+were also emitting **non-public blocks** (titles, media ids) of *public*
+entities — `by-slug/public` filtered them, these two never did.
+[web PR #47](https://github.com/teta-pi/web/pull/47): `/profile` sent **no
+token** on `GET /businesses/{id}` + `/blocks` (so it already showed the owner
+only their public blocks, and would have gone blank for a private entity after
+the API fix) — now sends the session token. Must merge **before** api #26.
+Changed: api `deps.py` (`get_optional_user` promoted from blocks.py),
+`routes/businesses.py` (`_get_visible_business`), `routes/blocks.py`; web
+`lib/api.ts`, `app/profile/page.tsx`; infra `scripts/security/probe.py`
+(`private_entity_exposure` rewritten: owner 200 + anon 404 on all four reads
+against a dedicated private fixture; S-8 SKIP message explains the new
+constraint), `fixtures.json` (+`s17_private_entity` = `ab27ca35`; the S-8
+fixture `e5b79aaa` was itself private so `/blocks` on it would 404 → set
+`is_public=is_published=true` on prod via the test key, blocks untouched),
+`public_allowlist.json` (`pending_owner_decision` cleared), docs
+security.md (S-17 CLOSED), known-issues.md, roadmap.md (row 1.25 — 1.24 was
+already 1.24·2.10), api.md, mcp.md (MCP tools surface `API 404` for private
+ids; by design), scripts/security/README.md.
+Risk: any *other* client reading `/businesses/{id}` or `/blocks` anonymously
+for an entity it owns now gets 404 — grepped web (only /profile, fixed) and
+mcp (anonymous by design, public ids only); pi-cam/WP plugin not grepped.
+Search-page per-row `blockApi.list` is unaffected (search is public-only).
+Local run of the rewritten probe pre-deploy correctly went red on all four
+routes (proof the assert bites).
+Next: merge order web #47 → api #26 → this PR; then live check (anon 404 ×
+4, owner 200) and `gh workflow run security-probe.yml` → expect
+`private_entity_exposure` PASS and `s8_private_blocks` PASS. 1.22 (`POST
+/blocks` ignores `is_public`) is the last open item in this family.
+
+---
+
 ## 2026-09-14 · 15.6 · security regression net (automated §6.2 re-audit)
 Done: built the automated replacement for docs/security.md §6.2's old
 "monthly manual" re-audit — a deterministic daily probe that re-asserts every
