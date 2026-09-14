@@ -47,6 +47,75 @@ Next: **owner action** — (1) add the `SEC_PROBE_API_KEY` GitHub secret
 (docs/deployment.md) so the auth'd checks run in CI, else they SKIP; (2) decide
 S-17 (filter vs document) and the /docs+/redoc question; (3) 15.5 to close
 S-16 — the probe will flip that check green when it merges.
+## 2026-09-12 · 6.7 · "block creation/upload/pi-camera doesn't work" — diagnosed + fixed
+Done: Owner reported block creation, photo upload, and pi-camera block
+creation all broken. Live-verified block creation and file upload both work
+fine (`POST /businesses/{id}/blocks` 201, `POST /media/upload` 200,
+tested directly against prod). Root-caused the real complaint: `/profile`'s
+"Upload from PI Camera" button was pure UI simulation since 1.20-web
+(web PR #17, 2026-07-27) — `setTimeout` + fake "done" state, never called
+the backend, never persisted. Traced why it could never be finished as
+originally planned: the real device-upload pipeline always writes into one
+find-or-create "Pi CAM Captures" block per entity, so a button that let a
+user "pull a capture into this specific block" was never architecturally
+possible — not a wiring gap, a premise mismatch. Removed it.
+Changed: `teta-pi/web` PR #45 (`src/app/profile/page.tsx` —
+`handleFileUpload` simplified to file-only, fake button + dead branch
+removed, one-line note added). `docs/known-issues.md` new entry.
+Risk: Low — removes a component confirmed to never write real data; the
+real file-upload path and the real `PiCamButton` (pairing) are untouched.
+Not live-click-through-verified (no test-account credentials this
+session, recurring limitation) — reasoning from source + live API checks
+is unambiguous, but flag for a click-through once deployed.
+Next: merge PR #45, live-verify post-deploy; consider whether `/profile`
+should surface the "Pi CAM Captures" block more prominently once it exists
+(discoverability), separate from this fix.
+
+## 2026-09-14 · 14.10 · fake Pi Certificate — closed everywhere (Settings, HUD, verify.tsx)
+Done: Continuation of 14.8 (which removed the fake CA-cert onboarding
+screen but left the same flow reachable from Settings, flagged in its
+own writeup). Re-verified the picture first — read
+`modules/certificate/index.ts` and `modules/c2pa/manifest.ts` again in
+full; confirmed the real signing pipeline still never imported the
+fake module. Traced every remaining call site (`settings.tsx`,
+`camera.tsx`, `preview.tsx`) rather than fixing Settings in isolation,
+which surfaced two more independent instances of the same problem not
+in the original brief: the camera HUD/`SigningToast` said "Pi
+Verified"/ran a fake "certifying → verified" sequence purely from
+`isOnline`, and **`app/verify.tsx`'s "Verify external content" never
+looked at the picked file at all** — always showed a hardcoded fake
+"Content Authentic" result with made-up device/key/hash, regardless of
+input. `teta-pi/pi-cam` PR [#9](https://github.com/teta-pi/pi-cam/pull/9).
+Changed: `teta-pi/pi-cam` — removed Settings' CTA/Trust
+Level/Auto-CA-Upgrade rows; deleted `modules/certificate/` (zero call
+sites left); dropped the fake `'ca'` HUD/badge/toast states in
+`camera.tsx`, `preview.tsx`, `SigningToast.tsx`, `VerificationBadge.tsx`;
+rewired `verify.tsx` to the real `modules/c2pa` `verifyMedia()` instead
+of ignoring the file, removed the "TRY A SAMPLE" fake-outcome buttons;
+retired `'ca'` from `modules/c2pa`'s shared types with a legacy-data
+coercion in `loadTrustIndex()`; corrected `README.md`/`CLAUDE.md`.
+`docs/roadmap.md` new `14.10` row + 14.8 note pointing here;
+`docs/known-issues.md` finding now CLOSED (was reopened after 14.8).
+Risk: Low — this only removes UI/state that read a fake local flag;
+the real on-device C2PA signing pipeline (Secure Enclave/Keystore →
+`c2pa_verified` on the backend) was not touched, confirmed independent
+both before and after the edits. `tsc --noEmit` clean; `expo-doctor`
+17/18 (same pre-existing unrelated patch mismatch as 14.8). Not
+build-verified locally (14.4, sandbox can't reach `dl.google.com`) —
+owner to confirm via EAS: Settings no longer shows any
+"Pi Certificate"/"Trust Level" row, and verifying a real Pi CAM photo
+in "Verify external content" shows real captured-time/device/hash data
+instead of the old canned "iPhone 16 Pro" result.
+Next: A real CA-backed trust tier (Phase 2, `ca.picam.app`) is now a
+clean-slate future task — no leftover fake scaffolding to build on top
+of or confuse with. If cross-device verification (not just this-device
+captures) is ever wanted for `verify.tsx`, it needs a real backend
+lookup — not attempted here, kept in scope.
+Numbering note: used **14.10** instead of the assigned 14.9 — that slot
+was already taken by the gallery-refresh fix (PR #8, merged 2026-09-12)
+before this session started; flagged so the roadmap stays unambiguous.
+
+---
 
 ## 2026-09-12 · 1.24/2.10 · fix teta_verify_endpoint 401 — MCP service-key auth
 Done: closed a 🟠 HIGH finding open since the 6.5 QA pass (2026-09-06) —

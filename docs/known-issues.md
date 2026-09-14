@@ -3,6 +3,47 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+### ✅ FIXED 2026-09-12 — Owner report "block creation, photo upload, block creation via pi camera doesn't work at all"
+Investigated live against prod before touching any code:
+- `POST /businesses/{id}/blocks` → `201`, works correctly.
+- `POST /media/upload` (real file upload) → `200`, works correctly.
+- **`/profile`'s "Upload from PI Camera" button (inside `BlockDetailModal`'s
+  empty-media state) was 100% fake** — confirmed by reading
+  `handleFileUpload` in `teta-pi/web/src/app/profile/page.tsx`: a
+  `setTimeout` marked the block `"done"` with `source:"pi_camera"` and zero
+  real fields (no `id`/`storage_url`/`original_hash`). It never called the
+  backend and was never persisted — a page reload silently discarded it,
+  and in the meantime `MediaDisplay` showed a permanent striped placeholder
+  with no real photo. This stub dates back to web PR #17 (1.20-web,
+  2026-07-27), self-commented at the time as *"Pi CAM pairing isn't wired
+  yet (tracked separately, 14.x)"* — a fair note then, but 14.x (14.4/14.5)
+  has since shipped real pairing + capture (2026-09-10/11) and nobody went
+  back to this specific button.
+**Why it could never be "wired up" as originally planned, only removed:**
+the real device-upload pipeline (`POST /media/device-upload`,
+`api/app/api/routes/media.py::device_upload_media`) always find-or-creates
+a single **"Pi CAM Captures"** block per entity — it has no concept of
+attaching a capture to whichever block a human happens to have open in the
+web editor. The button's premise (pick a block, then "pull in" a camera
+photo) doesn't match how captures actually land server-side, so "properly
+wire it" was never actually an option once 14.x's real architecture
+existed — unlike this repo's other, real `PiCamButton` (pairing QR +
+`GET /devices` status), which was correct and unaffected by this bug.
+**Fixed:** `teta-pi/web` PR [#45](https://github.com/teta-pi/web/pull/45) —
+removed the fake button and its dead `pi_camera` branch entirely
+(`handleFileUpload` is now single-arg, real-file-upload-only); added a
+one-line note pointing people at the real "Pi CAM Captures" block instead.
+`npx tsc --noEmit` and `npm run build` both clean (all 13 routes).
+**Not verified this session:** a live authenticated click-through of
+`/profile` (no test-account sign-in credentials available, same recurring
+limitation as prior sessions) — the real block-create and file-upload
+backend calls were re-verified directly against prod instead (both
+healthy), and the removed code path's fakeness was confirmed by full
+source trace, not just inference. Flag for a live click-through once
+merged+deployed.
+Status: FIX OPEN (PR #45, not yet merged) — root cause fully diagnosed and
+addressed; block creation and real file upload were never actually broken.
+
 ### ✅ `teta-pi/pi-cam` Gallery tab never refreshed after a new photo (14.9, 2026-09-12)
 Owner report: "gallery doesn't work, photos aren't added." Root cause:
 `app/(tabs)/gallery.tsx`'s photo-load `useEffect` ran once on mount
@@ -145,7 +186,7 @@ block can only delete the whole block (`DELETE /blocks/{id}`, which is
 wired), not just the media.
 Status: OPEN, LOW priority — product gap, not a live bug.
 
-### ✅ `teta-pi/pi-cam`'s "Get Pi Certificate" onboarding screen — fake feature, CLOSED for onboarding; broader "Pi Verified" badge issue reopened below (14.8, 2026-09-11)
+### ✅ `teta-pi/pi-cam`'s "Get Pi Certificate" fake feature — CLOSED everywhere (14.8 onboarding + 14.10 Settings/HUD/verify.tsx, 2026-09-11 / 2026-09-14)
 `modules/certificate/index.ts` is self-labeled in its own header: *"Phase
 1: симуляція для тестування UI. Phase 2: реальний запит до
 https://ca.picam.app/v1/"*. `requestCACertificate()` does a fake 2-second
@@ -182,20 +223,34 @@ independent false-trust path.
 until a real CA exists) and rewrote the false "recognized by any
 C2PA-compatible tool" slide copy to describe the real, working
 producer-profile-link feature instead.
-**Still open — NOT fixed this session, same root cause, different entry
-points:** Settings still has the identical "Get Pi Certificate" upgrade
-flow (`settings.tsx:134-244`, "Pi Certificate" row + "Upgrade to Pi
-Verified — Free" banner) reachable one tap away, and Settings'
-"Trust Level" row shows "Pi Verified" from `isOnline` alone. Either one
-still hands a user a persistent, device-local fake "Pi Verified" badge
-across camera/gallery/preview/verify. Needs its own session: pull the
-Settings CTA + the `isOnline`-only Trust Level claim the same way 14.8
-pulled onboarding's, or gate all of it behind a real CA (Phase 2).
-Status: OPEN (Settings + isOnline paths), HIGH priority — same reasoning
-as before: for a product whose pitch is "trust cryptographic proof, not
-claims," a fabricated crypto-trust badge in the user's own app directly
-contradicts the premise, even though it still can't reach the public
-trust graph or backend data.
+**Fix completed this session (14.10, `teta-pi/pi-cam` PR #9):** removed
+Settings' "Get Pi Certificate" CTA, "Pi Certificate" row, the
+`isOnline`-only "Trust Level" row, and the equally fake "Auto CA
+Upgrade" toggle (never read anywhere in the capture path). Deleted
+`modules/certificate/` entirely — zero call sites remained once
+`settings.tsx`/`camera.tsx`/`preview.tsx` were fixed. Tracing every
+call site surfaced two more instances of the same problem, both fixed:
+the camera HUD (3 variants) and `SigningToast` said "Pi Verified"/ran a
+"certifying → verified" sequence purely from `isOnline`, unrelated to
+any real cert; and **`app/verify.tsx`'s "Verify external content" never
+looked at the picked file at all** — it unconditionally showed a
+hardcoded fake "Content Authentic" result (made-up device/key/hash)
+regardless of what was chosen, arguably the most severe instance of
+this pattern found across the whole audit. Rewired it to the real,
+already-working `modules/c2pa` `verifyMedia()`; removed the "TRY A
+SAMPLE" buttons (same fabricated-outcome problem, just relocated);
+results now show real data from the actual manifest, with an honest
+limitation noted instead of overclaiming (local-manifest-only — can't
+verify a file captured on another device, no backend lookup wired yet).
+Retired the `'ca'` trust-level value from `modules/c2pa`'s shared
+types and `VerificationBadge`'s public API; `loadTrustIndex()` coerces
+any legacy `'ca'` entry from before this fix down to `'device'` so an
+existing install can't still render a stale fake badge. Confirmed
+independent (again): `manifest.ts`'s real on-device C2PA signing never
+imported `modules/certificate`, untouched throughout.
+Status: CLOSED 2026-09-14 — no known path left anywhere in the app that
+can show a fake "Pi Verified"/CA-trust claim. A real CA-backed tier
+(Phase 2, `ca.picam.app`) is future work, not tracked as a defect.
 
 ### ✅ Confirmed correct, no regressions (checked this pass)
 - Web `/settings` (password/email change, API-key generate, avatar upload,
