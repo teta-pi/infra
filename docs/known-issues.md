@@ -51,6 +51,468 @@ post-deploy check, same gap 3.10 itself left open. `teta-pi/web` branch
 `session/3.23-person-registry`, `src/app/profile/page.tsx`,
 `src/app/claim/page.tsx`.
 
+### ✅ FIXED 2026-09-12 — Owner report "block creation, photo upload, block creation via pi camera doesn't work at all"
+Investigated live against prod before touching any code:
+- `POST /businesses/{id}/blocks` → `201`, works correctly.
+- `POST /media/upload` (real file upload) → `200`, works correctly.
+- **`/profile`'s "Upload from PI Camera" button (inside `BlockDetailModal`'s
+  empty-media state) was 100% fake** — confirmed by reading
+  `handleFileUpload` in `teta-pi/web/src/app/profile/page.tsx`: a
+  `setTimeout` marked the block `"done"` with `source:"pi_camera"` and zero
+  real fields (no `id`/`storage_url`/`original_hash`). It never called the
+  backend and was never persisted — a page reload silently discarded it,
+  and in the meantime `MediaDisplay` showed a permanent striped placeholder
+  with no real photo. This stub dates back to web PR #17 (1.20-web,
+  2026-07-27), self-commented at the time as *"Pi CAM pairing isn't wired
+  yet (tracked separately, 14.x)"* — a fair note then, but 14.x (14.4/14.5)
+  has since shipped real pairing + capture (2026-09-10/11) and nobody went
+  back to this specific button.
+**Why it could never be "wired up" as originally planned, only removed:**
+the real device-upload pipeline (`POST /media/device-upload`,
+`api/app/api/routes/media.py::device_upload_media`) always find-or-creates
+a single **"Pi CAM Captures"** block per entity — it has no concept of
+attaching a capture to whichever block a human happens to have open in the
+web editor. The button's premise (pick a block, then "pull in" a camera
+photo) doesn't match how captures actually land server-side, so "properly
+wire it" was never actually an option once 14.x's real architecture
+existed — unlike this repo's other, real `PiCamButton` (pairing QR +
+`GET /devices` status), which was correct and unaffected by this bug.
+**Fixed:** `teta-pi/web` PR [#45](https://github.com/teta-pi/web/pull/45) —
+removed the fake button and its dead `pi_camera` branch entirely
+(`handleFileUpload` is now single-arg, real-file-upload-only); added a
+one-line note pointing people at the real "Pi CAM Captures" block instead.
+`npx tsc --noEmit` and `npm run build` both clean (all 13 routes).
+**Not verified this session:** a live authenticated click-through of
+`/profile` (no test-account sign-in credentials available, same recurring
+limitation as prior sessions) — the real block-create and file-upload
+backend calls were re-verified directly against prod instead (both
+healthy), and the removed code path's fakeness was confirmed by full
+source trace, not just inference. Flag for a live click-through once
+merged+deployed.
+Status: FIX OPEN (PR #45, not yet merged) — root cause fully diagnosed and
+addressed; block creation and real file upload were never actually broken.
+
+### ✅ `teta-pi/pi-cam` Gallery tab never refreshed after a new photo (14.9, 2026-09-12)
+Owner report: "gallery doesn't work, photos aren't added." Root cause:
+`app/(tabs)/gallery.tsx`'s photo-load `useEffect` ran once on mount
+(deps `[permission, loadPhotos]`), and expo-router `Tabs` keep every
+screen mounted (no `unmountOnBlur`) — so a photo taken on Camera and
+correctly saved to the device library never appeared in an already-open
+Gallery tab. Only a full app restart remounted the screen and surfaced
+the backlog, which reads exactly like "the feature doesn't work."
+`camera.tsx` already solved the identical class of problem for its own
+settings read (`useFocusEffect` re-reading on tab focus) — Gallery just
+never had the equivalent for its own photo list.
+**Fix:** `useFocusEffect(() => loadPhotos())`, `teta-pi/pi-cam` PR
+[#8](https://github.com/teta-pi/pi-cam/pull/8). `tsc --noEmit` clean;
+not build-verified locally (sandbox can't reach `dl.google.com`, see
+14.4) — owner to confirm via EAS build.
+Status: CLOSED 2026-09-12.
+
+## 6.6 — UI-button ↔ backend ↔ camera-app sync audit (2026-09-11)
+
+Prompted by the PiCamButton root cause above (a button that couldn't reflect
+real state because no endpoint existed for it) — a full sweep for the same
+class of bug: every button/CTA whose backend wiring doesn't match what it
+claims to do. Method: diffed every path string in `teta-pi/web/src/lib/api.ts`
+against the live `https://api.tetapi.dev/openapi.json` (68 paths), then did
+the same for `teta-pi/pi-cam`'s API calls. QA only, one small test entity
+created+cleaned up via the real endpoints (documented inline below).
+
+### 🟠 `POST /admin/entities/bulk-preverify` returns broken `profile_url`/`opt_out_url` (wrong domain + no page behind the link)
+`api/app/api/routes/admin.py`'s bulk-preverify response builds both URLs on
+`tetapi.dev` (the static landing site), not `app.tetapi.dev` (the Next.js
+app that actually serves `/e/[slug]`). Live-verified by creating one real
+test item: `profile_url: https://tetapi.dev/e/qa-sync-test-co` → `404`;
+the same slug on the right domain, `https://app.tetapi.dev/e/qa-sync-test-co`
+→ `200` (correct page). `opt_out_url:
+https://tetapi.dev/e/qa-sync-test-co/opt-out?token=...` → also `404`, and
+doubly wrong: there is no `/e/[slug]/opt-out` frontend route at all
+(`teta-pi/web/src/app` grepped, nothing) — the real backend route is a bare
+`POST /api/v1/businesses/{id}/opt-out?token=...` with no page behind it
+whatsoever (confirmed working when called directly — used it to clean up
+the test entity, 200 OK, unpublished).
+**Impact:** breaks `docs/gtm.md`'s own non-negotiable Phase-2 guardrail —
+*"Instant claim AND instant opt-out/removal... A community backlash would
+invert the loop — these guardrails are not optional."* Every outreach
+message `scripts/gtm/outreach_queue.py` builds from these URLs sends a
+stranger a dead link for both the profile view and the one-click opt-out,
+at exactly the moment (cold outreach) reputational risk is highest.
+**Fix:** (a) build `profile_url` on `app.tetapi.dev`; (b) either point
+`opt_out_url` at a direct API call (ugly but functional) or add a real
+`/e/[slug]/opt-out` (or `/opt-out/[token]`) page in `teta-pi/web` that calls
+the backend and shows a human-readable confirmation — a bare 200 JSON
+response is not something to send a non-technical stranger.
+**CLOSED 2026-09-11 (1.23, `teta-pi/api` PR #22)** — backend half: all
+three links now built from `settings.app_url` / `settings.api_url`
+(`profile_url` → `app.tetapi.dev/e/{slug}`, `opt_out_url` →
+`app.tetapi.dev/e/{slug}/opt-out?token=…`, `badge_url` →
+`api.tetapi.dev/badge/{slug}` — badge domain confirmed by live curl, the
+old `tetapi.dev/badge/…` also 404'd). Same settings now back `tag.py`,
+`intent.py`, `resolver.py`, `auth.py` links, so no `tetapi.dev/e/…` literal
+is left anywhere in `app/`. **Still open as a frontend dependency:** the
+`/e/[slug]/opt-out` page in `teta-pi/web` does not exist (404) — tracked
+as 3.x, must call `POST /businesses/{id}/opt-out?token=` after resolving
+the slug via `GET /businesses/by-slug/{slug}/public`.
+
+### 🟠 `/claim` wizard has no path to claim a pre-verified-unclaimed profile (1.11's frontend half doesn't exist)
+Backend (`1.11`, shipped since the last QA pass) correctly 409s
+`POST /businesses` when the name matches an existing `claim_status=
+pre_verified_unclaimed` row, with a real, actionable body — live-verified:
+`{"message":"A pre-verified, unclaimed profile already exists for this
+name. Claim it instead of creating a duplicate.","business_id":"...",
+"slug":"...","claim_url":"/businesses/{id}/claim/domain/start"}`. But
+`teta-pi/web/src/app/claim/page.tsx:189-191` calls `businessApi.create` and
+its `.catch()` swallows **any** error into one generic message: *"Could not
+save your profile — you can retry from your dashboard."* The 409's
+`claim_url`/`business_id` are discarded; grepped all of `teta-pi/web` for
+`claim/domain/start`/`claim/domain/check` — zero references anywhere.
+**Impact:** this is the core mechanic GTM Phase 2 depends on (*"Claimed
+profile unlocks... badge... Loop closes"* — `docs/gtm.md` Phase 2 table). A
+real MCP-server author who receives outreach and clicks through to claim
+their pre-verified profile — the only claim flow the product has — hits a
+dead-end generic error instead of the domain-verification claim step that
+already exists and works on the backend.
+**Fix:** special-case a 409 from `businessApi.create` in `/claim`, read
+`claim_url`/`business_id` from the body, and route into a domain-ownership
+claim step (reuse the existing `/verify/domain/start`+`/check` UI — same
+underlying service, `domain_ownership.py`).
+Status: OPEN, HIGH — GTM Phase 2's core loop mechanic doesn't exist on the
+frontend yet, even though the backend is ready.
+**Update 2026-09-12** (`teta-pi/web` PR #44): `/e/[slug]` now shows a
+"Is this you? Claim this profile" CTA on pre-verified-unclaimed profiles,
+but it's a placeholder (expands a "coming soon" note) — same root gap as
+this entry, not a fix for it. Whoever picks this up should wire both
+entry points (the `/claim` 409 case above, and this CTA) into the same
+real domain-ownership claim step in one pass rather than building it
+twice.
+
+### 🟠 `POST /auth/agent-key` — unauthenticated, unlimited, undocumented account+key mint, called by nothing
+`api/app/api/routes/auth.py:347-358` (`create_agent_key`) has no auth
+dependency and no rate limiter of any kind (grepped the file). Live-tested:
+a bare `POST https://api.tetapi.dev/api/v1/auth/agent-key` with zero
+headers/body returns `200` and a fresh, immediately-usable JWT — every
+single call silently creates a new `User` row (`is_agent=True`, a random
+`pk_live_...` key) with no verification, no cost, no limit. Grepped
+`teta-pi/web`, `teta-pi/mcp`, and `teta-pi/pi-cam` in full — **zero
+references anywhere**; this endpoint has existed since the very first
+commit (`83d5fba`, "Add full-stack TETA+PI system") and has never been
+wired to any of our own clients or documented in `docs/api.md`'s Auth
+table. It surfaced in this audit precisely because it's an orphaned
+endpoint no button drives.
+**Impact:** anyone can mint unlimited free accounts + valid bearer tokens,
+unrate-limited — a resource-exhaustion / fake-account vector, and a way to
+sidestep any per-account limiting elsewhere by minting a fresh identity per
+request.
+**Fix (product decision):** wire it up properly behind admin/internal auth
+if it serves a real purpose (agent-account provisioning?), or remove it if
+dead. At minimum, rate-limit it like `/claim`/`/badge`/`/verify-endpoint`
+before it stays reachable from the open internet.
+Status: ✅ **CLOSED 2026-09-11** (session 15.4, tracked as `docs/security.md`
+S-15) — endpoint **deleted outright**, [api PR #23](https://github.com/teta-pi/api/pull/23).
+Re-confirmed independently of this audit's own grep: zero call-sites in
+fresh `web`/`mcp`/`pi-cam`/WP-plugin checkouts, unchanged since the repo's
+first commit (`83d5fba`), and `is_agent` has no admin-provisioning flow to
+gate behind — so removal (not `require_admin`) was the clean fix, same call
+already made for the analogous dead `/auth/register` endpoint above. The two
+probe accounts this audit's own live test created
+(`agent-e4f27342559dced1@teta-pi.agent` 15:06,
+`agent-df2830672772c722@teta-pi.agent` 15:14) were deactivated
+(`is_active=false`, rows kept per append-only discipline) after owner
+confirmation. A third `is_agent` row, `agent@tetapi.dev` (2026-07-04,
+`role=admin`), was checked and confirmed **legitimate** — seeded in migration
+`007_roles_admin_audit.py` as the founder-designated "operations agent"
+admin account, unrelated, left untouched. Live-verify after deploy: the
+endpoint should 404, not 200.
+
+### 🟡 `DELETE /media/{media_id}` has no UI trigger anywhere
+Backend supports deleting one media item independently of its block
+(confirmed live in `openapi.json`), but grepped `teta-pi/web/src/` in
+full — no call to it anywhere, no "delete photo/file" affordance in
+`BlockDetailModal`/`MediaDisplay`. An owner who uploads the wrong file to a
+block can only delete the whole block (`DELETE /blocks/{id}`, which is
+wired), not just the media.
+Status: OPEN, LOW priority — product gap, not a live bug.
+
+### ✅ `teta-pi/pi-cam`'s "Get Pi Certificate" fake feature — CLOSED everywhere (14.8 onboarding + 14.10 Settings/HUD/verify.tsx, 2026-09-11 / 2026-09-14)
+`modules/certificate/index.ts` is self-labeled in its own header: *"Phase
+1: симуляція для тестування UI. Phase 2: реальний запит до
+https://ca.picam.app/v1/"*. `requestCACertificate()` does a fake 2-second
+delay, then stores a literal `'SIMULATED_CERT_' + <partial pubkey>` string
+in `SecureStore` as if it were a real certificate, with a fabricated 1-year
+expiry; `registerDevice()` in the same file is a pure stub returning
+`{deviceId:'simulated-device-id', jwtToken:'simulated-jwt'}`. Nothing calls
+`ca.picam.app` except the unreachable `requestCASign`.
+**Front and center, not buried:** the onboarding flow — every new user's
+first run, `app/onboarding.tsx:174-226` — has a "Get Pi Certificate 🟢"
+button with the copy *"Online? We add a Pi Certificate Authority stamp —
+recognized by any C2PA-compatible tool."* This is false today in every
+respect: there is no real CA, nothing is "recognized by" anything. The same
+fake state is shown again in Settings, and the photo-preview screen
+(`app/preview.tsx:236-251`) renders a trust badge gated on it —
+`'Pi Verified · L2 trust'` vs `'Device Signed · L1 trust'` — plus a
+`CA CERTIFICATE: Pi CA · Active` detail row.
+**Correction to the "mitigating factor" above (found while fixing 14.8):**
+`modules/c2pa/manifest.ts:95` hardcoding `ca_certificate: null` is real,
+and it's true the *public/backend* trust graph and stored manifests can
+never show `'ca'` — that part of the original write-up holds. But
+`trustLevel` in the app's own UI is **not** derived from the manifest at
+all: `app/preview.tsx:84-86` calls `getCertInfo()` independently and sets
+`trustLevel = 'ca'` the moment `SecureStore`'s fake cert status is
+`'active'` — regardless of what the manifest says. Same pattern in
+`app/(tabs)/camera.tsx:234` (`certActive`) and `app/(tabs)/settings.tsx`.
+So the fake "Pi Verified · L2 trust" badge **does** render, persistently,
+across preview/camera/gallery/verify — it just never leaves the device.
+Worse: `settings.tsx:202`'s "Trust Level" row shows "Pi Verified" purely
+from `isOnline`, with **no certificate involved at all** — a second,
+independent false-trust path.
+**Fix shipped this session (14.8, `teta-pi/pi-cam` PR #7):** removed the
+"Get Pi Certificate" onboarding screen entirely (option a — pull it
+until a real CA exists) and rewrote the false "recognized by any
+C2PA-compatible tool" slide copy to describe the real, working
+producer-profile-link feature instead.
+**Fix completed this session (14.10, `teta-pi/pi-cam` PR #9):** removed
+Settings' "Get Pi Certificate" CTA, "Pi Certificate" row, the
+`isOnline`-only "Trust Level" row, and the equally fake "Auto CA
+Upgrade" toggle (never read anywhere in the capture path). Deleted
+`modules/certificate/` entirely — zero call sites remained once
+`settings.tsx`/`camera.tsx`/`preview.tsx` were fixed. Tracing every
+call site surfaced two more instances of the same problem, both fixed:
+the camera HUD (3 variants) and `SigningToast` said "Pi Verified"/ran a
+"certifying → verified" sequence purely from `isOnline`, unrelated to
+any real cert; and **`app/verify.tsx`'s "Verify external content" never
+looked at the picked file at all** — it unconditionally showed a
+hardcoded fake "Content Authentic" result (made-up device/key/hash)
+regardless of what was chosen, arguably the most severe instance of
+this pattern found across the whole audit. Rewired it to the real,
+already-working `modules/c2pa` `verifyMedia()`; removed the "TRY A
+SAMPLE" buttons (same fabricated-outcome problem, just relocated);
+results now show real data from the actual manifest, with an honest
+limitation noted instead of overclaiming (local-manifest-only — can't
+verify a file captured on another device, no backend lookup wired yet).
+Retired the `'ca'` trust-level value from `modules/c2pa`'s shared
+types and `VerificationBadge`'s public API; `loadTrustIndex()` coerces
+any legacy `'ca'` entry from before this fix down to `'device'` so an
+existing install can't still render a stale fake badge. Confirmed
+independent (again): `manifest.ts`'s real on-device C2PA signing never
+imported `modules/certificate`, untouched throughout.
+Status: CLOSED 2026-09-14 — no known path left anywhere in the app that
+can show a fake "Pi Verified"/CA-trust claim. A real CA-backed tier
+(Phase 2, `ca.picam.app`) is future work, not tracked as a defect.
+
+### ✅ Confirmed correct, no regressions (checked this pass)
+- Web `/settings` (password/email change, API-key generate, avatar upload,
+  logout-all, delete-account) — all 6 buttons map 1:1 to real
+  `/auth/*` endpoints, verified against `api.ts` + live `openapi.json`.
+- Web `/admin` (Dashboard/Analytics/Users/Claims incl. CSV export + status
+  change/Entities incl. validate/Audit log) — every action in
+  `src/app/admin/page.tsx` maps to a real `adminApi.*` call and a real
+  endpoint; nothing found stubbed.
+- `teta-pi/pi-cam` pairing (`registerWithQR` → `POST /devices/register`)
+  and capture upload (`uploadMedia` → `POST /media/device-upload`,
+  `X-Device-Api-Key` header) — both match the live API exactly, field for
+  field, header name included.
+
+## ✅ Pi CAM pairs in-app but web never showed it — FIXED 2026-09-11
+
+Owner report: "камера не сінхронізується з аккаунтом на вебі. в додатку є"
+— pairing works from the Pi CAM app, but `/profile` never reflects it.
+
+**Root cause, confirmed via prod DB before touching code:** the backend
+pairing chain (`POST /devices/register` from the app, `POST
+/media/device-upload` for captures) was already fully working — a device
+registered 2026-09-10 12:09 for the owner's own business (`tetakta`), with
+a C2PA-verified capture landing in a public "Pi CAM Captures" block a
+minute later, visible via `GET /businesses/{id}/blocks`. The actual bug:
+**no endpoint ever existed for the web to ask "is a camera already
+paired?"** — `PiCamButton` on `/profile` always rendered "Connect Camera"
+regardless of real state, because it had nothing to check against; there
+was only `POST /devices/generate-token` (start a new pairing) and `POST
+/devices/register` (app-side), no `GET`.
+
+Fix: `teta-pi/api` PR [#19](https://github.com/teta-pi/api/pull/19) —
+`GET /devices` returns `{paired, devices[]}` for the caller's business
+(same owner-lookup as `generate-token`). Companion `teta-pi/web` PR
+[#43](https://github.com/teta-pi/web/pull/43) wires `PiCamButton` to poll
+it on mount + after the QR modal closes, showing "✓ Camera linked" once
+true. **Both merged 2026-09-11 with explicit owner go-ahead, deployed,
+live-verified:** `curl` against prod `GET /devices` with the account's
+own token returns `{"paired":true,"devices":[{"id":"b8ad9e35-...",
+"label":"Pi CAM","registered_at":"2026-09-10T12:09:36Z"}]}` — the exact
+device from the DB check above; deployed `/profile` JS bundle confirmed
+to contain the new "Camera linked"/"Link another camera" strings and the
+`/devices` call.
+
+## 6.5 pre-GTM full QA (2026-09-06)
+
+Full E2E QA pass before GTM launch, per `docs/gtm.md` §Execution checklist +
+`docs/security.md` §5. Read-only/authorized-test-account only, our own infra,
+same rules of engagement as `docs/security.md` §"Rules of engagement". This is
+a QA pass, not a fix session — nothing below was fixed here except where
+explicitly marked; new findings go to whoever owns that direction next.
+
+### ✅ CLOSED 2026-09-12 (session 1.24/2.10) — `teta_verify_endpoint` is permanently broken via MCP (401 on every call)
+Live: MCP session, `teta_verify_endpoint(endpoint_url:"https://example.com/agent")`
+→ `{"isError":true, text:"API 401: {\"detail\":\"Not authenticated\"}"}`. Root
+cause: `api/app/api/routes/endpoint_verification.py:98-101`'s `verify_endpoint`
+requires `current_user: User = Depends(get_current_user)` — added by the S-2
+SSRF fix (api PR #3, 1.7, 2026-07-14) as the auth mitigation for the
+previously-unauthenticated-SSRF finding. `mcp/src/client.ts`'s `apiFetch()`
+never attaches an `Authorization` header (grepped, none exists), and MCP has
+no auth mechanism of its own (S-11) — so no MCP caller can ever satisfy this
+route. Reproduced without a real API key too: a bare unauthenticated
+`POST https://api.tetapi.dev/api/v1/verify-endpoint` also returns
+`{"detail":"Not authenticated"}`.
+**Impact:** one of the 7 core advertised tools — described as trust-critical
+("run this before your agent routes a request or a payment to it") — has been
+100% non-functional for every MCP caller since the SSRF fix shipped
+(2026-07-14), silently. Neither the 7.x MCP audit (2026-08-04) nor the 15.x
+security passes caught it — those verified the API-side auth was added, not
+that MCP could still reach the route afterward.
+**Fix options (product decision needed):** (a) give the MCP server its own
+service-level API key baked into its env so it can authenticate on behalf of
+anonymous callers, or (b) relax `/verify-endpoint`'s auth requirement back to
+unauthenticated-but-rate-limited (like `/v1/tag-ping`/badge) now that the SSRF
+fix's host-validation covers the core risk independent of auth.
+**CLOSED 2026-09-12** — owner chose (a). `teta-pi/mcp` PR #9 +
+`teta-pi/api` PR #24 (comment only, no API code change needed —
+`get_current_user` already accepts any active account's `pk_live_` key
+generically). One dedicated `mcp-service@tetapi.dev` service account +
+`pk_live_` key minted directly in prod Postgres, wired into
+`tetapi-mcp.service`'s `Environment=` as `TETA_PI_SERVICE_API_KEY`. Full
+rationale in `docs/decisions.md` (2026-09-11 entry) — including why this
+skips the full 2.2 scoped-key system for now. **Live-verified**: a real
+`teta_verify_endpoint` MCP call against prod now returns a structured
+verdict (`FAILED — endpoint did not respond`, for a non-agent test URL) —
+no more 401, no more `Not authenticated`.
+Status: CLOSED.
+
+### 🟡 NEW — `teta_verify_entity`/`teta_get_proof`/`teta_get_profile`/`teta_verify_claim` proof links point at raw JSON, not the public page
+`teta_search`/`teta_resolve_intent` proof links correctly go to
+`https://app.tetapi.dev/e/{slug}` (`mcp/src/index.ts:448`, `entityPageUrl()`).
+The other four tools' "Proof:" line uses `proofUrlById()`
+(`mcp/src/index.ts:23-25`) → `https://api.tetapi.dev/api/v1/businesses/{id}/proof`,
+a raw JSON API endpoint, at lines 168/207/243/315/593. Root cause:
+`AgentBusinessProfile` (`api/app/schemas/business.py:74-82`, returned by
+`GET /businesses/{id}/preview`) carries no `slug` field even though
+`Business.slug` exists and is used everywhere else for `/e/[slug]`; the MCP
+code's own comment (`index.ts:15-18`) acknowledges this tradeoff.
+**Impact:** GTM doc item 1.2 ("proof_url in every response... so when an
+agent cites the answer, the user sees tetapi.dev") is satisfied for 2 of 6
+applicable tools but not the other 4 — those tools' proof link opens raw JSON
+in a browser, not a TETA+PI-branded page, if a citing agent surfaces it to a
+human.
+**Fix (if ever wanted):** add `slug` to `AgentBusinessProfile` +
+`agent_preview` route, thread through `mcp/src/client.ts`, use
+`entityPageUrl(slug)` in the 4 affected handlers (either replacing or
+alongside the raw-JSON link as a secondary "machine-verifiable evidence" URL).
+Status: OPEN, no fix planned this session.
+
+### ✅ RE-VERIFIED CLOSED — MCP `teta_search`'s `verified_only` filter (known-issues §7.x #5 was stale)
+The `docs/known-issues.md` §"7.x" entry "🟠 5. MCP `teta_search`'s
+`verified_only` filter is a no-op" still said `Status: OPEN` and a GTM-boot
+chip from an older session had this hanging as unresolved. **It is fixed.**
+`git log -S` on `mcp/src/index.ts` traces the fix to commit `3c9cda5`
+("1.13: fix resolve→verify→profile MCP chain (audit #2/#5/#16, preview
+500)") — `searchBusinesses` is now called with
+`level: verified_only ? "registry" : "any"` exactly as the original finding's
+own suggested fix said. Live-verified this session: `teta_search(query:
+"hellfire", verified_only:true)` → "No verified entities found"; same query
+with `verified_only:false` → returns HELLFIRE Solutions (`[NONE]`). The §7.x
+entry above is left as-is for the historical record; this entry is the
+correction — **do not re-open #5 or re-file this in a future GTM boot.**
+Also confirmed live: `teta_search`'s own proof_url is present in every
+result (GTM 2.6 requirement), pointing at the public `/e/[slug]` page.
+
+### 🟡 3.23 (`/profile` ↔ `/e/[slug]` person-registry-data consistency) — fix ready, not yet merged
+`teta-pi/web` PR #41 ("fix(web): 3.23 — /profile no longer hides real
+registry data on person-kind entities") is **OPEN**, no CI checks configured
+on it. Confirmed live that the asymmetry it describes is real today: `/e/bob`
+(public page) correctly shows "REGISTRY · VERIFIED" with real Handelsregister
+data (VR 40166) — fixed earlier by 3.22a — but per the PR body, `/profile`
+(owner view) still hardcodes a fabricated `registry:n/a — not applicable,
+individual` for any person-kind entity in `AttestationBar` and `AgentView`,
+regardless of real data. Root cause traced by the PR to roadmap 3.10 (web PR
+#12), which added the `isBusinessKind`-only gate without live test
+credentials to verify it. The PR also opens the "Registry" verification tile
+to all entity kinds (backend `verifyApi.registry` already takes no
+entity-kind argument). Could not test the authenticated `/profile` side
+directly this session (no test account credentials with real edit rights —
+same limitation prior sessions noted).
+Status: OPEN — flag for owner review/merge of `teta-pi/web` PR #41.
+
+### ✅ RE-VERIFIED live this session (no regressions found)
+- **S-7** (`1.5`/`1.7`/`1.8` reset-on-change logic): re-verified end-to-end on
+  a fresh test entity — `PATCH agent_endpoint` to a URL that then passes
+  `/verify-endpoint`'s three checks → `agent_endpoint_verified` persists
+  `true` on a follow-up `GET` → `PATCH agent_endpoint` to a different URL →
+  both the response and a follow-up `GET` show it reset to `false`. Still
+  correct, `api/app/api/routes/businesses.py:266-270` unchanged. The
+  parallel `name`-change → `registry_status` reset (same lines) was
+  confirmed by code inspection only this pass (would need driving a test
+  entity to `registry_status:"verified"` first via the full async flow to
+  re-prove live end-to-end; not done, out of scope for a spot-check).
+- **S-8** (private-block leak on `GET /businesses/{id}/blocks`): spot-checked
+  against a live test entity unauthenticated — all 7 returned blocks have
+  `is_public: true`, no private block leaked.
+- **S-13/S-14** (MCP rate-limit + idle-session sweep): burst of 65
+  `teta_search` calls on one MCP session → first ~61 returned `200`, then
+  `429` (matches documented 60/min/IP). `sessions` Map idle-sweep code
+  (`mcp/src/index.ts:650-658`, 10 min timeout) still present and unchanged.
+  Structured JSON logging confirmed live via `journalctl -u tetapi-mcp` on
+  prod — one `{ts,tool,session,entity,latency_ms,status}` line per call.
+- **3.21** (L0 entities visible in ranked `/search` results): confirmed live,
+  `HELLFIRE Solutions` (L0) renders directly in the ranked list with a
+  dashed-border "L0 no attestation on record" badge, not hidden behind
+  "Show unverified" (that toggle no longer exists, matches the fix).
+- **2026-08-19 nav-leak fixes** (`/`, `/search`, `/profile`): re-tested in a
+  genuinely clean/unauthenticated browser session — `/search` and the home
+  page show only "Sign in / Create account", `/profile` shows the
+  "Your session expired" sign-in gate, no entity data leaked in any case.
+- **/admin**: unauthenticated visit correctly shows the "Back Office —
+  Admin access only. All actions are audited." email-code gate, no data
+  leaked. Claims/Users/Entities tabs not exercised this session (no admin
+  credentials available).
+
+### 🟡 STILL OPEN, unchanged since last audit (confirmed, not re-explained here)
+- `teta-pi/web` still has **no `.gitignore`** (2026-08-22 entry) — confirmed
+  still missing today.
+- **S-10** (in-memory, single-process-only rate limiters on the API side —
+  `/verify-endpoint`, `/claim`, badge, tag-ping) — unchanged, still OPEN,
+  Redis migration still pending.
+- Bandit finding `api/app/api/routes/badge.py`'s `hashlib.md5(...)` ETag
+  without `usedforsecurity=False` — confirmed still present, still a
+  one-line fix, still not done.
+- **1.11** (bulk pre-verification import) — confirmed **still not started**:
+  no matching route anywhere in `api/app/api/routes/admin.py`, and
+  `docs/roadmap.md`'s own 1.11 row says "Not done". Still the hard blocker
+  for real Phase-2 outreach, as expected — nothing to re-decide here.
+
+### GTM Execution checklist — real state confirmed (see `docs/gtm.md` for the
+### checklist itself, updated alongside this entry)
+- `llms.txt` — **live** on `tetapi.dev` (200 OK). Not present on
+  `app.tetapi.dev` (404, expected — doc only specifies the landing domain).
+- `agent.json` — both `tetapi.dev` and `app.tetapi.dev` report
+  `"version": "1.4.0"` (checklist wanted ≥ 1.1.0 — exceeded).
+- Tool descriptions — live-read all 7; clearly agent-query-optimized
+  ("before your agent routes a request or a payment to it", "before your
+  agent trusts a claim"), not generic "verification protocol server" copy.
+- Badge endpoint (1.10) — **live** at `https://api.tetapi.dev/badge/{id}`
+  (note: unprefixed router, NOT under `/api/v1` — `api/main.py:46`). Returns
+  a real SVG with `Cache-Control`/`ETag`, rate-limited 120/min
+  (`badge.py:18-19`). Impression counter is real and **confirmed
+  incrementing live**: Redis key `badge_impressions:{id}` went `2 → 5` after
+  3 test hits.
+- The 6 registry-listing submissions (official registry, Smithery, Glama,
+  mcp.so/PulseMCP, awesome-mcp-servers, GitHub MCP Registry) — spot-checked;
+  `registry.modelcontextprotocol.io` search for "tetapi" returns 0 results.
+  `server.json` artifact exists in `teta-pi/mcp` (2.5 prep already done) but
+  no actual submission has happened yet — all 6 correctly remain unchecked,
+  owner-executed, not code-blocked.
+- Self-verified L2 + Bob/Mykhailo as person entities — not confirmed as done
+  this session (no entity found under those names in a quick `/search`
+  scan); still appears unchecked, owner action.
+
 ## 🔴 FIXED 2026-08-19 — `/search` "My page" nav leak (regression) + `/profile` real unauthenticated data leak (new root cause, supersedes 2026-08-05 note below)
 Owner reported the same nav-leak bug class again, this time on `/search`
 (3.16b), plus re-confirmed (direct question, not a misread) seeing
@@ -821,7 +1283,7 @@ Continues the numbering from the session-1 report below. 2 Critical / 2 High /
 | 30 | 🟡 | "Connect Camera" should live next to blocks, not in the general verify menu | **3.13 ✅ fixed 2026-07-24, web PR #16** — `PiCamButton` (slimmed from `PiCamSection`) sits in the "Your blocks" header row (+ ties to **14.5**) |
 | 31 | 🟢 | Publish & Privacy should fold into the compact icon menu too | **3.13 ✅ fixed 2026-07-24, web PR #16** — "Publish" is the sixth icon in `VerifyMenu` |
 | 32 | 🔴 | ~~seed/test entities pollute real search~~ → **NOT real data**, manager confirmed via direct psql: 0 rows in `businesses` for any of those names — frontend fabricates fake entity cards | **3.14 ✅ fixed 2026-07-20, web PR #13** — home `page.tsx` fell back to hardcoded `SEED_RESULTS` on any empty/failed API search and rendered them as real results; now returns `[]` on empty/failed search, seed pool shown only in the pre-search hero |
-| 33 | 🔴 | Pi CAM needs a new build + camera sync reachable from BOTH onboarding AND the block-creation step | **14.5** — blocked on owner confirming 14.4's dev-client boots on a real device |
+| 33 | 🔴 | Pi CAM needs a new build + camera sync reachable from BOTH onboarding AND the block-creation step | **14.5 🔄 2026-09-10, re-verified same day** — onboarding sync done (`teta-pi/web` PR #42, unmerged): `/claim` wizard's camera step revealed, reuses `PiCamButton`'s exact `devices.generateToken()` call/payload; block-creation sync was already done in 3.13 (`PiCamButton` in `/profile`'s blocks header, confirmed unchanged — zero diff from `main`). Full `npm run build` clean (tsc+lint+prerender). Still open: live E2E confirmation of pairing+capture on a real device (14.2) — basic pairing/record was regression-checked (build clean, code path untouched, QR generation confirmed via network log) but not re-confirmed on physical hardware this session |
 
 ## Owner QA Bug Report — 2026-07-17 (23 items, decomposed 2026-07-18)
 
@@ -1557,7 +2019,7 @@ token both returned only the public block, the owner's token returned both.
 `is_public` field of `BlockCreate` entirely when constructing the `Block` row
 — every new block is created public regardless of what the caller sends; a
 private block can currently only be produced by `PATCH`ing it right after
-creation. Status: OPEN, not yet triaged into the roadmap.
+creation. Status: OPEN — triaged into roadmap as 1.22 (2026-09-11).
 
 ## 🟡 Email delivery limited to one address
 Resend domain `tetapi.dev` not verified; sender `onboarding@resend.dev` only
@@ -1570,6 +2032,60 @@ Status: OPEN (needs DNS).
 nothing. **Fix:** set `OPENDATABOT_API_KEY` (verifier already implemented in
 `premium.py`).
 Status: OPEN (needs licence key).
+
+## ✅ 1.11 bulk pre-verification import — CLOSED (VARCHAR(20) live-500 + frontend indicator)
+Two issues tracked together since they landed in the same feature window:
+
+**1. `claim_status VARCHAR(20)` too short — CLOSED 2026-09-11 (manager
+live-verified).** Migration 013 sized `businesses.claim_status` as
+`VARCHAR(20)`, but `"pre_verified_unclaimed"` is 22 characters — every
+`POST /admin/entities/bulk-preverify` call 500'd with
+`StringDataRightTruncationError` from the moment PR #20 deployed (confirmed
+via `journalctl -u tetapi-api` on prod). Transaction rolled back cleanly
+each time, no corrupted rows. Fixed by migration `014_claim_status_widen.py`
+(`teta-pi/api` PR #21, `ALTER COLUMN … TYPE VARCHAR(30)` + matching
+`app/models/business.py` change), merged and deployed 2026-09-11. **Manager
+live-verified post-deploy**: column confirmed `VARCHAR(30)` via prod psql;
+`POST /admin/entities/bulk-preverify` with a real test item → `200`, real
+`business_id`/`profile_url`/`opt_out_url`/`badge_url` returned;
+`GET /businesses/by-slug/{slug}/public` confirmed `claim_status:
+"pre_verified_unclaimed"`, `pre_verified_unclaimed: true`; `POST
+/{id}/opt-out?token=…` confirmed `200 {"status":"opted_out"}` (used to
+remove the manager's own test row — unpublished, not deleted, matches the
+audit-trail design). `GET /search?q=…` for the test row's name returned
+`[]` at the time — not root-caused then. **Retested 2026-09-12** with a
+real top-500-style name (`Session 1.11 Test Server`) while verifying the
+frontend indicator below: `GET /search?q=Session%201.11%20Test%20Server`
+returned the row correctly. Whatever caused the earlier `[]` looks
+query-specific, not a standing bug — no longer treated as an open item,
+but flag it if it recurs with a different query shape.
+
+**2. `/e/[slug]` has no visual pre-verified indicator — CLOSED 2026-09-12,
+`teta-pi/web` PR #44.** `PublicProfile`/`SearchResult` types gained
+`claim_status`/`pre_verified_unclaimed`; `/e/[slug]` now renders an
+explicit mono "PRE-VERIFIED · UNCLAIMED" banner directly under
+`AttestationBar` (dashed border, `GR_MUTED` — deliberately not
+seal-colored, since the flag means less certainty, not more) with a short
+explanation and an "Is this you? Claim this profile" CTA; `/search`
+result rows (mobile + desktop) carry a matching small dashed tag.
+Live-verified against prod: created a temp `pre_verified_unclaimed` row
+via `bulk-preverify`, confirmed the banner and search tag render on both
+desktop and mobile, then removed the row via `/opt-out`. **CTA is a
+placeholder only** — clicking it expands a "coming soon" note rather than
+starting a real domain-ownership claim: the public payload doesn't expose
+the entity id `POST /{id}/claim/domain/start` needs, and this repo's own
+`/claim` page is the self-registration wizard, not a claim flow for an
+*existing* entity. Tracked as a deliberate follow-up (see roadmap.md
+1.11), not silently skipped.
+
+Also worth a deliberate look later, not a bug: pre-verified rows are left
+visible in default `/search` (not hidden) since the whole outreach mechanic
+depends on agents finding them — revisit if it dilutes search relevance
+once there are hundreds of thin imported rows.
+Status: fully closed — backend (endpoint + schema + live 500) and frontend
+(visual indicator on `/e/[slug]` + `/search`) both prod-verified. Only
+remaining follow-up before Phase 2 outreach: the real domain-ownership
+claim UI for an existing pre-verified entity (point 2 above).
 
 ## Audit — things that are FINE (checked, no action)
 - `ENVIRONMENT=production` set; `dev_token` not exposed by `/auth/magic-link`.
