@@ -3,6 +3,23 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+### ✅ `teta-pi/pi-cam` Gallery tab never refreshed after a new photo (14.9, 2026-09-12)
+Owner report: "gallery doesn't work, photos aren't added." Root cause:
+`app/(tabs)/gallery.tsx`'s photo-load `useEffect` ran once on mount
+(deps `[permission, loadPhotos]`), and expo-router `Tabs` keep every
+screen mounted (no `unmountOnBlur`) — so a photo taken on Camera and
+correctly saved to the device library never appeared in an already-open
+Gallery tab. Only a full app restart remounted the screen and surfaced
+the backlog, which reads exactly like "the feature doesn't work."
+`camera.tsx` already solved the identical class of problem for its own
+settings read (`useFocusEffect` re-reading on tab focus) — Gallery just
+never had the equivalent for its own photo list.
+**Fix:** `useFocusEffect(() => loadPhotos())`, `teta-pi/pi-cam` PR
+[#8](https://github.com/teta-pi/pi-cam/pull/8). `tsc --noEmit` clean;
+not build-verified locally (sandbox can't reach `dl.google.com`, see
+14.4) — owner to confirm via EAS build.
+Status: CLOSED 2026-09-12.
+
 ## 6.6 — UI-button ↔ backend ↔ camera-app sync audit (2026-09-11)
 
 Prompted by the PiCamButton root cause above (a button that couldn't reflect
@@ -102,7 +119,22 @@ request.
 if it serves a real purpose (agent-account provisioning?), or remove it if
 dead. At minimum, rate-limit it like `/claim`/`/badge`/`/verify-endpoint`
 before it stays reachable from the open internet.
-Status: OPEN, security-relevant, no fix this session.
+Status: ✅ **CLOSED 2026-09-11** (session 15.4, tracked as `docs/security.md`
+S-15) — endpoint **deleted outright**, [api PR #23](https://github.com/teta-pi/api/pull/23).
+Re-confirmed independently of this audit's own grep: zero call-sites in
+fresh `web`/`mcp`/`pi-cam`/WP-plugin checkouts, unchanged since the repo's
+first commit (`83d5fba`), and `is_agent` has no admin-provisioning flow to
+gate behind — so removal (not `require_admin`) was the clean fix, same call
+already made for the analogous dead `/auth/register` endpoint above. The two
+probe accounts this audit's own live test created
+(`agent-e4f27342559dced1@teta-pi.agent` 15:06,
+`agent-df2830672772c722@teta-pi.agent` 15:14) were deactivated
+(`is_active=false`, rows kept per append-only discipline) after owner
+confirmation. A third `is_agent` row, `agent@tetapi.dev` (2026-07-04,
+`role=admin`), was checked and confirmed **legitimate** — seeded in migration
+`007_roles_admin_audit.py` as the founder-designated "operations agent"
+admin account, unrelated, left untouched. Live-verify after deploy: the
+endpoint should 404, not 200.
 
 ### 🟡 `DELETE /media/{media_id}` has no UI trigger anywhere
 Backend supports deleting one media item independently of its block

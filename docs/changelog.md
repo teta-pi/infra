@@ -40,13 +40,70 @@ signup, not a privilege escalation. Live-verified end to end: a real
 `teta_verify_endpoint` MCP call against prod now returns a structured
 verdict (`FAILED — endpoint did not respond`, for a non-agent test URL)
 instead of `API 401: Not authenticated`.
-Next: found in passing, spawned as a separate task, not fixed here —
-`POST /auth/agent-key` (singular, different from 2.2's planned
-`/auth/agent-keys`) is unauthenticated, unlimited, and mints a new
-account+key on every call with zero rate-limiting; already tracked in
-known-issues.md, worth a dedicated security session.
+Next: found in passing, spawned as a separate task — `POST /auth/agent-key`
+(singular, different from 2.2's planned `/auth/agent-keys`) was
+unauthenticated, unlimited, and minted a new account+key on every call
+with zero rate-limiting. **Already closed same-day by session 15.4 below**
+(deleted outright, not gated — zero call-sites anywhere in the codebase).
 
 ---
+## 2026-09-11 · 15.4 · agent-key lockdown (URGENT, live exploit on prod)
+Done: Closed the `POST /auth/agent-key` hole found in 6.6 — unauthenticated,
+unrate-limited, minted a fresh account + live `pk_live_` key + JWT on every
+call, confirmed live on prod (`200` from a bare empty-body curl). Deleted
+the endpoint outright rather than gating it: independently re-grepped fresh
+`web`/`mcp`/`pi-cam`/WP-plugin checkouts (not just trusting the audit's own
+framing) — zero call-sites anywhere, unchanged since the repo's first
+commit (`83d5fba`), and `is_agent` (the flag it set) has no
+admin-provisioning flow to gate behind, so `require_admin` would have
+protected a feature that doesn't exist. [api PR #23](https://github.com/teta-pi/api/pull/23).
+Deactivated the two prod accounts created by live probing
+(`agent-e4f27342559dced1@teta-pi.agent` 15:06,
+`agent-df2830672772c722@teta-pi.agent` 15:14) via `is_active=false` (rows
+kept, append-only discipline) — done via prod `psql` only after explicit
+owner confirmation, per session instructions. Checked for other `is_agent`
+rows of unknown origin: found one, `agent@tetapi.dev` (2026-07-04), and
+confirmed it's legitimate — the founder-seeded "operations agent" admin
+account from migration `007_roles_admin_audit.py`, unrelated, left
+untouched.
+Changed: `teta-pi/api` `app/api/routes/auth.py` (endpoint removed) ·
+`docs/security.md` (new S-15) · `docs/known-issues.md` (§6.6 agent-key
+finding → CLOSED) · `docs/roadmap.md` (new row 15.4) · prod DB (`users.is_active`
+on 2 rows).
+Risk: None expected — the route is gone (should 404), and the only two
+accounts that ever exploited it are deactivated. Live re-verify after
+deploy: `POST /auth/agent-key` should return `404`, not `200`.
+Next: none — closed. If agent-account provisioning ever becomes a real
+product feature, it needs a fresh, deliberately-designed endpoint behind
+`require_admin`, not a revival of this one.
+
+## 2026-09-12 · 14.9 · gallery never refreshes after taking a photo
+Done: Owner reported the Gallery tab "doesn't work, photos aren't
+added." Read `app/(tabs)/gallery.tsx` and `app/(tabs)/camera.tsx` in
+full to trace it rather than guessing. Root cause: Gallery's photo-load
+`useEffect` had `[permission, loadPhotos]` as deps — ran once on first
+mount, never again, because expo-router `Tabs` keep every screen
+mounted (no `unmountOnBlur`). Confirmed the actual photo-save path in
+`camera.tsx` is fine (`MediaLibrary.createAssetAsync`, gated correctly
+by the "Save to Photos" setting) — the bug was purely in Gallery never
+re-reading the library. `teta-pi/pi-cam` PR
+[#8](https://github.com/teta-pi/pi-cam/pull/8).
+Changed: `teta-pi/pi-cam` `app/(tabs)/gallery.tsx` — split the
+permission-request effect from the photo-load effect, added
+`useFocusEffect(() => loadPhotos())` (same pattern `camera.tsx` already
+uses for its own settings re-read on tab focus). `docs/roadmap.md` new
+`14.9` row; `docs/known-issues.md` new closed entry.
+Risk: Low — additive-only change (an extra re-fetch on tab focus), no
+behavior removed. `tsc --noEmit` clean. Not build-verified locally
+(sandbox can't reach `dl.google.com`, see 14.4); owner to confirm on a
+real device via EAS: take a photo, switch to Gallery without
+restarting the app, confirm it appears immediately.
+Next: None — this was a self-contained fix. If the owner still doesn't
+see photos after this lands, the next thing to check is whether
+`MediaLibrary` permission or the "Save to Photos" toggle itself is off
+on their device (that path fails silently in `camera.tsx` today with no
+user-facing error — worth a follow-up if it turns out to be the actual
+cause).
 
 ## 2026-09-12 · 3.frontend (1.11 chain) · pre-verified-unclaimed disclosure on /e/[slug] + /search
 Done: closes the last open piece of 1.11 (GTM honesty guardrail) — a
