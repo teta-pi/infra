@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "Stable prod fixtures the probe reads (never writes). All owned by the test",
+    "account behind ~/.tetapi/test_api_key. If a fixture disappears the dependent",
+    "check reports SKIP with the reason, never a fake PASS.",
+    "s8: entity created by session 15.3 (2026-08-05) with one public and one private",
+    "block, left in place precisely as the S-8 regression fixture. The private block's",
+    "title is 'private-block-s8-SECRET' — the id being public is fine, the API must",
+    "never return the row to a non-owner."
+  ],
+  "s8_private_blocks": {
+    "entity_id": "e5b79aaa-6403-4c11-afee-776203fcc7c5",
+    "public_block_id": "da9a17b0-dea5-425b-abfb-f12de0a83196",
+    "private_block_id": "d0974159-cc75-463d-880a-b3af81b854b6"
+  }
+}

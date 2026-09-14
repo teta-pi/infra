@@ -116,7 +116,10 @@ Standing checklist re-run each audit cycle. `✅ = verified good`, `⚠️ = kno
   entities/blocks to anonymous agents.
 
 ### SSRF
-- ✅ **`POST /verify-endpoint`** unauthenticated SSRF — **FIXED** (api PR #3, §6).
+- ⚠️ **`POST /verify-endpoint`** — S-2 added auth but **no host validation**;
+  an authenticated caller still makes the server fetch loopback/metadata/RFC1918
+  (**S-16**, live-confirmed 2026-09-14, port oracle). Fix = 15.5 (port
+  `domain_ownership._resolves_to_public_ip` onto this route).
 - ⚠️ `/verify/domain/check` performs a boolean-only fetch to a caller-influenced
   host (mild SSRF, known-issues) — audit for allowlist/timeout/size caps and
   metadata-endpoint (169.254.169.254) blocking.
@@ -188,6 +191,9 @@ items are tracked here; functional-only bugs stay in `known-issues.md`.
 | S-14 | `teta-pi/mcp`'s `sessions` Map (`index.ts:571`) has no expiry beyond `transport.onclose` — a client that never sends a clean session `DELETE` (crash, network drop) leaks its transport for the process lifetime | 🟡 | 7.x MCP audit (2026-08-04) | `2 mcp` | OPEN — invisible under today's traffic, an unbounded slow memory leak under sustained real agent traffic with many imperfectly-closed sessions |
 | S-15 | `POST /auth/agent-key` unauthenticated, unrate-limited account+`pk_live_` key mint — live exploited on prod (2 probe accounts found) | 🔴 | 6.6 UI/backend sync audit (2026-09-11) | `15.4` | ✅ **CLOSED 2026-09-11** — endpoint deleted outright, [api PR #23](https://github.com/teta-pi/api/pull/23). Zero call-sites in `web`/`mcp`/`pi-cam`/WP plugin (grepped fresh checkouts independently of the audit), present unchanged since the repo's first commit (`83d5fba`), never documented in `docs/api.md`'s Auth table, and `is_agent` (the flag it set) has no admin-provisioning flow to gate behind — nothing to gate, so removal (not `require_admin`) was the clean fix. **Two prod accounts created by live probing** (`agent-e4f27342559dced1@teta-pi.agent` 2026-09-11 15:06, `agent-df2830672772c722@teta-pi.agent` 15:14) deactivated via `is_active=false` (rows kept, append-only discipline — A4) after explicit owner confirmation; `get_current_user` (`app/api/deps.py:15-41`) checks `is_active` on both the JWT and `pk_live_` paths, so this alone revokes both. Checked for other `is_agent` rows of unknown origin: one pre-existing row, `agent@tetapi.dev` (2026-07-04, `role=admin`) — legitimate, seeded in migration `007_roles_admin_audit.py:18` as a founder-designated "operations agent" admin account, unrelated to this exploit, left untouched. **Live-verify after deploy:** re-curl `POST /auth/agent-key` with empty body, expect `404` (route gone), not `200`. |
 
+| S-16 | `POST /verify-endpoint` still performs a server-side GET to any caller-supplied URL with **no host validation** — S-2's "fix" only added auth (`get_current_user`), not an allowlist/private-IP block. A caller with any active-account `pk_live_` key (a free signup, or the MCP service key) makes the prod server fetch `http://127.0.0.1:8000/…`, `169.254.169.254`, RFC1918 — `is_active:true` when the target responds = a loopback **port oracle**. `_verify_active`/`_verify_consistency` in `endpoint_verification.py` do `client.get(url, follow_redirects=True)` with no `_resolves_to_public_ip` guard (contrast `domain_ownership._check_file`, which has one since S-9) | 🟠 | 15.6 probe (2026-09-14) | `15.5` | **OPEN** — live-confirmed via both REST (`is_active:true` for `127.0.0.1:8000/health`) and MCP `teta_verify_endpoint`. Probe check `ssrf_canaries` + `mcp[verify_endpoint_ssrf]` assert it (honestly red until 15.5 ports `domain_ownership`'s `_resolves_to_public_ip` guard onto this route). The 169.254/10.x canaries pass only because the droplet can't route to them — the loopback oracle is the real proof |
+| S-17 | Private (`is_public=false` / `is_published=false`) entity is fully readable by anyone who knows its UUID via `GET /businesses/{id}`, `GET /businesses/{id}/preview` and `/proof` (name, description, blocks) — only private *blocks* were ever scoped (S-8); the entity row and the agent preview/proof were not. `get_business`/`agent_preview`/`get_proof` have no `is_public` filter for non-owners. `by-slug/{slug}/public` is correctly scoped, which is why this went unnoticed | 🟡 | 15.6 probe (2026-09-14) | owner decision (backend) | **OPEN — owner decision.** Filter these three on `is_public` for non-owners, **or** document "any entity readable by UUID" as intended for agents (agents are anonymous and read by UUID). Recorded in `scripts/security/public_allowlist.json` → `pending_owner_decision`; probe check `private_entity_exposure` asserts it |
+
 **Closed-item provenance:** S-1 and S-2 both landed in
 [`teta-pi/api` PR #3](https://github.com/teta-pi/api/pull/3) —
 *"fix(security): media path traversal (1.6) + SSRF-prone /verify-endpoint (1.7)"*,
@@ -224,17 +230,43 @@ Design constraints:
 - Findings feed back into §5 of this doc (the tracking table is the single source
   of truth).
 
-### 6.2 Read-only authorized re-audit cadence
+### 6.2 Read-only authorized re-audit — now an automaton (15.6)
 
-- **Cadence:** monthly manual pass (session 15.x) — re-run the §4 checklist
-  against current code, refresh `✅/⚠️/☐`, and diff against the last pass.
+Replaced the old "monthly manual pass" with a **daily deterministic probe** —
+`scripts/security/probe.py`, run by `.github/workflows/security-probe.yml`
+(cron `17 6 * * *`, plus `workflow_dispatch`). It exists because the manual
+cadence missed things for months: S-15 (agent-key), S-16 (loopback SSRF) and
+the private-block/entity leaks were all found by hand, by luck — never by a
+static scanner (§6.1's CodeQL/bandit can't see them).
+
+- **What it asserts:** every CLOSED §5 finding has a matching read-only assert
+  (walk the table — each `S-*` maps to a check in `scripts/security/README.md`),
+  plus one contract check (`auth_surface`) that fails if any live openapi
+  path+method answers 2xx to an unauthenticated caller and isn't in
+  `scripts/security/public_allowlist.json`. That allowlist is the contract that
+  would have caught S-15 on day one.
 - **Scope:** read-only, our infra only, no exploitation, no prod writes (§ Rules
-  of engagement). Live checks limited to non-destructive GETs against prod.
+  of engagement). Only GET/HEAD and the POSTs that by design don't write; the
+  `verify-endpoint` limiter (5/min) is respected (≤3 SSRF canaries per run);
+  high-volume rate-limit tests (badge/tag-ping, >100 req/min) are opt-in
+  (`--include-heavy`), never run by cron, since sustained load is out of scope
+  (§6.3).
+- **On FAIL:** the workflow goes red and opens/updates **one** GitHub issue
+  (label `security`) — it comments on the existing open issue rather than
+  spawning a new one per run. On PASS it is silent.
+- **Report-only — no auto-fix** (owner's call, `docs/decisions.md` 2026-09-14).
+  A FAIL that maps to a not-yet-merged fix (e.g. S-16 → 15.5) is *expected* red
+  until that fix lands; that's the probe proving it still bites.
 - **Trigger for an off-cadence pass:** any new public/unauthenticated surface
-  (e.g. `/v1/tag-ping`, Universal Tag wk-generator, device-upload changes) gets a
-  targeted review *before* it ships.
-- **Output:** update §4/§5 here + append to `docs/known-issues.md` for any new
-  concrete `file:line` finding + a `docs/changelog.md` entry.
+  still gets a targeted human review *before* it ships — and lands in the
+  allowlist as part of that.
+- **Output when a human finds something new:** update §4/§5 here + append to
+  `docs/known-issues.md` + a `docs/changelog.md` entry.
+
+**Rule (enforced by convention, not code):** every closed `S-*` gets an assert
+in `probe.py` **in the same PR that closes it** — fix and regression test ship
+together, so the net only ever grows. New-check mechanics:
+`scripts/security/README.md`.
 
 ### 6.3 Explicitly out of scope for the loop
 - No DAST / active scanning against prod, no fuzzing that writes, no load/DoS
