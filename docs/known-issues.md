@@ -2318,3 +2318,33 @@ plugin/theme, stolen FTP/wp-admin creds, a vulnerable server-side
 component), a false positive from the hosting scanner, or a
 misattribution because the plugin was the most recently installed thing.
 Status: CLOSED — all 6 items checked, clean across the board.
+
+---
+
+## nginx repo/prod drift + undeployed proxy tweaks (5.6, 2026-09-15)
+While adding security headers (5.6) the repo's `deploy/nginx/*.conf` was found
+drifted from the live `/etc/nginx/sites-available/*` and reconciled repo→live
+(commit "sync nginx confs from server"). Two things worth remembering:
+
+1. **The landing is served by `sites-available/teta-pi`, not a `tetapi.dev`
+   file**, root `/var/www/teta-pi` — the repo previously described a stale
+   `/var/www/tetapi/landing` layout that was never live. Repo file
+   `deploy/nginx/tetapi.dev.conf` now mirrors `teta-pi`; mapping documented in
+   `deployment.md`.
+2. **Undeployed proxy settings dropped from the repo to match reality:** the
+   repo had carried `X-Forwarded-For` (api, app, mcp), `proxy_http_version 1.1`
+   (api), and `X-Real-IP` + `Upgrade` + `chunked_transfer_encoding on` (mcp)
+   that were **never on prod**. Reconciled to live so the 5.6 header diff stayed
+   clean. Open question for a later devops task: should those be (re)deployed?
+   `X-Forwarded-For` in particular matters if any app ever trusts the real
+   client chain (note prod already has `conf.d/cf-real-ip.conf` mapping
+   `CF-Connecting-IP`, so client IP is available a different way).
+
+## X-Frame-Options: DENY on api vs the verification badge (watch, 5.6)
+`api.tetapi.dev` now sends `X-Frame-Options: DENY`, which applies to
+`GET /badge/{id}` too. Badges are SVG images meant to be embedded as `<img>` —
+`X-Frame-Options` does **not** affect `<img>`/`<object>` image rendering, only
+`<iframe>` framing — so DENY is expected to be harmless. Live-checked 5.6 that
+the badge endpoint still serves `image/svg+xml`. **If** a future feature offers
+an *iframe* embed of a badge/profile (interactive), DENY on api would block it;
+revisit to a scoped `SAMEORIGIN`/`frame-ancestors` then.
