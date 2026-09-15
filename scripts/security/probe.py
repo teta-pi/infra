@@ -302,8 +302,10 @@ def check_s8_private_blocks(rep: Report) -> None:
             rep.add("s8_private_blocks", SKIP, f"request error: {e}")
             return
     if r.status_code == 404:
+        # Since S-17 a private entity's /blocks 404s too — the S-8 fixture
+        # must stay a PUBLIC entity with one private block.
         rep.add("s8_private_blocks", SKIP,
-                f"fixture entity {entity} gone (404) — recreate a public+private block fixture")
+                f"fixture entity {entity} gone or private (404) — needs a public entity with a private block")
         return
     if r.status_code != 200:
         rep.add("s8_private_blocks", SKIP, f"unexpected {r.status_code}")
@@ -317,38 +319,54 @@ def check_s8_private_blocks(rep: Report) -> None:
                 f"anonymous list returned {len(ids)} public block(s), private block withheld")
 
 
-# ── private entity exposure (NEW finding 2026-09-14 — owner decision pending) ──
+# ── S-17 — private entity 404s by UUID for non-owners (api PR #26) ────────────
 def check_private_entity_exposure(rep: Report) -> None:
-    fx = _load_fixtures().get("s8_private_blocks")
+    fx = _load_fixtures().get("s17_private_entity")
     if not fx:
         rep.add("private_entity_exposure", SKIP, "no private-entity fixture configured")
         return
     entity = fx["entity_id"]
+    # Owner view first: proves the fixture is still private AND that the
+    # owner path is intact (S-17 is a 404-for-non-owners rule, not a lockout).
+    key = _api_key()
+    if key:
+        with _client(auth=key) as c:
+            try:
+                r = c.get(f"{API}/api/v1/businesses/{entity}")
+            except Exception as e:  # noqa: BLE001
+                rep.add("private_entity_exposure", SKIP, f"owner request error: {e}")
+                return
+        if r.status_code == 404:
+            rep.add("private_entity_exposure", SKIP,
+                    f"fixture entity {entity} gone (404 for owner) — recreate a private fixture")
+            return
+        if r.status_code != 200:
+            rep.add("private_entity_exposure", FAIL,
+                    f"owner GET /businesses/{{id}} -> {r.status_code} (owner must still see a private entity)")
+            return
+        body = r.json()
+        if body.get("is_public") is not False and body.get("is_published") is not False:
+            rep.add("private_entity_exposure", SKIP,
+                    f"fixture entity {entity} is no longer private — set is_public=false on it")
+            return
     leaks: list[str] = []
     with _client() as c:
-        for suffix in ("", "/preview", "/proof"):
+        for suffix in ("", "/preview", "/proof", "/blocks"):
             try:
                 r = c.get(f"{API}/api/v1/businesses/{entity}{suffix}")
-            except Exception:
-                continue
-            if r.status_code == 404:
-                continue
-            if 200 <= r.status_code < 300:
-                body = r.json()
-                is_pub = body.get("is_public")
-                # base returns is_public; preview/proof don't, but if the base
-                # says private and these still return the same entity, it's a leak.
-                if is_pub is False or (suffix and "TETA Security Sync Test A" in r.text):
-                    leaks.append(f"GET /businesses/{{id}}{suffix} -> 200 for a private entity")
+            except Exception as e:  # noqa: BLE001
+                rep.add("private_entity_exposure", SKIP, f"request error: {e}")
+                return
+            if r.status_code != 404:
+                leaks.append(f"GET /businesses/{{id}}{suffix} -> {r.status_code} for a private entity (want 404)")
     if leaks:
         rep.add("private_entity_exposure", FAIL,
-                "private (is_public=false) entity readable by UUID anonymously:\n    " +
-                "\n    ".join(leaks) +
-                "\n    OWNER DECISION (public_allowlist.json > pending_owner_decision): "
-                "filter these on is_public for non-owners, or document as intended.")
+                "private (is_public=false) entity readable by UUID anonymously (S-17 regressed):\n    " +
+                "\n    ".join(leaks))
     else:
         rep.add("private_entity_exposure", PASS,
-                "private entity not readable by UUID via base/preview/proof")
+                "private entity 404s anonymously on base/preview/proof/blocks"
+                + (", owner sees it (200)" if key else " (no key: owner path not checked)"))
 
 
 # ── f. RATE LIMITS ────────────────────────────────────────────────────────────

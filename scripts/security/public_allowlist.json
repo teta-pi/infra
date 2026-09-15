@@ -38,8 +38,7 @@
     "GET /wk/{entity_id}/llms.txt": "Universal Tag Part B; docs/api.md"
   },
   "pending_owner_decision": {
-    "_comment": "Live 2xx-to-anonymous surface that the docs do not sanction. Surfaced by dedicated probe checks (not by auth_surface, which uses dummy ids and so only catches endpoints that 2xx with junk input, the way /auth/agent-key did). Resolve each by fixing the route (then remove the entry) or by adding it to `public` with a docs/api.md citation.",
-    "private_entity_read": "GET /businesses/{id}, /businesses/{id}/preview and /businesses/{id}/proof all return a is_public=false / is_published=false entity's name+description to an anonymous caller who knows the UUID (confirmed 2026-09-14 against the 15.3 fixture e5b79aaa). Only private BLOCKS were ever scoped (S-8, api PR #10); the entity row itself and the agent preview/proof were not. docs/api.md marks by-slug/{slug}/public as 'published+public only' but says businesses CRUD is owner-checked. Owner decision: filter these three on is_public for non-owners, or document 'any entity readable by UUID' as intended for agents. Probe check `private_entity_exposure` asserts this."
+    "_comment": "Live 2xx-to-anonymous surface that the docs do not sanction. Surfaced by dedicated probe checks (not by auth_surface, which uses dummy ids and so only catches endpoints that 2xx with junk input, the way /auth/agent-key did). Resolve each by fixing the route (then remove the entry) or by adding it to `public` with a docs/api.md citation."
   },
   "must_not_exist": {
     "POST /api/v1/auth/agent-key": "S-15: unauthenticated account+pk_live_ mint, deleted in api PR #23 (2026-09-11)",

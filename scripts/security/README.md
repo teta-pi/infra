@@ -52,7 +52,7 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 |---|---|
 | `probe.py` | the checks |
 | `public_allowlist.json` | **the contract.** Every route the API may answer 2xx to an *unauthenticated* caller. `auth_surface` fails any live 2xx-to-anonymous route not listed here. `must_not_exist` lists deleted security-fix routes that must stay 404. `pending_owner_decision` records live 2xx surface the docs don't sanction yet (informational; the dedicated check that finds it is what fails). |
-| `fixtures.json` | stable prod rows the probe **reads** (never writes) — e.g. the 15.3 entity with one public + one private block for the S-8 / private-entity checks. |
+| `fixtures.json` | stable prod rows the probe **reads** (never writes) — e.g. the 15.3 entity (public since S-17) with one public + one private block for S-8, and a private entity for S-17. |
 
 ## Checks → findings
 
@@ -63,7 +63,7 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 | `s15_agent_key` | `POST /auth/agent-key` is 404 **and** absent from openapi | S-15 |
 | `s1_path_traversal` | `/media/local/…` traversal variants never 200 `/etc/passwd` | S-1 |
 | `s8_private_blocks` | anonymous `GET /businesses/{id}/blocks` withholds private blocks | S-8 |
-| `private_entity_exposure` | a private (`is_public=false`) entity isn't readable by UUID via base/`preview`/`proof` | *new 2026-09-14* |
+| `private_entity_exposure` | a private (`is_public=false`) entity 404s anonymously on base/`preview`/`proof`/`blocks` and still 200s for the owner (fixture `s17_private_entity`) | S-17 |
 | `secrets` | `/.env`, `/.git/config`, `/api/certs/` unreachable; no `pk_live_` in openapi; flags `/docs`+`/redoc` as an owner question | secrets §4 |
 | `headers` | HSTS + nosniff + frame-options on all four hosts (fix is devops, §6.3) | headers §4 |
 | `mcp` | `teta_search` works anon (by design); `teta_verify_endpoint` won't fetch loopback | S-11/S-16 |
