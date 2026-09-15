@@ -275,6 +275,30 @@ together, so the net only ever grows. New-check mechanics:
 - Secret rotation, WAF, nginx/systemd hardening = devops direction, raised
   separately with the owner (prod-affecting).
 
+**Security response headers — DONE (5.6, 2026-09-15, devops).** The probe's
+`headers[*]` gaps (no HSTS / nosniff / X-Frame-Options on app/api/mcp; landing
+missing HSTS) are closed at the nginx origin — see `docs/deployment.md`
+"Security response headers". `probe.py::check_headers` re-asserts all four hosts
+carry HSTS + `X-Content-Type-Options` + `X-Frame-Options`.
+
+Residuals still open (tracked, not blocking):
+- **CSP** — deliberately **not** shipped in 5.6; needs an audit of inline
+  scripts/styles on landing + app before a non-breaking policy can be written.
+  Own devops task.
+- **HSTS strength** — currently `max-age=86400`, no `includeSubDomains`, no
+  `preload`. Raise plan (1y → includeSubDomains once every subdomain incl.
+  `stats.tetapi.dev` is HTTPS-only → preload only by explicit owner decision) in
+  `deployment.md`. Until `max-age` is a year and includeSubDomains is set, HSTS
+  coverage is partial by design.
+- **Cloudflare SSL mode = residual on the CF→origin hop.** Origin is `listen 80`
+  only (no per-tetapi 443 vhost), so Cloudflare reaches the origin over plain
+  HTTP (Flexible-mode behaviour). HSTS is still correct and enforced for the
+  browser↔Cloudflare hop (where a real user's TLS lives); the CF→origin hop is
+  inside DigitalOcean's network but is not itself TLS. Moving CF to Full(-strict)
+  + a 443 origin vhost would close it — separate devops decision, **owner to
+  confirm the current CF SSL mode** (inferred Flexible from the origin config,
+  not read from the CF dashboard this session).
+
 ---
 
 *Maintained by direction 15. Keep §4/§5 current; docs are canonical for anything

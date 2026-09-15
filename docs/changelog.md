@@ -6,6 +6,56 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-15 · 5.6 · security response headers (nginx) + repo/prod nginx reconcile
+Done: closed the 15.6 probe's `headers[*]` gaps. All four hosts now serve HSTS +
+`X-Content-Type-Options` + `X-Frame-Options` (+ `Referrer-Policy`); the probe
+went from `headers[app]`/`[api]`/`[mcp]` FAIL + `[landing]` missing-HSTS to
+**4/4 PASS** (workflow run `34954559176`: 17 pass · 2 fail · 4 skip — the only
+reds are the two S-16 loopback-SSRF checks, awaiting 15.5, unrelated).
+
+Drift check first (owner's step 1): the repo's `deploy/nginx/*.conf` had drifted
+from live `/etc/nginx/sites-available/*`. The landing's `SAMEORIGIN`+`nosniff`
+seen live come from **origin nginx** (`sites-available/teta-pi`, root
+`/var/www/teta-pi`), **not** Cloudflare — confirmed by curling the origin
+directly (`-H "Host: …" http://164.90.235.66/`) and seeing identical headers;
+CF passes origin headers through unchanged. Reconciled repo→live in a separate
+commit (`sync nginx confs from server`) so the header diff is clean; that also
+surfaced undeployed proxy tweaks the repo carried that were never on prod
+(`X-Forwarded-For`, mcp `chunked_transfer_encoding`, etc. — logged in
+known-issues).
+
+CF SSL mode (step 2): origin is `listen 80` only (no per-tetapi 443 vhost), so
+CF→origin is plain HTTP (Flexible behaviour). HSTS is still correct/enforced for
+the browser↔CF hop. **Owner to confirm the CF SSL mode** — inferred from the
+origin config, not read from the CF dashboard. Recorded as a residual in
+security.md §6.3.
+
+Changed:
+- `deploy/nginx/snippets/security-headers.conf` (new) — HSTS `max-age=86400`,
+  nosniff, `X-Frame-Options: DENY`, Referrer-Policy, all `always`; `include`d in
+  app/api/mcp `server{}`.
+- `deploy/nginx/tetapi.dev.conf` (landing) — keeps `SAMEORIGIN` + its existing
+  set, gains **only** HSTS inline (the DENY snippet would duplicate/conflict).
+- Applied on prod manually (nginx changes are NOT in CI): backup →
+  `scp` → `sudo nginx -t` (passed) → `sudo systemctl reload nginx`. Live-verified
+  all 4 hosts through CF and origin (no duplicate headers); `/profile`, `/search`,
+  `/e/hellfire-solutions` all 200; MCP `initialize` ok; api `/health` ok; badge
+  `GET /badge/{id}` still 200 `image/svg+xml` (DENY doesn't affect `<img>`).
+- Docs: `deployment.md` (manual nginx-apply step + repo→server name mapping +
+  HSTS raise plan), `security.md` §6.3 (headers done; residuals: CSP, HSTS
+  strength, CF→origin hop), `known-issues.md`, `roadmap.md` 5.6.
+
+Risk: low. HSTS is intentionally short (1 day) and apex-only — no
+includeSubDomains/preload, so it can be walked back within a day if needed.
+`X-Frame-Options: DENY` on api blocks *iframe* embeds only (badges are `<img>`,
+unaffected); if an interactive iframe embed is ever added, revisit (known-issues).
+Backup of the four live confs at `/root/nginx-bak-20260915094524/` on prod.
+
+Next: (1) owner confirms CF SSL mode (Flexible vs Full). (2) after ≥7 quiet days,
+separate PR to raise HSTS to `max-age=31536000`. (3) CSP is its own task (needs
+an inline-script audit on landing + app). (4) unrelated: S-16 SSRF (15.5) still
+the only red in the probe.
+
 ## 2026-09-14 · 15.6 · security regression net (automated §6.2 re-audit)
 Done: built the automated replacement for docs/security.md §6.2's old
 "monthly manual" re-audit — a deterministic daily probe that re-asserts every

@@ -57,6 +57,72 @@ the 1.9 OTS fix, where only the API restarted and the worker crashed for 33 min)
 ⚠ When you add a Next.js page, add its route to the `app-paths-manifest.json` block
 in the workflow or it 404s in production.
 
+## nginx config — applied MANUALLY, not by CI
+`deploy/nginx/*.conf` and `deploy/nginx/snippets/*.conf` are **not** touched by
+`deploy.yml`. The push-to-`main` pipeline only rsyncs app code — it never writes
+`/etc/nginx`. Editing a conf in this repo does nothing on prod until a human
+copies it up. Because of that, the repo had silently drifted from the live
+configs (reconciled 2026-09-15, 5.6); **before editing a conf, diff it against
+the server** (`ssh tetapi "cat /etc/nginx/sites-available/<name>"`).
+
+### Repo file → server path mapping (they are NOT all 1:1 by name)
+| repo file | server `/etc/nginx/sites-available/…` |
+|---|---|
+| `deploy/nginx/api.tetapi.dev.conf` | `api.tetapi.dev` |
+| `deploy/nginx/app.tetapi.dev.conf` | `app.tetapi.dev` |
+| `deploy/nginx/mcp.tetapi.dev.conf` | `mcp.tetapi.dev` |
+| `deploy/nginx/tetapi.dev.conf` | **`teta-pi`** (landing — note the different name) |
+| `deploy/nginx/snippets/security-headers.conf` | `/etc/nginx/snippets/security-headers.conf` |
+
+Not tracked in this repo (server-only, out of the 5.6 header rollout):
+`stats.tetapi.dev` (GoatCounter), `teta`, `hellfiresol.com`, `default`.
+
+### Applying an nginx change (the manual step)
+```bash
+# from repo root, for each changed file (snippet FIRST if a conf includes it):
+scp deploy/nginx/snippets/security-headers.conf tetapi:/etc/nginx/snippets/security-headers.conf
+scp deploy/nginx/api.tetapi.dev.conf  tetapi:/etc/nginx/sites-available/api.tetapi.dev
+scp deploy/nginx/app.tetapi.dev.conf  tetapi:/etc/nginx/sites-available/app.tetapi.dev
+scp deploy/nginx/mcp.tetapi.dev.conf  tetapi:/etc/nginx/sites-available/mcp.tetapi.dev
+scp deploy/nginx/tetapi.dev.conf      tetapi:/etc/nginx/sites-available/teta-pi
+ssh tetapi "nginx -t"                 # MUST pass before reloading
+ssh tetapi "systemctl reload nginx"   # reload, NOT restart (zero-drop)
+```
+If `nginx -t` fails: do **not** reload, restore the previous file(s), report.
+`reload` re-reads config with no dropped connections; `restart` would blip all
+sites — never use it for a config change.
+
+## Security response headers (5.6, 2026-09-15)
+TLS terminates at **Cloudflare** (all four hosts answer `server: cloudflare`;
+origin nginx is `listen 80` only). Cloudflare passes origin response headers
+through unchanged — drift-checked 2026-09-15 by curling origin directly
+(`curl -sI -H "Host: <h>" http://164.90.235.66/`) and comparing to the CF-fronted
+response. So the headers are set **once, at the origin**, in nginx.
+
+- **app / api / mcp**: `include snippets/security-headers.conf;` at `server{}`
+  level → HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy`. All `always` so they appear on 4xx/5xx too (api answers 405
+  and mcp 404 to `GET /`).
+- **landing (`teta-pi`)**: keeps its own self-contained header set and
+  `X-Frame-Options: SAMEORIGIN`; only HSTS was added (inline, not via the
+  snippet — the snippet's `DENY` would duplicate/conflict with the landing's
+  headers).
+
+### HSTS raise plan (deliberately conservative)
+Start value is `max-age=86400` (1 day), **no** `includeSubDomains`, **no**
+`preload`. HSTS is browser-cached and hard to walk back, so raise in steps:
+1. **Now (5.6):** `max-age=86400` on all four hosts.
+2. **After ≥7 days with no TLS/mixed-content incident:** separate PR →
+   `max-age=31536000` (1 year).
+3. **`includeSubDomains`:** only after confirming **every** `*.tetapi.dev`
+   subdomain is HTTPS-only — today that's the 4 hosts **plus `stats.tetapi.dev`**
+   (GoatCounter) and any future `verify.tetapi.dev` (12.5c, not deployed yet).
+   Adding it before a subdomain is HTTPS-ready would black-hole that subdomain
+   in every browser that saw the header.
+4. **`preload`:** never without an explicit, separate owner decision — it is a
+   browser-baked, effectively irreversible commitment (submits the apex to the
+   HSTS preload list). Not planned.
+
 ## Secrets — server `.env` only (`/opt/tetapi/api/.env`), never in git
 `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `RESEND_API_KEY`, `PII_ENCRYPTION_KEY`
 (Fernet), `ENVIRONMENT=production`, plus optional `OPENAI_API_KEY`,
