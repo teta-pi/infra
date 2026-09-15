@@ -2215,7 +2215,20 @@ base + `/preview` both return the entity, `/proof` returns its proof scaffold.
 (matching S-8), or document "any entity readable by its UUID" as intended for
 anonymous agents. Recorded in `scripts/security/public_allowlist.json` →
 `pending_owner_decision`; probe check `private_entity_exposure` asserts it.
-Status: OPEN — owner decision (backend).
+Status: ✅ **CLOSED 2026-09-14** (1.25, [api PR #26](https://github.com/teta-pi/api/pull/26))
+— decision: filter. Non-owners get 404 on `GET /businesses/{id}`, `/preview`,
+`/proof`, `/blocks` and `/blocks/{block_id}` when the entity is private or
+unpublished; owner (token) still 200. Found in passing and fixed in the same
+PR: `/preview` and `/proof` emitted **non-public blocks** (titles, media ids)
+of public entities too — they iterated `business.blocks` with no `is_public`
+filter, unlike `by-slug/public`. Web side ([web PR #47](https://github.com/teta-pi/web/pull/47)):
+`/profile` called `GET /businesses/{id}` and `/blocks` **without a token**, so
+before this it silently showed the owner only their public blocks and would
+have shown nothing at all for a private entity after the API fix — now sends
+the session token. Probe fixture note: the S-8 fixture entity `e5b79aaa` was
+itself private, so `/blocks` on it now 404s; it was set public
+(`is_public=is_published=true`, blocks unchanged) and `ab27ca35` (private)
+became the S-17 fixture.
 
 ### Two owner questions the probe raised but does not decide
 - **Security headers** absent on app./api./mcp.tetapi.dev (no HSTS anywhere;

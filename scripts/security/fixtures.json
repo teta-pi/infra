@@ -6,11 +6,20 @@
     "s8: entity created by session 15.3 (2026-08-05) with one public and one private",
     "block, left in place precisely as the S-8 regression fixture. The private block's",
     "title is 'private-block-s8-SECRET' — the id being public is fine, the API must",
-    "never return the row to a non-owner."
+    "never return the row to a non-owner. Since S-17 (2026-09-14) the entity itself",
+    "MUST be public (is_public=is_published=true), otherwise /blocks 404s and the",
+    "check can only SKIP.",
+    "s17: a private (is_public=false, is_published=false) entity of the same test",
+    "account; every by-UUID read (base/preview/proof/blocks) must 404 anonymously",
+    "and 200 for the owner."
   ],
   "s8_private_blocks": {
     "entity_id": "e5b79aaa-6403-4c11-afee-776203fcc7c5",
     "public_block_id": "da9a17b0-dea5-425b-abfb-f12de0a83196",
     "private_block_id": "d0974159-cc75-463d-880a-b3af81b854b6"
+  },
+  "s17_private_entity": {
+    "entity_id": "ab27ca35-f517-4e03-a353-9ebf8a58f13c",
+    "name": "TETA Security Sync Test B 15.3"
   }
 }
