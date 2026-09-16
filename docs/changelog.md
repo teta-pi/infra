@@ -6,6 +6,33 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-16 · 1.22 · POST /businesses/{id}/blocks honours is_public — CLOSED
+Done: [api PR #27](https://github.com/teta-pi/api/pull/27). `add_block`
+(`app/api/routes/blocks.py`) built the `Block` row without reading
+`BlockCreate.is_public`, so every new block was public regardless of payload
+and a private block only existed after a follow-up PATCH (window where a
+block meant to be private was live). Now `is_public=payload.is_public`; the
+schema already had the field with `default=True`, so callers that omit it
+are unchanged. Checked teta-pi/web: `blockApi.add` sends only
+`title/description/order`, never `is_public` — no web caller is affected
+either way.
+Changed: `app/api/routes/blocks.py` (one line), `pyproject.toml`
+(`[tool.pytest.ini_options]`), new `tests/test_blocks_is_public.py` — the api
+repo's **first pytest**: calls `add_block` with a stub session (owner check +
+embedding patched), asserts `is_public` false/true/omitted→true. Verified it
+fails on pre-fix `main` and passes with the fix. **Not in the 15.6 probe**:
+security.md §6.2 wants an assert per closed finding, but the probe is
+read-only by design and this needs a write (create a block) — pytest in-repo
+is the assert. Docs: roadmap 1.22 ✅, known-issues S-8 "found in passing" note
+→ CLOSED, api.md blocks paragraph.
+Risk: none functional (default unchanged). The new test has no CI runner yet
+— api's workflows are bandit/codeql/pip-audit/deploy, none runs pytest; it
+only runs locally until someone adds a test job. Also: `app/**/__pycache__/*.pyc`
+are tracked in the api repo (no `.gitignore`) — left alone, noted here.
+Next: live check after deploy (POST private block with test key → anon
+`GET /blocks` omits, owner shows; DELETE). Optional: add a `pytest` CI job to
+teta-pi/api so the test actually gates merges.
+
 ## 2026-09-15 · 5.6 · security response headers (nginx) + repo/prod nginx reconcile
 Done: closed the 15.6 probe's `headers[*]` gaps. All four hosts now serve HSTS +
 `X-Content-Type-Options` + `X-Frame-Options` (+ `Referrer-Policy`); the probe
