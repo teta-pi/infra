@@ -2066,7 +2066,9 @@ token both returned only the public block, the owner's token returned both.
 `is_public` field of `BlockCreate` entirely when constructing the `Block` row
 — every new block is created public regardless of what the caller sends; a
 private block can currently only be produced by `PATCH`ing it right after
-creation. Status: OPEN — triaged into roadmap as 1.22 (2026-09-11).
+creation. Status: CLOSED (2026-09-16) — roadmap 1.22, api PR #27:
+`add_block` passes `payload.is_public` through; regression pytest in the api
+repo (`tests/test_blocks_is_public.py`) since the security probe is read-only.
 
 ## 🟡 Email delivery limited to one address
 Resend domain `tetapi.dev` not verified; sender `onboarding@resend.dev` only

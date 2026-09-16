@@ -73,7 +73,9 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
 - `routes/blocks.py` — block CRUD, owner-checked via parent business. Reads
   (`GET /businesses/{id}/blocks`, `GET /blocks/{block_id}`) apply the same
   S-8 + S-17 rule: non-owners see only public blocks of public+published
-  entities, everything else 404s.
+  entities, everything else 404s. `POST /businesses/{id}/blocks` honours
+  `is_public` in the payload (default `true`) since 1.22 — before that every
+  block was created public and could only be made private by a follow-up PATCH.
 - `routes/media.py` — `/media/upload` (JWT), `/media/device-upload` (api_key),
   local storage under `UPLOAD_DIR`, served at `/media/local/{id}/{name}`.
 
