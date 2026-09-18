@@ -6,6 +6,30 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-18 · inbox triage · why CI failure emails are red — read-only check
+Done: owner asked why they're getting a stream of GitHub Actions failure emails
+across `infra`/`api`/`web`. Pulled `gh run list`/`gh run view --log-failed` on the
+latest failing runs in all three:
+- `infra` "Security probe (regression net)" — working as designed, not a new
+  problem. It fails on purpose whenever any probe check is red and comments on the
+  standing tracking issue ([teta-pi/infra#110](https://github.com/teta-pi/infra/issues/110))
+  instead of opening a new one each day. Latest run (2026-09-17): down to 2 fails
+  (both S-16 SSRF, awaiting 15.5) from the original 7 — HSTS headers and the
+  private-entity exposure fail both cleared already (5.6, 1.25).
+- `api` Bandit + pip-audit — already documented, not new (`docs/known-issues.md`
+  "`teta-pi/api` CI: Bandit + pip-audit both red"): MD5-for-ETag false positive,
+  `ecdsa` transitive vuln with no upstream fix and no real exploit path (API JWTs
+  are HS256).
+- `web` npm audit — **is** new: the 3.18 fix (2026-08-06) pinned `sharp` to
+  `0.35.3` and went green; CI runs since 2026-09-12 are red again on 2 libheif
+  advisories in `sharp <0.35.4` disclosed after that pin. Logged as a fresh entry
+  in known-issues (top of file) rather than folded into the closed 3.18 entry.
+Changed: `docs/known-issues.md` (new entry, top of file — `sharp` pin regression),
+this changelog entry. No code changes, no repos other than `infra`'s docs touched.
+Risk: none — read-only investigation, only docs written.
+Next: small `3 frontend` session to bump `overrides.sharp` in `teta-pi/web` to
+`>=0.35.4` and confirm `npm audit` clean.
+
 ## 2026-09-16 · 5.7 · run pytest in CI (tests.yml) — DONE
 Done: [api PR #28](https://github.com/teta-pi/api/pull/28) + this infra PR (docs).
 1.22 shipped the api repo's first pytest (`tests/test_blocks_is_public.py`) but no

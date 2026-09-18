@@ -3,6 +3,23 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 `teta-pi/web` CI: `npm audit` red again (2026-09-12→18) — the 3.18 `sharp` pin (0.35.3) is now itself vulnerable
+Not investigated in depth this session (spotted while triaging inbox CI
+failure emails, `6 manager`-style read-only check). 3.18 (2026-08-06) fixed
+the previous `npm audit` red by pinning `sharp` to `0.35.3` via
+`package.json` `overrides` (see the closure note below, "`teta-pi/web` CI:
+`npm audit` job red"). CI runs since 2026-09-12 show 2 new vulnerabilities
+(1 high, 1 critical) in `sharp <0.35.4` — two libheif advisories,
+`GHSA-g89c-p67h-r497` and `GHSA-2jg2-4ch7-h545` — disclosed after that pin
+was set, so `0.35.3` no longer clears `npm audit`. `npm audit fix --force`
+still offers to jump to `next@15.5.25` (outside the stated range, same
+tradeoff 3.18 already reasoned through) but the actual fix here is
+narrower: bump the `overrides.sharp` pin from `0.35.3` to `>=0.35.4`.
+Status: OPEN, non-blocking (no repo has required status checks — see the
+Bandit/pip-audit entry below). Next: small `3 frontend` session — bump the
+override, `npm audit` clean, confirm no `sharp` API break (image
+transforms), redeploy.
+
 ## 🟠 FIXED 2026-09-01 — `/profile` hid a real person-kind entity's registry data (`n/a` override), Registry Match step wrongly gated business-only (roadmap 3.23)
 Owner confirmed live: `bob` (`entity_type: person`) has a genuine
 `registry_status: verified` record (Handelsregister, VR 40166). `/e/bob`
