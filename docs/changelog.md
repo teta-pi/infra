@@ -6,6 +6,30 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-16 · 5.7 · run pytest in CI (tests.yml) — DONE
+Done: [api PR #28](https://github.com/teta-pi/api/pull/28) + this infra PR (docs).
+1.22 shipped the api repo's first pytest (`tests/test_blocks_is_public.py`) but no
+workflow ran it — that PR's own "Risk" line flagged it ("no CI runner yet ... only
+runs locally until someone adds a test job"). This adds the test job.
+Changed: new `teta-pi/api` `.github/workflows/tests.yml` — `pull_request` + push to
+`main` (+ `workflow_dispatch`), `setup-python@v6` (3.12), `pip install ".[dev]"`,
+`pytest -q`. Style matches `bandit.yml`/`pip-audit.yml` (`checkout@v7`,
+`permissions: contents: read`, `timeout-minutes`). **No Postgres service, zero
+droplet load** — the 1.22 test is unit-level (stub `AsyncSession`, owner check +
+embedding patched, all `Settings` fields default, `create_async_engine` lazy, no
+import-time client init), so imports + run need no DB. Docs: `deployment.md` (new
+"Test CI" section + HSTS-style note that it's not a required check yet), roadmap
+5.7, this entry.
+Risk: low. Couldn't do a full `pip install ".[dev]"` + run locally (host disk full;
+local Python is 3.11 vs CI's 3.12) — validation rests on static analysis + the PR's
+own CI run, which is the real check. If a heavy dep or a py3.12-only import surprises
+the runner, the first CI run on the PR shows it before merge.
+Next: **owner decision** — block merge on a red Tests run? If yes, add `pytest` as a
+required status check under `main`'s branch protection (asked in the api PR); if no,
+it stays advisory.
+
+---
+
 ## 2026-09-16 · 1.22 · POST /businesses/{id}/blocks honours is_public — CLOSED
 Done: [api PR #27](https://github.com/teta-pi/api/pull/27). `add_block`
 (`app/api/routes/blocks.py`) built the `Block` row without reading

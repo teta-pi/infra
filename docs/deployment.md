@@ -57,6 +57,24 @@ the 1.9 OTS fix, where only the API restarted and the worker crashed for 33 min)
 ⚠ When you add a Next.js page, add its route to the `app-paths-manifest.json` block
 in the workflow or it 404s in production.
 
+## Test CI — `.github/workflows/tests.yml` (api repo, 5.7)
+The api repo's other workflows are `bandit.yml`, `codeql.yml`, `pip-audit.yml`
+(security/deps) and `deploy.yml` (prod). Since 5.7 there is also **`tests.yml`**,
+which runs `pytest`. Trigger: `pull_request` + push to `main` (+ `workflow_dispatch`).
+Steps: `actions/setup-python@v6` (3.12) → `pip install ".[dev]"` → `pytest -q`.
+Same style as `bandit.yml`/`pip-audit.yml` (`checkout@v7`, `permissions: contents: read`,
+`timeout-minutes`).
+
+**No Postgres service, zero droplet load.** It runs entirely on the GitHub runner.
+The 1.22 suite (`tests/test_blocks_is_public.py`, the repo's first pytest) is
+unit-level: `add_block` is called with a stub `AsyncSession` and the owner check +
+embedding patched out, and every `Settings` field has a default with a lazily-created
+engine — so imports and the run need no database.
+
+**Not a required status check yet** — whether a red run blocks merge on `main` is an
+owner call (see roadmap 5.7 / the api PR). Until the owner adds it under `main`'s
+branch protection, the Tests run is advisory (visible on the PR, non-blocking).
+
 ## nginx config — applied MANUALLY, not by CI
 `deploy/nginx/*.conf` and `deploy/nginx/snippets/*.conf` are **not** touched by
 `deploy.yml`. The push-to-`main` pipeline only rsyncs app code — it never writes
