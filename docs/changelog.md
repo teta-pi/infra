@@ -6,6 +6,41 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-18 · 5.8 devops · SH.OS co-tenant — isolated account provisioned, access held OFF on a security finding
+Done: provisioned an isolated, unprivileged foothold for the owner's second
+project (SH.OS) on the shared droplet, variant B (TETA+PI keeps control).
+Created `shos` (uid 1002, `--disabled-password`, groups `shos`+`users` only — no
+sudo, no docker group), `enable-linger`, subuid/subgid; installed rootless-docker
+prereqs (`uidmap`, `slirp4netns`); applied a systemd slice cap
+(`user-1002.slice.d/limits.conf`: MemoryMax 512M / MemoryHigh 410M / CPUQuota 50%
+/ TasksMax 512). Picked port range **8200–8299** (boot's 8100–8199 was dirty —
+8100 = GoatCounter, 8090 = hellfire). Isolation checks under `shos`:
+docker socket / sudo / `systemctl restart tetapi-api` / web-root write all
+correctly DENIED.
+Changed: `deploy/nginx/shos.conf` (vhost template, placeholder domain),
+`deploy/systemd/user-1002.slice.d/limits.conf`, `scripts/security/cotenant_check.sh`
+(on-box isolation verifier — the runner probe can't SSH the box),
+`docs/deployment.md` ("Co-tenant: shos" section incl. revoke-in-one-move + fix
+runbook), `docs/security.md` (trust boundary **B6**, findings **S-18/S-19/S-20**),
+`docs/roadmap.md` (5.8). Prod writes: user `shos` + the slice limits file only.
+Risk: **3 pre-existing blockers found — isolation is NOT real yet.**
+🔴 **S-18** `/opt/tetapi/api/.env` is 644 world-readable (any local account reads
+Fernet/JWT/DB/Resend secrets — A7/A8). 🔴 **S-19** `/opt/tetapi/api`+`certs` owned
+by the `hellfire` co-tenant (owns our prod tree / C2PA key). 🟠 **S-20** redis
+answers unauthenticated on shared loopback 6379 (A9 data). All predate 5.8 and are
+already exploitable by the existing `hellfire` tenant. They live in `/opt/tetapi`
++ service config — off-limits to this session — so **NOT fixed here**; runbook in
+`deployment.md`, owned by a TETA+PI backend/devops task. **SH.OS access (SSH key +
+vhost) deliberately NOT enabled** — doing so before the fixes would hand SH.OS
+every TETA+PI secret on day one. Separately: kernel update pending a reboot
+(needrestart notice, from prior unattended-upgrades — not actioned).
+Next: (1) TETA+PI-side task to close S-18/19/20 (chmod/chown/redis-auth) + re-run
+`scripts/security/cotenant_check.sh` → all green; (2) owner: real SH.OS domain +
+DNS, confirm a DO Cloud Firewall limits inbound to 22/80/443, generate
+`shos_ed25519` on their machine and hand over the **public** key; (3) then enable
+access (key + `Match User shos` sshd drop-in + vhost) + live OOM stress test from
+a real shos session; (4) hand the `hellfire` devops boot brief to that project.
+
 ## 2026-09-18 · inbox triage · why CI failure emails are red — read-only check
 Done: owner asked why they're getting a stream of GitHub Actions failure emails
 across `infra`/`api`/`web`. Pulled `gh run list`/`gh run view --log-failed` on the

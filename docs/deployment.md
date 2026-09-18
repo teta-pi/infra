@@ -174,7 +174,148 @@ After any change, verify on prod (curl the affected endpoint / open the page).
 
 ## Analytics
 Self-hosted GoatCounter at `stats.tetapi.dev` (systemd, SQLite). Tracking snippet in
-the Next.js layout and every landing page.
+the Next.js layout and every landing page. GoatCounter listens on `127.0.0.1:8100`.
+
+## Co-tenant: shos (SH.OS) — 5.8, 2026-09-18
+
+The droplet hosts a **second, unrelated project (SH.OS)** alongside TETA+PI. Its
+dev agent gets an isolated, unprivileged foothold; TETA+PI keeps full control of
+nginx / ports / limits. SH.OS requests changes via the manager session — they
+never edit nginx or systemd. This box was *already* multi-tenant before 5.8 (the
+`hellfire` / `hellfiresol.com` project, `docs/security.md` B6); shos is the first
+one provisioned to the strict model below.
+
+> ⚠ **ACCESS IS OFF.** As of 2026-09-18 `shos` exists but has **no SSH key and no
+> vhost** — it cannot log in at all. Do **not** enable access until the
+> pre-existing isolation blockers **S-18 / S-19 / S-20** (`docs/security.md` §5)
+> are fixed — until then any local account, shos included, can read every TETA+PI
+> secret. Fix runbook below.
+
+### The account (done, on prod)
+- User `shos`, **uid 1002**, `--disabled-password`, groups **`shos` + `users` only**
+  — deliberately **NOT** in `sudo`, **NOT** in `docker` (docker group == root).
+- `loginctl enable-linger shos` (user services survive with no live session).
+- subuid/subgid `231072:65536` (auto-added; needed for rootless docker).
+- Containers, if any, run **rootless** under shos — never the host docker socket.
+  Prereqs installed system-wide in 5.8: `uidmap`, `slirp4netns`
+  (`dockerd-rootless-setuptool.sh` + `dbus-user-session` were already present;
+  `kernel.unprivileged_userns_clone=1`).
+
+### Resource limits (systemd slice — enforced, not honour-system)
+Tracked in this repo at `deploy/systemd/user-1002.slice.d/limits.conf`, applied
+manually to `/etc/systemd/system/user-1002.slice.d/limits.conf` + `daemon-reload`.
+
+| Limit | Value | Why |
+|---|---|---|
+| `MemoryMax` | 512M | hard cap; kernel OOM-kills a shos process first. `available` was ~1086 MB at provisioning, so this leaves TETA+PI its usage + headroom |
+| `MemoryHigh` | 410M | throttle-before-kill (~80% of Max) |
+| `CPUQuota` | 50% | **one** vCPU shared with TETA+PI (RAM-bound, idle load <0.2) + hellfire; half a core so shos can never starve the API |
+| `TasksMax` | 512 | fork-bomb ceiling |
+
+Caps bind the whole shos **user manager** (its `systemd --user` units + rootless
+dockerd under `user@1002.service`). A `sudo -u shos …` from another login is *not*
+capped by this slice — so the live OOM test must run from a real shos session.
+
+### Ports — shos may listen ONLY on `127.0.0.1:8200–8299`
+`8100` is GoatCounter, `8090` is hellfire — the boot's original `8100–8199` was
+dirty; **`8200–8299` is verified free**. SH.OS tells us which port their app binds;
+we point a vhost at it. Enforcement is by convention + the perimeter, not systemd
+(systemd can't cheaply pin a bind address): nginx only ever `proxy_pass`es to
+`127.0.0.1`, and the **only** externally-reachable ports must be 22/80/443 (see
+"DigitalOcean firewall" below). A shos process binding `0.0.0.0` is a policy
+violation — `scripts/security/cotenant_check.sh` lists shos-owned listeners.
+
+### Rootless docker — SH.OS initialises it themselves (once, in their own session)
+```bash
+# as shos, after their SSH key is added:
+dockerd-rootless-setuptool.sh install
+systemctl --user enable --now docker
+export DOCKER_HOST=unix:///run/user/1002/docker.sock   # add to ~/.bashrc
+docker info      # confirm rootless
+```
+
+### Adding an SH.OS vhost (we do this, not them)
+Template: `deploy/nginx/shos.conf` (placeholder domain + port). Once the owner
+supplies the real SH.OS domain (and its DNS — Cloudflare? — points at
+`164.90.235.66`):
+```bash
+scp deploy/nginx/shos.conf tetapi:/tmp/shos.conf
+ssh tetapi "sudo mv /tmp/shos.conf /etc/nginx/sites-available/shos && \
+  sudo ln -sf /etc/nginx/sites-available/shos /etc/nginx/sites-enabled/shos && \
+  sudo nginx -t && sudo systemctl reload nginx"
+```
+
+### Enabling SSH access (the gated last step — only after S-18/19/20 are fixed)
+1. **Owner generates the key on their OWN machine** (never on the server):
+   `ssh-keygen -t ed25519 -f ~/.ssh/shos_ed25519 -C shos@tetapi-droplet`
+2. Owner gives us the **public** part (`~/.ssh/shos_ed25519.pub`) — never the
+   private key, never pasted into chat as the private half.
+3. Install it + a scoped sshd block (does **not** touch the global hardening):
+```bash
+ssh tetapi "sudo install -d -m700 -o shos -g shos /home/shos/.ssh && \
+  echo '<PUBKEY>' | sudo tee /home/shos/.ssh/authorized_keys && \
+  sudo chmod 600 /home/shos/.ssh/authorized_keys && \
+  sudo chown shos:shos /home/shos/.ssh/authorized_keys"
+# scoped drop-in — NOT the global 00-tetapi-hardening.conf:
+ssh tetapi "printf 'Match User shos\n  AllowAgentForwarding no\n  X11Forwarding no\n  PermitTTY yes\n' | \
+  sudo tee /etc/ssh/sshd_config.d/20-shos.conf && sudo sshd -t && sudo systemctl reload sshd"
+```
+
+### Revoking SH.OS access — one move
+```bash
+ssh tetapi "sudo usermod -L shos; \
+  sudo truncate -s0 /home/shos/.ssh/authorized_keys; \
+  sudo systemctl stop user-1002.slice; \
+  sudo loginctl disable-linger shos"
+# nginx: remove the symlink + reload; full teardown: sudo deluser --remove-home shos
+```
+
+### Disk — no quota (residual, monitor instead)
+Root fs is `ext4` mounted **without** `usrquota`/`grpquota`, so a per-user disk
+quota can't be set without remounting `/` + `quotacheck` (intrusive on prod —
+out of scope). **Residual risk:** shos can fill the shared 50 GB disk. Mitigation
+= monitoring, not enforcement: watch `sudo du -sh /home/shos` and overall `df -h /`
+(disk is at 18% today). Revisit if SH.OS's footprint grows.
+
+### DigitalOcean firewall — owner must confirm (can't be read from the droplet)
+There is no `do-agent` on the box and no `doctl`, so whether a **network-level DO
+Cloud Firewall** restricts inbound to 22/80/443 is only visible in the DO
+dashboard/API. **Owner action:** confirm a Cloud Firewall exists allowing only
+22/80/443 inbound. If none exists, the loopback-only port policy is the only thing
+keeping shos ports private — a shos process binding `0.0.0.0` on 8200–8299 would
+then be world-reachable. (Note: `tetapi-web` already binds `0.0.0.0:3001` and
+`tetapi-mcp` `:::3002` — a firewall is what keeps those private today.)
+
+### Pre-existing isolation blockers — TETA+PI-side remediation (NOT this session)
+5.8's isolation checks surfaced three misconfigurations that predate shos (the
+existing `hellfire` co-tenant can already exploit all three). They live inside
+`/opt/tetapi` + TETA+PI service config, which this devops/co-tenant session must
+**not** touch — they belong to a TETA+PI backend/devops task. Tracked as **S-18 /
+S-19 / S-20** in `docs/security.md`. Verifier: `scripts/security/cotenant_check.sh`
+(red now, green after the fixes). Recommended fixes (all low-risk — tetapi-api runs
+as **root**, so tightening perms/ownership doesn't break the service):
+```bash
+# S-18: .env is 644 (world-readable) → every local account reads Fernet/JWT/DB creds
+ssh tetapi "sudo chmod 600 /opt/tetapi/api/.env && sudo chown root:root /opt/tetapi/api/.env"
+# S-19: /opt/tetapi/api + certs are owned by the hellfire co-tenant (trust inversion)
+ssh tetapi "sudo chown -R root:root /opt/tetapi/api && sudo chmod 700 /opt/tetapi/api/certs"
+#   ⚠ first confirm the deploy pipeline (deploy.yml) writes /opt/tetapi/api as the
+#   same account it uses for web/mcp (already root:root) so rsync keeps working.
+# S-20: redis answers unauthenticated on shared loopback 127.0.0.1:6379
+#   Option A: set `requirepass` in the redis container + update REDIS_URL in .env.
+#   Option B (cleaner, no secret to manage): drop the `127.0.0.1:6379:6379` port
+#   publish in docker-compose so redis is reachable only on docker's internal
+#   network — do this only if no host process (outside docker) needs redis.
+```
+**Broader hardening note (not blocking):** `tetapi-api`/`web`/`mcp` run as **root**
+(`User=` unset). On a multi-tenant box, moving them to a dedicated non-root service
+account would shrink blast radius — own TETA+PI backend task, out of 5.8 scope.
+
+### Observation logged in 5.8 (owner's call, not actioned)
+`apt-get install uidmap slirp4netns` surfaced a needrestart notice: an updated
+kernel is installed but **not loaded** (pending from prior unattended-upgrades).
+A reboot would load it (and blip all four subdomains). Not 5.8's call — flagged
+for the owner to schedule if/when desired.
 
 ## Server resize runbook (9.1 capacity audit, 2026-07-13)
 
