@@ -277,14 +277,19 @@ out of scope). **Residual risk:** shos can fill the shared 50 GB disk. Mitigatio
 = monitoring, not enforcement: watch `sudo du -sh /home/shos` and overall `df -h /`
 (disk is at 18% today). Revisit if SH.OS's footprint grows.
 
-### DigitalOcean firewall — owner must confirm (can't be read from the droplet)
-There is no `do-agent` on the box and no `doctl`, so whether a **network-level DO
-Cloud Firewall** restricts inbound to 22/80/443 is only visible in the DO
-dashboard/API. **Owner action:** confirm a Cloud Firewall exists allowing only
-22/80/443 inbound. If none exists, the loopback-only port policy is the only thing
-keeping shos ports private — a shos process binding `0.0.0.0` on 8200–8299 would
-then be world-reachable. (Note: `tetapi-web` already binds `0.0.0.0:3001` and
-`tetapi-mcp` `:::3002` — a firewall is what keeps those private today.)
+### Perimeter firewall — confirmed `ufw` (2026-09-19)
+The inbound perimeter is an **on-host `ufw`** firewall — active, `default deny
+(incoming)`, allowing only **22/80/443** (v4 + v6). Verified two ways: `sudo ufw
+status verbose` on the box, and an external TCP probe of `164.90.235.66` from off
+the droplet — only 22/80/443 answer; 3001, 3002, 5432, 6379, 8000, 8200 are all
+filtered from the internet. So `tetapi-web` (`0.0.0.0:3001`) and `tetapi-mcp`
+(`:::3002`) are private today because ufw drops them, and a stray shos bind on
+`0.0.0.0:8200–8299` would likewise be blocked externally. Rootless docker (shos)
+uses slirp4netns userspace networking and does **not** insert host iptables rules,
+so it cannot punch through ufw the way rootful docker's `DOCKER` chain can.
+(There is no `do-agent`/`doctl` on the box, so whether a *DigitalOcean Cloud
+Firewall* also fronts the droplet isn't readable from the shell — it's optional
+defense-in-depth on top of ufw, not required; ufw already enforces the policy.)
 
 ### Pre-existing isolation blockers — TETA+PI-side remediation (NOT this session)
 5.8's isolation checks surfaced three misconfigurations that predate shos (the
