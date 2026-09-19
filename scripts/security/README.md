@@ -69,6 +69,29 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 | `mcp` | `teta_search` works anon (by design); `teta_verify_endpoint` won't fetch loopback | S-11/S-16 |
 | `rate_limit` | `verify-endpoint` 5/min limiter trips (default); badge/tag-ping under `--include-heavy` | rate-limiting §4 |
 
+## On-box co-tenant asserts (S-18 / S-19 / S-20) live in `cotenant_check.sh`, not here
+
+`probe.py` runs on a **GitHub runner with no SSH to prod** — it can only reach the
+public HTTP surface. The co-tenant/shared-host blockers are filesystem- and
+loopback-level (`.env` perms, `/opt/tetapi/api` ownership, Redis `AUTH` on
+`127.0.0.1:6379`), invisible over HTTP. So they are **not** in the table above;
+they are asserted by **`cotenant_check.sh`**, which must be run **on the droplet**
+with local sudo (`docs/security.md` §6.2 exception):
+
+```bash
+ssh tetapi 'sudo bash -s' < scripts/security/cotenant_check.sh   # exit 0 == all pass
+```
+
+| S-* | Assert in `cotenant_check.sh` |
+|---|---|
+| S-18 | `shos` cannot read `/opt/tetapi/api/.env` (must be `600 root:root`) |
+| S-19 | `/opt/tetapi/api` owned by `root:root` (not a co-tenant) |
+| S-20 | Redis `127.0.0.1:6379` rejects unauthenticated `PING` (`requirepass`) |
+
+All three are ✅ CLOSED (5.9, 2026-09-19) and PASS. Re-run the script after any
+change to `/opt/tetapi` perms/ownership, the redis container, or when onboarding a
+new co-tenant. It is read-only (redis: `PING` only).
+
 ## Adding a check when a new S-* closes
 
 **Rule (`docs/security.md` §6.2): every closed S-\* gets an assert here, in the

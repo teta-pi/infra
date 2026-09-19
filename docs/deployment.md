@@ -186,10 +186,12 @@ never edit nginx or systemd. This box was *already* multi-tenant before 5.8 (the
 one provisioned to the strict model below.
 
 > ⚠ **ACCESS IS OFF.** As of 2026-09-18 `shos` exists but has **no SSH key and no
-> vhost** — it cannot log in at all. Do **not** enable access until the
-> pre-existing isolation blockers **S-18 / S-19 / S-20** (`docs/security.md` §5)
-> are fixed — until then any local account, shos included, can read every TETA+PI
-> secret. Fix runbook below.
+> vhost** — it cannot log in at all. The isolation-blocker precondition is now
+> **cleared: S-18 / S-19 / S-20 were fixed in 5.9 (2026-09-19)** — see the section
+> below, and `docs/security.md` §5 (all ✅ CLOSED). Enabling access is still a
+> **separate, owner-gated step**: the owner must supply the `shos` public SSH key
+> (never on the server, never the private half in chat), then follow "Enabling SSH
+> access" below. Do not add the key on your own initiative.
 
 ### The account (done, on prod)
 - User `shos`, **uid 1002**, `--disabled-password`, groups **`shos` + `users` only**
@@ -291,14 +293,28 @@ so it cannot punch through ufw the way rootful docker's `DOCKER` chain can.
 Firewall* also fronts the droplet isn't readable from the shell — it's optional
 defense-in-depth on top of ufw, not required; ufw already enforces the policy.)
 
-### Pre-existing isolation blockers — TETA+PI-side remediation (NOT this session)
+### Pre-existing isolation blockers — ✅ FIXED (5.9, 2026-09-19)
 5.8's isolation checks surfaced three misconfigurations that predate shos (the
-existing `hellfire` co-tenant can already exploit all three). They live inside
-`/opt/tetapi` + TETA+PI service config, which this devops/co-tenant session must
-**not** touch — they belong to a TETA+PI backend/devops task. Tracked as **S-18 /
-S-19 / S-20** in `docs/security.md`. Verifier: `scripts/security/cotenant_check.sh`
-(red now, green after the fixes). Recommended fixes (all low-risk — tetapi-api runs
-as **root**, so tightening perms/ownership doesn't break the service):
+existing `hellfire` co-tenant could already exploit all three). **All three were
+remediated in task 5.9 (2026-09-19)** and verified on-box:
+`scripts/security/cotenant_check.sh` → **ALL ISOLATION ASSERTS PASS** (exit 0);
+api/mcp/app health 200; celery worker reconnected + "ready".
+
+- **S-18** — `/opt/tetapi/api/.env` was `644` (already `root:root`); now `600 root:root`.
+  `.env` is rsync-excluded in `deploy.yml`, so the mode survives deploys.
+- **S-19** — `/opt/tetapi/api` (+ `certs`) was `hellfire:hellfire`; now `root:root`,
+  `certs` dir `700`. Confirmed `deploy.yml` rsyncs as `root@` so ownership survives.
+  No `*.key.pem` exists on disk — the C2PA signing key is inline in `.env` (covered
+  by S-18). ⚠ rsync `-a` may reset the **certs dir mode** to the repo's on the next
+  deploy; the real protection is `.env`/ownership, not the dir bit.
+- **S-20** — Redis (standalone `tetapi-redis` container) now requires `AUTH`
+  (Option A, `--requirepass`; secret at `/root/tetapi-redis.pass`, `600`; volume /
+  loopback publish / restart-policy preserved). `REDIS_URL` updated in `.env`;
+  api + celery worker/beat restarted. From `shos`: `PING` → `-NOAUTH`.
+
+The original runbook is kept **below as history**. Fixes were all low-risk —
+tetapi-api/web/mcp run as **root**, so tightening perms/ownership doesn't break the
+service:
 ```bash
 # S-18: .env is 644 (world-readable) → every local account reads Fernet/JWT/DB creds
 ssh tetapi "sudo chmod 600 /opt/tetapi/api/.env && sudo chown root:root /opt/tetapi/api/.env"
