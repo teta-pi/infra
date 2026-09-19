@@ -6,6 +6,50 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-19 · 5.9 devops · co-tenant isolation blockers S-18/S-19/S-20 — all CLOSED
+Done: closed the three pre-existing shared-host isolation blockers 5.8 surfaced
+(they let *any* local account — incl. the existing `hellfire` co-tenant — read
+TETA+PI secrets, own our prod tree, and hit our redis). Prod-affecting; owner
+authorized and took a DO snapshot first; no in-flight deploy (checked
+`gh run list --repo teta-pi/api`). Every server step was shown in chat before
+running.
+- **S-18** `/opt/tetapi/api/.env` `644`→`600 root:root` (was already `root:root`,
+  only the mode was world-readable). It's rsync-excluded in `deploy.yml`, so the
+  mode survives deploys. The C2PA signing key is stored inline in `.env`
+  (`C2PA_SIGNING_KEY_PEM`) — no `*.key.pem` on disk — so this also protects it.
+- **S-19** `/opt/tetapi/api`(+`certs`) `hellfire:hellfire`→`root:root`, certs dir
+  `700`. First confirmed `api`'s `deploy.yml` rsyncs as `root@164.90.235.66`
+  (`--delete`, but excludes `.env` + `certs/*.key.pem`), so root ownership + those
+  perms survive deploys.
+- **S-20** redis (standalone `tetapi-redis`, `redis:7-alpine`, default bridge,
+  no compose labels) recreated with `--requirepass` (Option A), preserving the
+  named `/data` volume, `127.0.0.1:6379` loopback publish, and `unless-stopped`
+  restart policy. 32-byte secret generated on-box at `/root/tetapi-redis.pass`
+  (`600`, never printed to chat); `REDIS_URL` rewritten in `.env` (backup
+  `.env.bak.5.9`); `tetapi-api` + `celery-worker` + `celery-beat` restarted (all
+  read the same `.env`, all run as root). Worker reconnected with auth and logged
+  "ready".
+Verified: `ssh tetapi 'sudo bash -s' < scripts/security/cotenant_check.sh` →
+**ALL ISOLATION ASSERTS PASS** (exit 0); from a `shos` context redis `PING` →
+`-NOAUTH Authentication required.`; api/mcp/app health all 200; three units active.
+Changed: `docs/security.md` (S-18/19/20 → ✅ CLOSED with evidence; **B6** →
+"controls in place"), `docs/deployment.md` (blockers section → ✅ FIXED, runbook
+kept as history; ACCESS-IS-OFF banner → precondition cleared, access still
+owner-gated), `scripts/security/README.md` (documents that S-18/19/20 are asserted
+on-box by `cotenant_check.sh`, not by the SSH-less runner `probe.py`),
+`docs/roadmap.md` (5.9). Prod writes: `.env` perms, `/opt/tetapi/api` ownership,
+`tetapi-redis` container + `/root/tetapi-redis.pass`.
+Risk: **certs dir mode** (`700`) may be reset to the repo's dir mode by rsync `-a`
+on the next `main` deploy — the real secret protection is `.env`/ownership + the
+`certs/*.key.pem` rsync-exclude, not the dir bit, and no `*.key.pem` exists on
+disk anyway. No dummy deploy was run this session, so the **next push to `main`**
+is what confirms ownership/perms survive rsync — watch that deploy. Postgres
+`:5432` loopback auth is still unverified (noted as S-20 residual, out of scope).
+Next: (owner) enable SH.OS SSH access — supply the `shos` public key, then the
+gated "Enabling SSH access" runbook + a vhost; and confirm the next api deploy
+keeps `/opt/tetapi/api` `root:root`.
+
+
 ## 2026-09-18 · 5.8 devops · SH.OS co-tenant — isolated account provisioned, access held OFF on a security finding
 Done: provisioned an isolated, unprivileged foothold for the owner's second
 project (SH.OS) on the shared droplet, variant B (TETA+PI keeps control).
