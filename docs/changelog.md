@@ -49,6 +49,7 @@ Next: (owner) enable SH.OS SSH access — supply the `shos` public key, then the
 gated "Enabling SSH access" runbook + a vhost; and confirm the next api deploy
 keeps `/opt/tetapi/api` `root:root`.
 
+
 ## 2026-09-18 · 5.8 devops · SH.OS co-tenant — isolated account provisioned, access held OFF on a security finding
 Done: provisioned an isolated, unprivileged foothold for the owner's second
 project (SH.OS) on the shared droplet, variant B (TETA+PI keeps control).

@@ -193,6 +193,11 @@ one provisioned to the strict model below.
 > (never on the server, never the private half in chat), then follow "Enabling SSH
 > access" below. Do not add the key on your own initiative.
 
+> vhost** — it cannot log in at all. Do **not** enable access until the
+> pre-existing isolation blockers **S-18 / S-19 / S-20** (`docs/security.md` §5)
+> are fixed — until then any local account, shos included, can read every TETA+PI
+> secret. Fix runbook below.
+
 ### The account (done, on prod)
 - User `shos`, **uid 1002**, `--disabled-password`, groups **`shos` + `users` only**
   — deliberately **NOT** in `sudo`, **NOT** in `docker` (docker group == root).
@@ -315,6 +320,15 @@ api/mcp/app health 200; celery worker reconnected + "ready".
 The original runbook is kept **below as history**. Fixes were all low-risk —
 tetapi-api/web/mcp run as **root**, so tightening perms/ownership doesn't break the
 service:
+
+### Pre-existing isolation blockers — TETA+PI-side remediation (NOT this session)
+5.8's isolation checks surfaced three misconfigurations that predate shos (the
+existing `hellfire` co-tenant can already exploit all three). They live inside
+`/opt/tetapi` + TETA+PI service config, which this devops/co-tenant session must
+**not** touch — they belong to a TETA+PI backend/devops task. Tracked as **S-18 /
+S-19 / S-20** in `docs/security.md`. Verifier: `scripts/security/cotenant_check.sh`
+(red now, green after the fixes). Recommended fixes (all low-risk — tetapi-api runs
+as **root**, so tightening perms/ownership doesn't break the service):
 ```bash
 # S-18: .env is 644 (world-readable) → every local account reads Fernet/JWT/DB creds
 ssh tetapi "sudo chmod 600 /opt/tetapi/api/.env && sudo chown root:root /opt/tetapi/api/.env"
