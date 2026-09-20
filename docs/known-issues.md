@@ -179,9 +179,15 @@ at least call it with a stored device_id if local state is already gone),
 and add an "unlink"/"revoke" action next to each device row in whatever
 `/profile`/`/settings` UI now lists paired cameras (`GET /devices`,
 shipped 2026-09-11).
-Status: NEW, OPEN, HIGH — this is a real standing-credential exposure, not
-a UI polish issue; recommend treating it with similar urgency to the
-`/auth/agent-key` lockdown already in flight (api PR #23).
+Status: ✅ **CLOSED 2026-09-20** (`docs/security.md` S-21) — [api PR #29](https://github.com/teta-pi/api/pull/29)
+(1.25: migration 015 `devices.revoked_at` + nullable `api_key`; revocation erases the
+secret; `DELETE /devices/{id}` owner, `POST /devices/self-revoke` device,
+`DELETE /admin/devices/{id}` admin + audit; `GET /devices` shows `revoked_at`;
+`device_revoked` verification_event), [pi-cam PR #11](https://github.com/teta-pi/pi-cam/pull/11)
+(14.11: "Unlink" calls self-revoke first, honest "revoked on this phone only" when
+offline), [web PR #48](https://github.com/teta-pi/web/pull/48) (3.25: per-device
+Revoke on `/profile`). Live-verified on prod after deploy (see changelog) and
+guarded by `probe.py` `check_s21_device_revoked`. Previously: NEW, OPEN, HIGH.
 
 ### 🟠 `POST /admin/entities/bulk-preverify` returns broken `profile_url`/`opt_out_url` (wrong domain + no page behind the link)
 `api/app/api/routes/admin.py`'s bulk-preverify response builds both URLs on
