@@ -2367,3 +2367,30 @@ drifted from the live `/etc/nginx/sites-available/*` and reconciled repo→live
 the badge endpoint still serves `image/svg+xml`. **If** a future feature offers
 an *iframe* embed of a badge/profile (interactive), DENY on api would block it;
 revisit to a scoped `SAMEORIGIN`/`frame-ancestors` then.
+
+## ✅ FIXED (5.10, 2026-09-20) — shos `MemoryMax` was not a hard cap (swap spill)
+Found while enabling SH.OS access (5.10): the `user-1002.slice` `MemoryMax=512M`
+did **not** OOM-kill a runaway `shos` process — a 650 MB allocation from a real
+shos session survived (`memory.events` `oom_kill=0`, `high` counter climbing). Root
+cause: the box has a 2 GB `/swapfile` and the slice's `memory.swap.max` defaulted to
+`max`, so `MemoryMax` only limited RAM residency; the overflow paged to swap. A
+runaway shos could thus hold 512 MB RAM **plus ~1.9 GB shared swap** and thrash
+disk, degrading TETA+PI even though its own RAM cap held. Fixed by adding
+`MemorySwapMax=0` to `deploy/systemd/user-1002.slice.d/limits.conf`; a first retest
+then *livelocked* in `MemoryHigh=410M` throttle (no reclaim target without swap), so
+`MemoryHigh` was removed too. Final: allocation >512 MB → clean cgroup OOM-kill
+(exit 137, `oom_kill=1`), TETA+PI api/app stayed 200. Applies only to the shos
+slice. Note for future co-tenant slices on this box: pair `MemoryMax` with
+`MemorySwapMax=0` (and skip `MemoryHigh`) or the cap is soft.
+
+## 🟡 shos.hellfiresol.com public routing serves the hellfire apex, not our vhost (5.10, 2026-09-20)
+The 5.10 origin vhost (`listen 80`, `server_name shos.hellfiresol.com`,
+`proxy_pass 127.0.0.1:8200`) is correct and returns **502** at the origin until
+SH.OS's app listens. But `https://shos.hellfiresol.com` via Cloudflare returns
+**200 with the hellfire apex site** (canonical `hellfiresol.com`), i.e. CF is not
+reaching our `:80` vhost — the zone's CF SSL mode is **Full**, so CF connects to
+origin `:443`, where the hellfire Certbot default vhost answers. This is a
+Cloudflare / hellfire-zone concern (**not** TETA+PI infra, no boot written): to
+route the subdomain to our origin, set Flexible SSL for `shos.hellfiresol.com` (CF
+→ origin `:80`) or add a `:443` origin cert + `listen 443` server for this host.
+Does not affect SSH access, which is fully enabled.

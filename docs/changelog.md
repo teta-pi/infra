@@ -6,6 +6,61 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-20 · 5.10 devops · SH.OS SSH access ENABLED
+Done: turned on the gated last step of the co-tenant work (5.8 provisioned, 5.9
+closed S-18/19/20). SH.OS's `shos` account can now SSH in with the owner-supplied
+key, and `shos.hellfiresol.com` has an origin vhost. Owner authorized 2026-09-19;
+every server command was shown in chat before running. Preconditions re-verified
+first: `cotenant_check.sh` green (exit 0), `shos` uid 1002 (no sudo/docker),
+access still OFF (no `authorized_keys`), `/opt/tetapi/api` `root:root`, DNS →
+Cloudflare.
+- **authorized_keys** installed from the owner's `~/.ssh/shos_ed25519.pub` (private
+  half never touched the server): `/home/shos/.ssh` `700`, key `600`, `shos:shos`.
+- **sshd drop-in `99-shos.conf`** — `Match User shos` (no agent/X11 forwarding,
+  PermitTTY yes). **Named `99-`, not `20-`/`shos.conf` as the old runbook said:**
+  `sshd` includes `sshd_config.d/*.conf` in lexical order and a `Match` block runs
+  to the *end of the whole config*, not the end of its file — a `20-` name would
+  swallow `50-cloud-init.conf` (`PasswordAuthentication yes`) and
+  `60-cloudimg-settings.conf`, giving shos `PasswordAuthentication yes`. Verified
+  after reload with `sshd -T -C user=shos,…` (`passwordauthentication no`,
+  `x11forwarding no`, `allowagentforwarding no`, `permittty yes`) and a non-shos
+  user (globals intact). Reloaded the `ssh` unit (no session drop).
+- **vhost** `deploy/nginx/shos.hellfiresol.com.conf` (renamed from `shos.conf` to
+  the domain convention; added `proxy_read_timeout 60s`) → `sites-available/
+  shos.hellfiresol.com` + symlink, `nginx -t` ok, reloaded. Origin returns **502**
+  (correct — SH.OS's app isn't on `127.0.0.1:8200` yet) with the security-headers.
+- **Isolation verified live from a real `shos` SSH session:** login ok; `sudo -n`
+  denied; `docker ps` denied; `cat /opt/tetapi/api/.env` denied; redis `PING` →
+  `-NOAUTH`; postgres `127.0.0.1:5432` TCP-reachable but **SCRAM** password-gated
+  (raw startup packet → `AuthenticationSASL`, not `trust`).
+- **Isolation gap found + fixed (in scope):** the OOM test allocated 650 MB and
+  *survived* (`memory.events` `oom_kill=0`) — `MemoryMax=512M` was only a
+  RAM-residency limit because the slice could spill into the 2 GB swapfile
+  (`memory.swap.max` defaulted to `max`). Added **`MemorySwapMax=0`**; a first
+  retest then livelocked in `MemoryHigh` throttle (no reclaim target without swap,
+  `high` counter >23000, process wedged ~451M), so **removed `MemoryHigh`**. Final
+  retest: clean OOM-kill (exit 137, `oom_kill=1`), slice back to idle, TETA+PI
+  api/app **200** throughout.
+Changed: `deploy/nginx/shos.hellfiresol.com.conf` (renamed + `proxy_read_timeout`),
+`deploy/systemd/user-1002.slice.d/limits.conf` (`+MemorySwapMax=0`, `-MemoryHigh`),
+`docs/{deployment,security,roadmap,known-issues}.md`, `changelog.md`. Prod:
+`/home/shos/.ssh/authorized_keys`, `/etc/ssh/sshd_config.d/99-shos.conf`,
+`/etc/nginx/sites-{available,enabled}/shos.hellfiresol.com`, live slice limits.
+Risk: the sshd `Match` filename ordering is now the only thing keeping shos off
+password-auth — if a future drop-in re-introduces a `Match`-then-global pattern the
+leak returns (guarded by the `sshd -T -C` check documented in `deployment.md`). The
+`MemoryHigh` removal means shos gets a hard kill with no throttle warning (intended
+for a hard-isolation slice). No post-5.9 api deploy has happened, so the certs-dir
+mode reset risk (S-19 caveat) is still unconfirmed against a real deploy.
+Next: **out of scope, reported to manager, no boot written** — public
+`shos.hellfiresol.com` via Cloudflare currently serves the hellfire apex (CF SSL
+mode Full → CF hits origin `:443` / hellfire's default vhost, not our `:80`).
+Aligning it (Flexible SSL for the subdomain, or a `:443` origin cert for this host)
+is a Cloudflare / hellfire-zone change. SH.OS also needs to bind their app to
+`127.0.0.1:8200` for the vhost to serve 200 instead of 502.
+
+---
+
 ## 2026-09-19 · 5.9 devops · co-tenant isolation blockers S-18/S-19/S-20 — all CLOSED
 Done: closed the three pre-existing shared-host isolation blockers 5.8 surfaced
 (they let *any* local account — incl. the existing `hellfire` co-tenant — read
