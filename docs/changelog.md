@@ -45,7 +45,11 @@ Risk: pi-cam #11 and web #48 unmerged at time of writing — until the app build
 ships, existing phones still do local-only unlink (the *web* Revoke covers them
 once #48 is live). Downgrade of 015 deletes revoked rows (they have no key to
 restore). The test `pk_live_` key has admin role, which is how the admin path was
-exercised — nothing else changed.
+exercised — nothing else changed. Side observation from the manager after this
+deploy (not this task): the api deploy reset `/opt/tetapi/api` to `hellfire:hellfire`
+again (S-19 regression — `rsync -az` as root preserves the runner's uid 1001 = hellfire
+on the box; `.env` stayed `root:root`) — tracked as 5.11 (`rsync --chown`), `deploy.yml`
+untouched here.
 Next: manager merges pi-cam #11 + web #48; owner EAS-builds the app; consider
 listing revoked devices (greyed) on `/profile` rather than hiding them, and a
 `revoked_at` filter on `GET /devices` if the list grows.
