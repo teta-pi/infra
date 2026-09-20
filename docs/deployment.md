@@ -185,18 +185,21 @@ never edit nginx or systemd. This box was *already* multi-tenant before 5.8 (the
 `hellfire` / `hellfiresol.com` project, `docs/security.md` B6); shos is the first
 one provisioned to the strict model below.
 
-> ⚠ **ACCESS IS OFF.** As of 2026-09-18 `shos` exists but has **no SSH key and no
-> vhost** — it cannot log in at all. The isolation-blocker precondition is now
-> **cleared: S-18 / S-19 / S-20 were fixed in 5.9 (2026-09-19)** — see the section
-> below, and `docs/security.md` §5 (all ✅ CLOSED). Enabling access is still a
-> **separate, owner-gated step**: the owner must supply the `shos` public SSH key
-> (never on the server, never the private half in chat), then follow "Enabling SSH
-> access" below. Do not add the key on your own initiative.
-
-> vhost** — it cannot log in at all. Do **not** enable access until the
-> pre-existing isolation blockers **S-18 / S-19 / S-20** (`docs/security.md` §5)
-> are fixed — until then any local account, shos included, can read every TETA+PI
-> secret. Fix runbook below.
+> ✅ **ACCESS ENABLED 2026-09-20 (task 5.10).** `shos` can now SSH in with the
+> owner-supplied key. Isolation verified live from a real `shos` session: no sudo,
+> no host docker socket, cannot read `/opt/tetapi/api/.env`, redis `-NOAUTH`,
+> postgres requires a SCRAM password, and a >512 MB allocation is cleanly
+> OOM-killed (TETA+PI api/app stayed 200 throughout). Owner authorized 2026-09-19.
+> To revoke in one move, see "Revoking SH.OS access" below.
+>
+> Enabling surfaced (and 5.10 fixed) a resource-cap gap: `MemoryMax` alone was not
+> a hard ceiling because the slice could spill to the 2 GB swapfile — fixed with
+> `MemorySwapMax=0` and by dropping `MemoryHigh` (see the limits table). Residual
+> notes: postgres `127.0.0.1:5432` is TCP-reachable from `shos` but password-gated
+> (SCRAM, not `trust`); and the public `shos.hellfiresol.com` still resolves to the
+> hellfire apex site via Cloudflare — the CF SSL mode is Full so CF reaches origin
+> `:443` (hellfire's default vhost), not our `:80` shos vhost. That routing is a
+> Cloudflare/hellfire-zone fix, not TETA+PI infra.
 
 ### The account (done, on prod)
 - User `shos`, **uid 1002**, `--disabled-password`, groups **`shos` + `users` only**
@@ -215,13 +218,21 @@ manually to `/etc/systemd/system/user-1002.slice.d/limits.conf` + `daemon-reload
 | Limit | Value | Why |
 |---|---|---|
 | `MemoryMax` | 512M | hard cap; kernel OOM-kills a shos process first. `available` was ~1086 MB at provisioning, so this leaves TETA+PI its usage + headroom |
-| `MemoryHigh` | 410M | throttle-before-kill (~80% of Max) |
+| `MemorySwapMax` | 0 | **added 5.10.** Without it the slice could spill over `MemoryMax` into the 2 GB swapfile (`memory.swap.max` defaulted to `max`), so `MemoryMax` was only a RAM-residency limit — a 650 MB test allocation *survived* by swapping (`memory.events` `oom_kill=0`). Pinning swap to 0 makes 512M a true ceiling: over-cap → OOM-kill (verified `oom_kill=1`, exit 137) |
 | `CPUQuota` | 50% | **one** vCPU shared with TETA+PI (RAM-bound, idle load <0.2) + hellfire; half a core so shos can never starve the API |
 | `TasksMax` | 512 | fork-bomb ceiling |
 
+**`MemoryHigh` removed (5.10).** It was `410M` ("throttle-before-kill"), which only
+helps *with* swap. With `MemorySwapMax=0` it has no reclaim target, so a runaway
+livelocks in throttle between High and Max instead of being killed (observed:
+`memory.events` `high` climbed past 23000, process wedged ~451M, never OOM-killed,
+and the stall degraded other shos sessions). Dropping High lets `MemoryMax` do a
+clean, prompt kill.
+
 Caps bind the whole shos **user manager** (its `systemd --user` units + rootless
 dockerd under `user@1002.service`). A `sudo -u shos …` from another login is *not*
-capped by this slice — so the live OOM test must run from a real shos session.
+capped by this slice — so the live OOM test must run from a real shos SSH session
+(the enable-time 5.10 test did, and got a clean OOM-kill).
 
 ### Ports — shos may listen ONLY on `127.0.0.1:8200–8299`
 `8100` is GoatCounter, `8090` is hellfire — the boot's original `8100–8199` was
@@ -241,32 +252,51 @@ export DOCKER_HOST=unix:///run/user/1002/docker.sock   # add to ~/.bashrc
 docker info      # confirm rootless
 ```
 
-### Adding an SH.OS vhost (we do this, not them)
-Template: `deploy/nginx/shos.conf` (placeholder domain + port). Once the owner
-supplies the real SH.OS domain (and its DNS — Cloudflare? — points at
-`164.90.235.66`):
+### Adding an SH.OS vhost (we do this, not them) — DONE 5.10, 2026-09-20
+File: `deploy/nginx/shos.hellfiresol.com.conf` (domain-named, matching the other
+vhosts; `listen 80`, `server_name shos.hellfiresol.com`, `proxy_pass
+http://127.0.0.1:8200`, `proxy_read_timeout 60s`, shared security-headers snippet).
+Deployed 2026-09-20:
 ```bash
-scp deploy/nginx/shos.conf tetapi:/tmp/shos.conf
-ssh tetapi "sudo mv /tmp/shos.conf /etc/nginx/sites-available/shos && \
-  sudo ln -sf /etc/nginx/sites-available/shos /etc/nginx/sites-enabled/shos && \
+scp deploy/nginx/shos.hellfiresol.com.conf tetapi:/tmp/shos.hellfiresol.com.conf
+ssh tetapi "sudo mv /tmp/shos.hellfiresol.com.conf /etc/nginx/sites-available/shos.hellfiresol.com && \
+  sudo ln -sf /etc/nginx/sites-available/shos.hellfiresol.com /etc/nginx/sites-enabled/shos.hellfiresol.com && \
   sudo nginx -t && sudo systemctl reload nginx"
 ```
+The origin correctly returns **502** until SH.OS's app listens on `127.0.0.1:8200`
+(their first port; they tell the manager if they need another in 8200–8299).
+⚠ **Public routing caveat:** `https://shos.hellfiresol.com` via Cloudflare currently
+serves the hellfire apex site, not this origin — CF SSL mode is Full so CF reaches
+origin `:443` (hellfire's default vhost), never our `:80`. Aligning that (Flexible
+SSL for the subdomain, or a `:443` origin cert for this host) is a Cloudflare /
+hellfire-zone change, outside TETA+PI infra.
 
-### Enabling SSH access (the gated last step — only after S-18/19/20 are fixed)
+### Enabling SSH access (the gated last step) — DONE 5.10, 2026-09-20
 1. **Owner generates the key on their OWN machine** (never on the server):
    `ssh-keygen -t ed25519 -f ~/.ssh/shos_ed25519 -C shos@tetapi-droplet`
 2. Owner gives us the **public** part (`~/.ssh/shos_ed25519.pub`) — never the
    private key, never pasted into chat as the private half.
 3. Install it + a scoped sshd block (does **not** touch the global hardening):
 ```bash
-ssh tetapi "sudo install -d -m700 -o shos -g shos /home/shos/.ssh && \
-  echo '<PUBKEY>' | sudo tee /home/shos/.ssh/authorized_keys && \
+cat ~/.ssh/shos_ed25519.pub | ssh tetapi "sudo install -d -m700 -o shos -g shos /home/shos/.ssh && \
+  sudo tee /home/shos/.ssh/authorized_keys >/dev/null && \
   sudo chmod 600 /home/shos/.ssh/authorized_keys && \
   sudo chown shos:shos /home/shos/.ssh/authorized_keys"
-# scoped drop-in — NOT the global 00-tetapi-hardening.conf:
-ssh tetapi "printf 'Match User shos\n  AllowAgentForwarding no\n  X11Forwarding no\n  PermitTTY yes\n' | \
-  sudo tee /etc/ssh/sshd_config.d/20-shos.conf && sudo sshd -t && sudo systemctl reload sshd"
+# scoped drop-in — MUST sort LAST (99-), see the Match-leak note below:
+ssh tetapi "printf 'Match User shos\n    AllowAgentForwarding no\n    X11Forwarding no\n    PermitTTY yes\n' | \
+  sudo tee /etc/ssh/sshd_config.d/99-shos.conf && sudo sshd -t && sudo systemctl reload ssh"
 ```
+⚠ **The drop-in filename must sort AFTER the cloud-init files, hence `99-shos.conf`
+(NOT `20-shos.conf`).** `sshd` includes `/etc/ssh/sshd_config.d/*.conf` in lexical
+order and a `Match` block stays in effect until the next `Match` **or the end of
+the whole config** — it does *not* reset at the end of an included file. The box has
+`50-cloud-init.conf` (`PasswordAuthentication yes`) and `60-cloudimg-settings.conf`
+after it; a `20-shos.conf` `Match User shos` would swallow those, giving `shos`
+`PasswordAuthentication yes`. `99-shos.conf` sorts last so nothing follows it.
+Verified after reload with `sudo sshd -T -C user=shos,host=localhost,addr=127.0.0.1`
+(→ `passwordauthentication no`, `x11forwarding no`, `allowagentforwarding no`,
+`permittty yes`) and the same for a non-shos user (globals intact).
+(Reload the `ssh` unit on Ubuntu; `sshd` is an alias. Reload never drops sessions.)
 
 ### Revoking SH.OS access — one move
 ```bash
@@ -274,7 +304,10 @@ ssh tetapi "sudo usermod -L shos; \
   sudo truncate -s0 /home/shos/.ssh/authorized_keys; \
   sudo systemctl stop user-1002.slice; \
   sudo loginctl disable-linger shos"
-# nginx: remove the symlink + reload; full teardown: sudo deluser --remove-home shos
+# nginx: drop the vhost + reload:
+ssh tetapi "sudo rm -f /etc/nginx/sites-enabled/shos.hellfiresol.com && sudo nginx -t && sudo systemctl reload nginx"
+# full teardown also: sudo rm /etc/ssh/sshd_config.d/99-shos.conf && sudo systemctl reload ssh
+#   sudo deluser --remove-home shos
 ```
 
 ### Disk — no quota (residual, monitor instead)
