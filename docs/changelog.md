@@ -6,6 +6,36 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-21 · 5.11 devops · fix S-19 deploy regression (rsync uid-preserve)
+Done: stopped `/opt/tetapi/api` from being re-chowned to the `hellfire` co-tenant
+on every deploy. The first post-5.9 api deploy (run `35539343701`, `1f5967c`,
+2026-09-20) had reverted the whole tree to `hellfire:hellfire 755` (181 non-root
+files), regressing S-19 — the 5.9 "rsyncs as root@ so ownership survives" note was
+wrong.
+- Root cause: `rsync -az` implies `-o -g`; running as **root** on the receiver,
+  rsync preserves the *source's numeric* uid/gid. The GitHub runner user `runner`
+  is uid/gid **1001**, which on the droplet is co-tenant **hellfire**. `.env` was
+  spared only by being `--exclude`d (stayed `root:root 600`).
+- Fix: both `rsync` steps in `teta-pi/api` `deploy.yml` ("Sync API code", "Sync
+  public certs") now pass `--chown=root:root`; "Migrate + restart" re-asserts
+  `chmod 700 /opt/tetapi/api/certs` (rsync `-p` had carried the runner's `755` dir
+  mode — same residual noted in 5.9). Chose `--chown` over `-rlptDz` for
+  explicitness; rsync `3.2.7` (droplet) / `3.2.x` (ubuntu-latest) both ≥3.1.0.
+Changed: `teta-pi/api` `.github/workflows/deploy.yml` (PR #30, autodeploy);
+`teta-pi/infra` `docs/{security,deployment,roadmap,known-issues}.md` + this file.
+Risk: low — `--chown` requires rsync ≥3.1.0 (satisfied both ends); tetapi
+api/web/mcp are root-systemd units so `root:root` ownership is correct for them.
+Verified live after autodeploy: `find /opt/tetapi/api ! -user root` → 0,
+`! -group root` → 0, certs `700 root:root`, `.env` `root:root 600`, health 200,
+api/celery-worker/celery-beat all active, `cotenant_check.sh` S-19 assert green.
+Out of scope (reported, no boot written): `cotenant_check.sh` docker-socket assert
+is a **false positive** on shos's **rootless** docker (`unix:///run/user/1002/…`,
+shos's own namespace, only `shosho-staging-*` containers) — NOT host-socket access
+(host sock `660 root:docker`, shos not in group). Belongs to the security session:
+the assert should target `unix:///var/run/docker.sock` or test group membership.
+Next: security session to tighten the `cotenant_check.sh` docker assert so rootless
+co-tenants don't trip it (turns the script fully green again).
+
 ## 2026-09-20 · 1.25 backend + 14.11 camera + 3.25 web · Pi CAM device key revocation (S-21, known-issues 6.6b)
 Done: closed the standing-credential gap from the 6.6b addendum — a paired Pi
 CAM's `X-Device-Api-Key` was valid forever with no owner/device/admin way to kill
