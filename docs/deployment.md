@@ -341,10 +341,19 @@ api/mcp/app health 200; celery worker reconnected + "ready".
 - **S-18** — `/opt/tetapi/api/.env` was `644` (already `root:root`); now `600 root:root`.
   `.env` is rsync-excluded in `deploy.yml`, so the mode survives deploys.
 - **S-19** — `/opt/tetapi/api` (+ `certs`) was `hellfire:hellfire`; now `root:root`,
-  `certs` dir `700`. Confirmed `deploy.yml` rsyncs as `root@` so ownership survives.
-  No `*.key.pem` exists on disk — the C2PA signing key is inline in `.env` (covered
-  by S-18). ⚠ rsync `-a` may reset the **certs dir mode** to the repo's on the next
-  deploy; the real protection is `.env`/ownership, not the dir bit.
+  `certs` dir `700`. No `*.key.pem` exists on disk — the C2PA signing key is inline in
+  `.env` (covered by S-18).
+  ⚠ **Regressed on the first post-5.9 deploy (run `35539343701`, `1f5967c`,
+  2026-09-20) — fixed in 5.11.** The 5.9 assumption "rsyncs as `root@` so ownership
+  survives" was wrong: `rsync -az` implies `-o -g`, and running as root on the
+  receiver rsync *preserves the source's numeric uid/gid*. The GitHub runner user
+  `runner` is uid/gid **1001**, which on the droplet is co-tenant **hellfire** — so
+  every deploy re-flipped the whole tree to `hellfire:hellfire` (and the `-p` dir
+  mode reset certs to `755`). **Fix (5.11):** both `rsync` steps in `deploy.yml` now
+  pass `--chown=root:root`, and "Migrate + restart" re-asserts `chmod 700
+  /opt/tetapi/api/certs`. Verified after 5.11 deploy: `find /opt/tetapi/api ! -user
+  root | wc -l` → 0, certs `700 root:root`, health 200, `cotenant_check.sh` S-19
+  assert green.
 - **S-20** — Redis (standalone `tetapi-redis` container) now requires `AUTH`
   (Option A, `--requirepass`; secret at `/root/tetapi-redis.pass`, `600`; volume /
   loopback publish / restart-policy preserved). `REDIS_URL` updated in `.env`;

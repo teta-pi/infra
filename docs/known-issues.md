@@ -2400,3 +2400,36 @@ Cloudflare / hellfire-zone concern (**not** TETA+PI infra, no boot written): to
 route the subdomain to our origin, set Flexible SSL for `shos.hellfiresol.com` (CF
 → origin `:80`) or add a `:443` origin cert + `listen 443` server for this host.
 Does not affect SSH access, which is fully enabled.
+
+## ✅ S-19 regressed on every deploy — `rsync -az` re-chowned `/opt/tetapi/api` to `hellfire` (5.11, 2026-09-21, FIXED)
+5.9 closed S-19 (`chown -R root:root /opt/tetapi/api`) and asserted "deploy.yml
+rsyncs as `root@` so ownership survives". That was wrong. The first post-5.9
+deploy (run `35539343701`, `1f5967c`, 2026-09-20) reverted the whole tree to
+`hellfire:hellfire 755` (181 non-root files; certs dir `755`). Cause: `rsync -az`
+implies `-o -g`, and running as **root** on the receiver rsync preserves the
+*source's numeric* uid/gid — the GitHub runner user `runner` is uid/gid **1001**,
+which on the droplet is co-tenant **hellfire**. `.env` was spared only because it
+is `--exclude`d (stayed `root:root 600`). **Fix (5.11):** both `rsync` steps in
+`teta-pi/api` `deploy.yml` now pass `--chown=root:root`, and "Migrate + restart"
+re-asserts `chmod 700 /opt/tetapi/api/certs` (rsync `-p` had carried the runner's
+`755` dir mode). rsync `3.2.7` on the droplet / `3.2.x` on ubuntu-latest both
+support `--chown` (needs ≥3.1.0). Verified after the 5.11 deploy: `find
+/opt/tetapi/api ! -user root | wc -l` → 0, `! -group root` → 0, certs `700
+root:root`, health 200, all services active, `cotenant_check.sh` S-19 assert
+green. `teta-pi/api` PR #30.
+
+## 🟠 `cotenant_check.sh` docker-socket assert is a false positive on rootless docker (found 5.11, 2026-09-21, out of scope)
+Discovered while verifying 5.11: `cotenant_check.sh` now exits 1 on
+`FAIL: shos can use the host docker socket (must NOT be in docker group)`, but
+this is a **false positive, not a breach**. `id shos` shows no docker group;
+`getent group docker` = `bob,hellfire` only; the host socket is `660 root:docker`
+and genuinely unreachable by shos. The assert does a bare `docker ps`, which for
+shos resolves to their **rootless** daemon at `unix:///run/user/1002/docker.sock`
+(context `rootless`, showing only SH.OS's own `shosho-staging-*` containers in
+shos's user namespace) — the intended, safe setup, no host root. The check should
+target the host socket specifically (e.g.
+`DOCKER_HOST=unix:///var/run/docker.sock docker ps`) or test docker-group
+membership directly, so rootless co-tenants don't trip it. **Out of 5.11 scope
+(devops/S-19) and belongs to the security session — reported to manager, no boot
+written, check logic left untouched.** The S-19 ownership assert in the same
+script is green.
