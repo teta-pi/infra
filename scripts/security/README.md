@@ -52,7 +52,7 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 |---|---|
 | `probe.py` | the checks |
 | `public_allowlist.json` | **the contract.** Every route the API may answer 2xx to an *unauthenticated* caller. `auth_surface` fails any live 2xx-to-anonymous route not listed here. `must_not_exist` lists deleted security-fix routes that must stay 404. `pending_owner_decision` records live 2xx surface the docs don't sanction yet (informational; the dedicated check that finds it is what fails). |
-| `fixtures.json` | stable prod rows the probe **reads** (never writes) — e.g. the 15.3 entity (public since S-17) with one public + one private block for S-8, and a private entity for S-17. |
+| `fixtures.json` | stable prod rows the probe **reads** (never writes) — e.g. the 15.3 entity (public since S-17) with one public + one private block for S-8, a private entity for S-17, and one **revoked** Pi CAM device (+ its now-worthless key, stored without the `pk_live_` prefix) for S-21. |
 
 ## Checks → findings
 
@@ -64,6 +64,7 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 | `s1_path_traversal` | `/media/local/…` traversal variants never 200 `/etc/passwd` | S-1 |
 | `s8_private_blocks` | anonymous `GET /businesses/{id}/blocks` withholds private blocks | S-8 |
 | `private_entity_exposure` | a private (`is_public=false`) entity 404s anonymously on base/`preview`/`proof`/`blocks` and still 200s for the owner (fixture `s17_private_entity`) | S-17 |
+| `s21_device_revoked` | `POST /media/device-upload` with a **revoked** Pi CAM key → 401, and the owner's `GET /devices` still lists that device with `revoked_at` set (fixture `s21_revoked_device`; SKIP if the row is gone, FAIL if it was re-paired) | S-21 |
 | `secrets` | `/.env`, `/.git/config`, `/api/certs/` unreachable; no `pk_live_` in openapi; flags `/docs`+`/redoc` as an owner question | secrets §4 |
 | `headers` | HSTS + nosniff + frame-options on all four hosts (fix is devops, §6.3) | headers §4 |
 | `mcp` | `teta_search` works anon (by design); `teta_verify_endpoint` won't fetch loopback | S-11/S-16 |
@@ -109,6 +110,23 @@ the net only ever grows.
    ever disappears the check must SKIP, not fail).
 5. Run `python3 scripts/security/probe.py --only <name>` against prod and paste
    the result in the PR.
+
+## The S-21 fixture — the one prod write this net has ever justified
+
+`check_s21_device_revoked` needs a device that **is revoked on prod** — you can't
+assert "a revoked key is dead" without one, and creating+revoking a device per run
+would be a daily write (forbidden). So it was done **once, by hand**, in the 1.25
+PR (2026-09-20), under the test account behind `~/.tetapi/test_api_key`:
+`POST /devices/generate-token` → `POST /devices/register` (synthetic fingerprint
+`sec-probe-s21-fixture`) → one `device-upload` (200, proves the key worked) →
+`DELETE /devices/{id}` (200, `revoked_at` set) → the same upload → 401. The
+device id and the revoked key's suffix went into `fixtures.json`
+(`s21_revoked_device`). The key is **worthless by construction** (the server
+erased it — `api_key IS NULL`), which is the whole point: if it ever stops
+being worthless, the check goes red. Stored without the `pk_live_` prefix so no
+secret scanner trips on it. If the row disappears the check SKIPs; if it is
+re-paired (`revoked_at` null) it FAILs — re-create it the same way and update the
+fixture.
 
 ## The GitHub secret
 

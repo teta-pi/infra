@@ -6,6 +6,54 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-20 · 1.25 backend + 14.11 camera + 3.25 web · Pi CAM device key revocation (S-21, known-issues 6.6b)
+Done: closed the standing-credential gap from the 6.6b addendum — a paired Pi
+CAM's `X-Device-Api-Key` was valid forever with no owner/device/admin way to kill
+it. [api PR #29](https://github.com/teta-pi/api/pull/29) (merged + deployed):
+migration **015** (`devices.revoked_at`, `api_key` nullable); revocation keeps the
+row but **erases** the secret (`api_key=NULL`, `is_active=false`, `revoked_at`);
+`_get_device` rejects revoked/inactive/keyless rows in Python → 401 on
+`/media/device-upload`. Three paths: `DELETE /devices/{id}` (owner-checked,
+foreign → 404), `POST /devices/self-revoke` (auth = the device's own key, so it can
+only kill itself — chosen over a second auth scheme on the DELETE to keep the
+owner route single-scheme and mirror `/register`), `DELETE /admin/devices/{id}`
+(`require_admin` + `admin_audit_log` `devices.revoke` on every call). `GET /devices`
+now lists revoked rows with `revoked_at` (`paired` counts live ones). Append-only
+`verification_events` `device_revoked` (level 0, source owner/device/admin). Re-pair
+of a revoked fingerprint mints a fresh key. `tests/test_device_revoke.py` (unit-level,
+CI green, 17 passed). [pi-cam PR #11](https://github.com/teta-pi/pi-cam/pull/11)
+(14.11): "Unlink" calls self-revoke *before* wiping SecureStore; offline → honest
+"Key revoked on this phone only — also revoke it from your profile" alert, no fake
+done. [web PR #48](https://github.com/teta-pi/web/pull/48) (3.25): per-device
+Revoke button in `/profile`'s PiCamButton, list re-fetched from the server after.
+**Live-verified on prod** (test account): generate-token → register → upload 200 →
+owner DELETE 200 → upload **401** → DELETE again idempotent (same `revoked_at`);
+re-pair (same id, new key) → upload 200 → admin DELETE → 401; re-pair → self-revoke
+→ 401. psql read-only: 3 `device_revoked` events (owner/admin/device), 2
+`admin_audit_log` rows (`already_revoked` true/false), `api_key IS NULL`,
+`alembic_version=015`. Anon DELETE 401, self-revoke without header 422.
+Changed: `docs/security.md` (A2 note, **S-21 CLOSED**), `docs/known-issues.md`
+(6.6b → CLOSED), `docs/api.md` (devices lifecycle + admin kill switch),
+`docs/database.md` (014/015 rows, `devices` table), `docs/roadmap.md` (rows
+**1.26**, 14.11, 3.25 — the boot said 1.25 but that row was already S-17, same
+collision as 1.24; branches keep `1.25`), `scripts/security/probe.py`
+(`check_s21_device_revoked`, `{device_id}` dummy sub), `fixtures.json`
+(`s21_revoked_device`: the one justified prod write — one revoked device of the
+test account, key stored without prefix, worthless by construction),
+`scripts/security/README.md`. Probe `--only s21` and `--only auth` both PASS live.
+Risk: pi-cam #11 and web #48 unmerged at time of writing — until the app build
+ships, existing phones still do local-only unlink (the *web* Revoke covers them
+once #48 is live). Downgrade of 015 deletes revoked rows (they have no key to
+restore). The test `pk_live_` key has admin role, which is how the admin path was
+exercised — nothing else changed. Side observation from the manager after this
+deploy (not this task): the api deploy reset `/opt/tetapi/api` to `hellfire:hellfire`
+again (S-19 regression — `rsync -az` as root preserves the runner's uid 1001 = hellfire
+on the box; `.env` stayed `root:root`) — tracked as 5.11 (`rsync --chown`), `deploy.yml`
+untouched here.
+Next: manager merges pi-cam #11 + web #48; owner EAS-builds the app; consider
+listing revoked devices (greyed) on `/profile` rather than hiding them, and a
+`revoked_at` filter on `GET /devices` if the list grows.
+
 ## 2026-09-20 · 5.10 devops · SH.OS SSH access ENABLED
 Done: turned on the gated last step of the co-tenant work (5.8 provisioned, 5.9
 closed S-18/19/20). SH.OS's `shos` account can now SSH in with the owner-supplied

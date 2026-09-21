@@ -20,6 +20,8 @@ Docker container `tetapi-postgres` (image `pgvector/pgvector:pg16`).
 | 011 | `businesses.legal_entity_id` (nullable self-FK, brand→legal entity link); asserts append-only trigger from 006 is still attached |
 | 012 | `claims.ops_status` + `ops_status_updated_at` (backoffice outreach tracking) |
 | 013 | `businesses.claim_status` + `pre_verified_source` (bulk pre-verification import, roadmap 1.11) |
+| 014 | `businesses.claim_status` VARCHAR(20) → (30) (hotfix: `pre_verified_unclaimed` is 22 chars) |
+| 015 | `devices.revoked_at` + `devices.api_key` nullable — device key revocation (1.25, S-21). Revoke keeps the row, erases the key |
 
 ## Core tables
 - **users** — id, email (unique, plaintext for login/index), `full_name`
@@ -57,6 +59,11 @@ Docker container `tetapi-postgres` (image `pgvector/pgvector:pg16`).
   verification_status, is_public, `c2pa_manifest`(jsonb), `ots_proof`(bytea),
   `embedding` vector(1536) + HNSW index.
 - **media** — block_id, type, c2pa_verified/signer, bitcoin_confirmed/block, …
+- **devices** (Pi CAM) — business_id→businesses, label, device_fingerprint
+  (unique), device_public_key, `api_key?` (unique; `X-Device-Api-Key` for
+  `/media/device-upload`; **NULL once revoked**), is_active, registered_at,
+  `revoked_at?` (015). Revocation (1.25/S-21) never deletes the row — media
+  provenance and the fingerprint's uniqueness (idempotent re-pair) depend on it.
 - **claims** — email(unique), entity_type, ready_to_pay, source(jsonb),
   `position` (identity), created_at. View `claim_stats` = total/pay_ready/pct.
 - **verification_events** (Temporal Moat, append-only) — entity_id, event_type,
