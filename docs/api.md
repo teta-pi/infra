@@ -97,7 +97,16 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   lookup (see `docs/registries.md`).
 - `routes/intent.py` — `POST /resolve-intent`: TWIRA-ranked (falls back to keyword
   when no embeddings), returns per-component breakdown + first_verified_at.
-- `routes/endpoint_verification.py` — `/verify-endpoint`.
+- `routes/endpoint_verification.py` — `POST /verify-endpoint` (auth: any active
+  account's `pk_live_`/JWT — incl. the MCP service key; 5/min/IP). Body
+  `{endpoint_url, entity_id?}`. Makes up to two server-side GETs of `endpoint_url`,
+  so it is SSRF-guarded (S-16, 15.5): **`endpoint_url` must be**
+  (a) `http`/`https`, (b) a **domain name — not a literal IP** (agent endpoints
+  are domain-based), (c) a host that resolves only to **public** addresses (no
+  private/loopback/link-local/reserved/metadata), (d) port **80 or 443**.
+  Anything else → **400**. Redirects are not followed (a 3xx counts as not-active).
+  Validation lives in `app/core/ssrf.py::assert_safe_url` — the shared guard any
+  future caller-supplied-URL route must use.
 
 ## Claims (waitlist) — `routes/claims.py`
 `POST /claim` (201 + position, 409 idempotent, rate-limit 5/min/IP),

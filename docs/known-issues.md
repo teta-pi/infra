@@ -3,6 +3,25 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟠 FIX READY 2026-09-21 (15.5, api PR #31) — SSRF in `POST /verify-endpoint` (S-16), anonymously reachable via MCP
+Live SSRF/port-oracle: the route fetched a caller-supplied `endpoint_url` with
+**no** URL validation and `follow_redirects=True`
+(`api/app/api/routes/endpoint_verification.py` `_verify_active` L55-61,
+`_verify_consistency` L78-94, both `client.get(url, follow_redirects=True)`).
+`endpoint_url=http://127.0.0.1:8000/health` → `is_active:true`; `:1` → `false` —
+a loopback port scanner over the three-tenant droplet (tetapi :8000-8099,
+hellfire :8090/:5433, shos :8200-8299), redis/postgres on loopback, and DO
+metadata `169.254.169.254`. S-2's 2026-07-14 "fix" only added `get_current_user`
+(auth ≠ SSRF mitigation), and the MCP service-key wiring (mcp #9, 2026-09-12)
+made the tool anonymous again — see the `teta_verify_endpoint` CLOSED entry below,
+whose chosen option (a) re-opened this. **Fix (api PR #31, CI-green, awaiting
+merge+deploy):** new `app/core/ssrf.py::assert_safe_url` validates the URL before
+any fetch (http/https, no literal IPs, public-resolving host via `getaddrinfo`
+all A/AAAA, port 80/443), applied at `verify_endpoint` entry; both fetches now
+`follow_redirects=False`. `tests/test_ssrf_guard.py` (30 cases). Residual:
+DNS-rebinding (resolve≠fetch), documented in `docs/security.md` S-16. Auth kept
+(not reverted — that killed the MCP tool for 2mo).
+
 ## 🟡 `teta-pi/web` CI: `npm audit` red again (2026-09-12→18) — the 3.18 `sharp` pin (0.35.3) is now itself vulnerable
 Not investigated in depth this session (spotted while triaging inbox CI
 failure emails, `6 manager`-style read-only check). 3.18 (2026-08-06) fixed
@@ -456,6 +475,12 @@ skips the full 2.2 scoped-key system for now. **Live-verified**: a real
 verdict (`FAILED — endpoint did not respond`, for a non-agent test URL) —
 no more 401, no more `Not authenticated`.
 Status: CLOSED.
+**Follow-up (15.5, 2026-09-21):** option (a) made this route reachable by any
+anonymous MCP caller again — and it still had **no** SSRF host-validation (the
+line above saying "the SSRF fix's host-validation covers the core risk" was
+wrong; that validation never existed on this route until now). That is S-16;
+fixed in **api PR #31** with `app/core/ssrf.py::assert_safe_url` — see the
+top-of-file entry and `docs/security.md` S-16.
 
 ### 🟡 NEW — `teta_verify_entity`/`teta_get_proof`/`teta_get_profile`/`teta_verify_claim` proof links point at raw JSON, not the public page
 `teta_search`/`teta_resolve_intent` proof links correctly go to

@@ -6,6 +6,51 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-21 · 15.5 security · /verify-endpoint SSRF fixed (S-16) — FIX READY, awaiting merge
+Done: closed the live SSRF/port-oracle in `POST /verify-endpoint` (S-16) —
+reachable **anonymously** through the MCP `teta_verify_endpoint` tool since the
+service-key wiring (mcp #9, 2026-09-12). The route fetched a caller-supplied
+`endpoint_url` with no URL validation and `follow_redirects=True`
+(`is_active:true` for `127.0.0.1:8000/health` = a loopback/RFC1918/metadata
+scanner over the three-tenant droplet). S-2's 2026-07-14 change only added auth,
+which is not an SSRF mitigation and regressed to "anonymous" via MCP anyway.
+- **[api PR #31](https://github.com/teta-pi/api/pull/31)** (CI pytest **green**):
+  new `app/core/ssrf.py::assert_safe_url` — the shared guard for caller-supplied
+  outbound URLs: http/https only, **literal IPs rejected outright** (agent
+  endpoints are domains; collapses the IPv4/IPv6/IPv4-mapped-literal bypass
+  class), host resolved via `getaddrinfo` with every A/AAAA blocked on
+  private/loopback/link-local/reserved/multicast/unspecified (IPv4-mapped `::ffff:`
+  unwrapped), port 80/443 only → HTTP 400. Applied at `verify_endpoint` entry
+  before any fetch; both `_verify_active`/`_verify_consistency` now
+  `follow_redirects=False`. `get_current_user` **kept** (not reverted — that
+  killed the MCP tool for 2 months). 30-case `tests/test_ssrf_guard.py`.
+- **Scope check:** only caller-host fetch in the codebase. `domain_ownership`
+  already guarded (S-9); registry verifiers / Resend / OpenAI use fixed hosts;
+  tag-ping/wk do no caller-host fetch; admin `_ping` hardcoded. No other route
+  needs the helper today.
+- **Probe:** no change needed — `check_ssrf` already PASSes on the explicit 400
+  ("rejected pre-fetch") and FAILs only on 2xx + `is_active:true` (the true
+  oracle). Confirmed. `ssrf[*]` + `mcp[verify_endpoint_ssrf]` (infra#110) go green
+  on deploy.
+Changed: `teta-pi/api` `app/core/ssrf.py` (new), `app/api/routes/endpoint_verification.py`,
+`tests/test_ssrf_guard.py`. Docs (this PR): `security.md` (S-16 fix-ready, S-2
+correction, §4 SSRF), `known-issues.md` (top entry + cross-ref on the
+`teta_verify_endpoint` CLOSED note), `api.md` (`endpoint_url` rules), `roadmap.md`
+(15.5), this file.
+Risk: **merge+deploy is the manager's gate** — the worker session could not merge
+(blocked). Until #31 deploys, the SSRF is still live on prod. The fix is additive
+and CI-green; the one behavioural change for legitimate callers is that a raw-IP
+or non-80/443 agent endpoint now 400s (agent endpoints are domains, so expected).
+Residual after deploy: DNS-rebinding (resolve≠fetch) — documented, separate task
+if the owner wants IP-pinning.
+Next: manager merges [api PR #31](https://github.com/teta-pi/api/pull/31) → auto-deploy →
+live-verify (`127.0.0.1:8000/health` → 400; real public https → 200 is_active:true;
+MCP `teta_verify_endpoint` localhost → validation error) → `gh workflow run
+security-probe.yml -R teta-pi/infra` → `ssrf[*]`/`mcp[verify_endpoint_ssrf]` PASS,
+infra#110 green. Then flip S-16 to CLOSED in `security.md`.
+
+---
+
 ## 2026-09-21 · 5.11 devops · fix S-19 deploy regression (rsync uid-preserve)
 Done: stopped `/opt/tetapi/api` from being re-chowned to the `hellfire` co-tenant
 on every deploy. The first post-5.9 api deploy (run `35539343701`, `1f5967c`,
