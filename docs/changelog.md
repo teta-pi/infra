@@ -25,7 +25,7 @@ Findings (ranked; **all fixes are prod-config/CI → manager/devops, not dir 15*
    again (5.9 set root:root). `tetapi-api` runs as **root** and executes that tree →
    hellfire can run code as root. Cause: `api/.github/workflows/deploy.yml:24,33`
    `rsync -az` preserves the runner checkout uid 1001 = hellfire. Fix: `--chown=root:root`.
-2. **S-21 (🔴):** hellfire ∈ `docker` group == root over host (`docker run -v /:/host`).
+2. **S-24 (🔴):** hellfire ∈ `docker` group == root over host (`docker run -v /:/host`).
    Fix: rootless docker + drop from group.
 3. **S-22 (🔴, latent):** `businesses.py:508` claim/domain/check never matches the
    caller's proven domain to the entity anchor (`pre_verified_source.domain`,
@@ -49,9 +49,9 @@ pass date), `docs/known-issues.md`, `scripts/security/cotenant_check.sh` (rootle
 + S-21/S-23/H-1/H-4 asserts, port-range accuracy), `scripts/security/README.md`,
 `docs/roadmap.md` (15.7), this file.
 Risk: none from this session (read-only). The reported findings ARE the risk — S-19 +
-S-21 are live hellfire→root; S-22 arms with GTM Phase 2. Nothing here changes prod.
+S-24 are live hellfire→root; S-22 arms with GTM Phase 2. Nothing here changes prod.
 Next: manager to spin devops boots — (a) api deploy `--chown=root:root` + one-time
-chown [S-19], (b) hellfire→rootless + docker-group removal [S-21], (c) backend 1.11
+chown [S-19], (b) hellfire→rootless + docker-group removal [S-24], (c) backend 1.11
 anchor-match [S-22], (d) mask redis broker URL + vacuum journal [S-23]. Re-run
 `cotenant_check.sh` after each; it stays RED until they land.
 

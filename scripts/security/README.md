@@ -88,7 +88,7 @@ ssh tetapi 'sudo bash -s' < scripts/security/cotenant_check.sh   # exit 0 == all
 | S-18 | `shos` cannot read `/opt/tetapi/api/.env` (must be `600 root:root`) | ✅ PASS |
 | S-19 | `/opt/tetapi/api` owned by `root:root` (not a co-tenant) | ❌ **REGRESSED** — `hellfire:hellfire` again (api deploy `rsync -az` preserves runner uid 1001) |
 | S-20 | Redis `127.0.0.1:6379` rejects unauthenticated `PING` (`requirepass`) | ✅ PASS |
-| S-21 | `docker` group has no co-tenant (only `bob`) — membership == host root | ❌ FAIL — `hellfire` in `docker` group |
+| S-24 | `docker` group has no co-tenant (only `bob`) — membership == host root | ❌ FAIL — `hellfire` in `docker` group |
 | S-23 | no cleartext redis password in `journalctl -u tetapi-celery-worker` | ❌ FAIL |
 | H-1 | `sshd PermitRootLogin` is `prohibit-password`/`no`, not `yes` | ❌ FAIL |
 | H-4 | tetapi-postgres pg_hba has no loopback/local `trust` line | ❌ FAIL (safe today only via docker-proxy topology) |
@@ -96,7 +96,7 @@ ssh tetapi 'sudo bash -s' < scripts/security/cotenant_check.sh   # exit 0 == all
 **Do not run under `sudo -u shos` for the docker check** — shos runs its own
 rootless daemon, so a bare `docker ps` succeeds legitimately; the script forces
 `DOCKER_HOST=unix:///var/run/docker.sock` to test host-socket access specifically.
-S-18/S-20 PASS; **S-19 regressed** and S-21/S-23/H-1/H-4 are honestly RED (the fixes
+S-18/S-20 PASS; **S-19 regressed** and S-24/S-23/H-1/H-4 are honestly RED (the fixes
 are prod-config/CI, raised for a devops boot — see `docs/security.md` §5/§5.1). Re-run
 after any change to `/opt/tetapi` perms/ownership, the redis container, the `docker`
 group, `sshd` config, or when onboarding a co-tenant. Read-only (redis: `PING` only).

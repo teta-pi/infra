@@ -78,7 +78,7 @@ else
 fi
 
 echo "== host-wide co-tenancy (15.7) =="
-# S-21: hellfire (or anyone but bob) in the docker group == root over the host.
+# S-24: hellfire (or anyone but bob) in the docker group == root over the host.
 dockmembers=$(getent group docker | cut -d: -f4)
 extra=$(echo "$dockmembers" | tr ',' '\n' | grep -vxE 'bob' | grep -v '^$' | paste -sd, -)
 if [[ -z "$extra" ]]; then
