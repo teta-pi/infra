@@ -3,6 +3,46 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🔴 15.7 co-tenancy re-audit (2026-09-20) — hellfire→root ×2, latent claim-takeover, redis pass in journal
+Read-only + on-box authorized pass (dir 15). Full write-up + severity ranking in
+`docs/security.md` §5 (S-19 reopened, S-21/S-22/S-23 new) and §5.1 (H-1…H-6). The
+code/config anchors:
+
+- **S-19 REGRESSED (🔴):** `/opt/tetapi/api` + `/opt/tetapi/api/certs` are `755
+  hellfire:hellfire` again (was fixed to `root:root` in 5.9). `tetapi-api` runs as
+  **root** (`systemctl show tetapi-api` → `User=` empty) and executes that tree →
+  hellfire can write API code that runs as root. Root cause: `api`
+  `.github/workflows/deploy.yml:24` + `:33` use `rsync -az … root@…:/opt/tetapi/api/`
+  — `-a` (=`-ogtpr…`) preserves the runner checkout's uid **1001**, which is
+  `hellfire` on the droplet. Fix: `--chown=root:root` / `--no-owner --no-group` on
+  both rsyncs + a one-time `chown -R root:root /opt/tetapi/api; chmod 700 certs`.
+- **S-21 (🔴):** `getent group docker` = `bob,hellfire`; hellfire ∈ docker == root
+  over the host (`/var/run/docker.sock` is `root:docker`). Fix: rootless docker for
+  hellfire (as shos) + remove from group. shos is correctly NOT in docker and runs
+  rootless (`shosho-staging-web` on `127.0.0.1:8200`).
+- **S-22 (🔴, LATENT):** `api/app/api/routes/businesses.py:508`
+  `check_claim_domain_verification` calls
+  `domain_ownership.check_domain_verification(business_id, payload.domain)`
+  (`app/services/verification/domain_ownership.py:110`) with a **caller-supplied**
+  domain and never compares it to the entity anchor
+  `pre_verified_source["domain"]` (set in `app/api/routes/admin.py:655`). Any
+  authenticated user can claim any `pre_verified_unclaimed` entity by proving a
+  throwaway domain. Prod has 0 such rows today (`self_registered`=17,
+  `opted_out`=6) → latent, but this is the 1.11 flow that gates GTM Phase 2. Fix:
+  require `normalize_domain(payload.domain) == normalize_domain(business.pre_verified_source["domain"])`
+  before the `owner_id`/`claim_status` transfer (`businesses.py:522-523`).
+- **S-23 (🟡):** `journalctl -u tetapi-celery-worker` prints
+  `redis://:<PASSWORD>@127.0.0.1:6379//` (celery banner) — root/adm-readable only
+  (shos denied), but leaks the S-20 secret on any journal export.
+- Minor (`docs/security.md` §5.1): H-1 `sshd PermitRootLogin yes` (all users);
+  H-2 hellfire has no systemd resource slice (uncapped); H-3 `/proc` no `hidepid`
+  (argv of all procs readable; `environ` is `0400`, safe); H-4 tetapi-postgres
+  pg_hba `127.0.0.1/32 trust` (safe only via docker-proxy source rewrite —
+  verified SCRAM from host); H-5 `tetapi-web` binds `0.0.0.0:3001`, `tetapi-mcp`
+  `*:3002` (perimeter is ufw-only). Perimeter itself confirmed good: ufw
+  default-deny, only 22/80/443 reachable externally (8200/5432/6379/3001/3002/8000
+  all filtered from off-box).
+
 ## 🟡 `pull_top500.py`'s Glama pull now 401s (found 13.4, 2026-09-26)
 `glama.ai/api/mcp/v1/servers` returned `401 Unauthorized` on every page during
 a live run 2026-09-26 — it was working as of `13.2` (2026-08-21, "tested live

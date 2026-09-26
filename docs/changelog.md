@@ -6,6 +6,58 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-20 · 15.7 security · co-tenancy re-audit (read-only + on-box)
+Done: authorized read-only re-audit of the now-3-tenant droplet (bob/hellfire/shos),
+first full co-tenancy pass since 15.3. No prod writes, no exploitation (dir 15 RoE).
+Full write-up in `docs/security.md` §5 (S-19 reopened; S-21/S-22/S-23 added) + §5.1
+(H-1…H-6); anchors in `docs/known-issues.md`; `cotenant_check.sh` corrected + extended.
+
+Verdict by tenant: **shos isolation holds** — not in docker group, rootless docker
+only (`shosho-staging-web` on `127.0.0.1:8200`), systemd-capped (`MemoryMax=512M`,
+`MemorySwapMax=0`), cannot read `.env`/other journals/`/var/log`, redis `-NOAUTH`,
+postgres from host demands SCRAM (the pg_hba `127.0.0.1/32 trust` is unreachable —
+docker-proxy rewrites the source to the bridge gateway), ports loopback-only, ufw
+blocks it externally (8200 filtered from off-box). **hellfire isolation is broken**
+(two independent hellfire→root paths).
+
+Findings (ranked; **all fixes are prod-config/CI → manager/devops, not dir 15**):
+1. **S-19 REGRESSED (🔴, live):** `/opt/tetapi/api`+`certs` are `755 hellfire:hellfire`
+   again (5.9 set root:root). `tetapi-api` runs as **root** and executes that tree →
+   hellfire can run code as root. Cause: `api/.github/workflows/deploy.yml:24,33`
+   `rsync -az` preserves the runner checkout uid 1001 = hellfire. Fix: `--chown=root:root`.
+2. **S-21 (🔴):** hellfire ∈ `docker` group == root over host (`docker run -v /:/host`).
+   Fix: rootless docker + drop from group.
+3. **S-22 (🔴, latent):** `businesses.py:508` claim/domain/check never matches the
+   caller's proven domain to the entity anchor (`pre_verified_source.domain`,
+   `admin.py:655`) → any user can claim any `pre_verified_unclaimed` entity with a
+   throwaway domain. Prod has 0 such rows now, but this is the 1.11 GTM-Phase-2 gate —
+   fix before bulk-import.
+4. **S-23 (🟡):** redis password printed cleartext in `journalctl -u tetapi-celery-worker`
+   (root/adm-only; shos denied) — undermines S-20 on journal export.
+5. **H-1…H-6 (🟡/🟢):** PermitRootLogin yes; hellfire uncapped (no systemd slice);
+   `/proc` no hidepid (argv leak; environ safe 0400); pg_hba loopback trust; web/mcp
+   bind 0.0.0.0 (ufw-only privacy); cotenant_check.sh docker false-positive (fixed).
+
+S-16 SSRF: confirmed still the only caller-host server-side fetch is
+`endpoint_verification.py:58,85` (for 15.5); all registry verifiers use fixed hosts.
+S-10: uvicorn `--workers 1` confirmed → in-memory limiters correct (not ×N). Probe
+re-run 18 pass / 2 fail (both S-16) / 3 skip; the 2026-09-20 cron's `private_entity`/
+`headers[mcp]` SKIPs were a transient conn-reset, both re-verified PASS.
+
+Changed: `docs/security.md` (§2 B6 dedup+verdict, §5 S-19/S-21/S-22/S-23, §5.1, §6.2
+pass date), `docs/known-issues.md`, `scripts/security/cotenant_check.sh` (rootless fix
++ S-21/S-23/H-1/H-4 asserts, port-range accuracy), `scripts/security/README.md`,
+`docs/roadmap.md` (15.7), this file.
+Risk: none from this session (read-only). The reported findings ARE the risk — S-19 +
+S-21 are live hellfire→root; S-22 arms with GTM Phase 2. Nothing here changes prod.
+Next: manager to spin devops boots — (a) api deploy `--chown=root:root` + one-time
+chown [S-19], (b) hellfire→rootless + docker-group removal [S-21], (c) backend 1.11
+anchor-match [S-22], (d) mask redis broker URL + vacuum journal [S-23]. Re-run
+`cotenant_check.sh` after each; it stays RED until they land.
+
+---
+
+
 ## 2026-09-26 · 13.4 gtm · outreach queue uses real pre-verification links
 Done: last technical step before the first real Phase-2 outreach message.
 `scripts/gtm/outreach_queue.py build` no longer invents
