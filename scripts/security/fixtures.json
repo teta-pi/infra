@@ -5,13 +5,18 @@
     "check reports SKIP with the reason, never a fake PASS.",
     "s8: entity created by session 15.3 (2026-08-05) with one public and one private",
     "block, left in place precisely as the S-8 regression fixture. The private block's",
-    "title is 'private-block-s8-SECRET' — the id being public is fine, the API must",
+    "title is 'private-block-s8-SECRET' \u2014 the id being public is fine, the API must",
     "never return the row to a non-owner. Since S-17 (2026-09-14) the entity itself",
     "MUST be public (is_public=is_published=true), otherwise /blocks 404s and the",
     "check can only SKIP.",
     "s17: a private (is_public=false, is_published=false) entity of the same test",
     "account; every by-UUID read (base/preview/proof/blocks) must 404 anonymously",
-    "and 200 for the owner."
+    "and 200 for the owner.",
+    "s21: one Pi CAM device of the same test account, paired then REVOKED on prod",
+    "(2026-09-20, api PR #29 live check \u2014 the one justified prod write, see README).",
+    "The key is stored WITHOUT its pk_live_ prefix; it is worthless by construction",
+    "(server erased it, api_key IS NULL). device-upload with it must 401 and the",
+    "owner's GET /devices must still list the device with revoked_at set."
   ],
   "s8_private_blocks": {
     "entity_id": "e5b79aaa-6403-4c11-afee-776203fcc7c5",
@@ -21,5 +26,11 @@
   "s17_private_entity": {
     "entity_id": "ab27ca35-f517-4e03-a353-9ebf8a58f13c",
     "name": "TETA Security Sync Test B 15.3"
+  },
+  "s21_revoked_device": {
+    "device_id": "ef2cdffa-127b-4c36-9e8f-aa55769b9c93",
+    "entity_id": "eced734c-c3b7-459a-9df2-d772c1ee9211",
+    "label": "S-21 probe fixture (revoked)",
+    "revoked_key_suffix": "xJhScbP2wJ-w7vQ5s3wsEQhjahIiuLG7vtXdHu8G7JA"
   }
 }

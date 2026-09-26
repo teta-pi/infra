@@ -57,6 +57,204 @@ anchor-match [S-22], (d) mask redis broker URL + vacuum journal [S-23]. Re-run
 
 ---
 
+
+## 2026-09-26 · 13.4 gtm · outreach queue uses real pre-verification links
+Done: last technical step before the first real Phase-2 outreach message.
+`scripts/gtm/outreach_queue.py build` no longer invents
+`tetapi.dev/e/PLACEHOLDER-{id}` links — it calls the live
+`POST /admin/entities/bulk-preverify` (1.11) and takes real
+`profile_url`/`opt_out_url`/`badge_url` from `created[]` into the queue.
+Dataset rows map to API items via `domain` (parsed from the registry's
+`website`) / `github_org` (parsed from the `repo` URL); `npm_package` passed
+through for when the dataset gains it. Since this writes to prod, `build`
+defaults to `--dry-run` (shows what would be created, writes nothing) and
+only calls the API with `--create`; `skipped[]` (slug exists / no anchor)
+goes into the queue JSON, never silently dropped. `approve` now live-checks
+all three links return `200` (GET only — never the opt-out POST) before
+flipping status, catching a domain regression automatically instead of
+trusting links minted once. Added `optout` subcommand for cleaning up
+test/mistaken rows via the real endpoint. Updated the `gtm-drafts.md` §3
+template to name the page's "Pre-verified · Unclaimed" label, matching what
+1.11's frontend indicator (PR #44) actually shows.
+Changed: `scripts/gtm/outreach_queue.py`, `docs/gtm-drafts.md` §3,
+`scripts/gtm/README.md`, `docs/gtm.md`, `docs/roadmap.md` (new row 13.4).
+Risk: none to prod config; the script can now write real Business rows —
+`--dry-run` default + explicit `--create` + the ≤200/batch server cap are
+the guardrails. Full-dataset dry-run (500 official-registry rows; Glama pull
+now 401s, see known-issues.md) found 455/500 (91%) have a usable public
+anchor and are one `--create` away from real profiles; 45/500 permanently
+lack one. Did not run `--create` against the full 500 — deliberately left
+to the owner (guardrail: legitimacy before outreach; creating ~455 live
+profiles is a one-way action, not a side effect of this task). Live-tested
+end-to-end: `--dry-run` on 3 real rows, `--create` on 1 real row (all 3
+links confirmed live 200), `approve` passed, then correctly refused after
+cleanup (badge 404s post-opt-out), test row removed via `optout`.
+Next: owner decides when to run `--create` for real (full or partial batch)
+and starts sending approved items per docs/gtm.md Phase 2 guardrails
+(one message per author, no follow-up). Separately, `pull_top500.py`'s
+Glama pull now 401s — was working as of 13.2 (2026-08-21), reduces dataset
+coverage/enrichment but doesn't block Phase 2 (official registry alone is
+enough); flagged in known-issues.md, not fixed here (different script, out
+of this session's scope).
+
+## 2026-09-26 · 3.24 frontend · claim-409 branch + opt-out page
+Done: closed the last two frontend gaps blocking GTM Phase 2 outreach
+(`known-issues.md` §6.6, both marked CLOSED). **(1)** `/claim` recognises the
+409 `POST /businesses` returns when a slug belongs to a
+`pre_verified_unclaimed` row and branches into a real domain-ownership claim
+(`/claim/domain/start` + `/check` → `owner_id` transferred,
+`claim_status=claimed`) instead of the old generic "Could not save your
+profile". **(2)** New `/e/[slug]/opt-out?token=…` page — the route behind
+every outreach message's `opt_out_url` since 1.23, which until now 404'd:
+resolves the slug via `by-slug/public`, one button, no form, no login, and an
+honest text for each backend outcome (403 · 400 · 404 · already-opted-out).
+It does not fire on load, on purpose — mail scanners GET every link in a
+message, and would opt people out on the recipient's behalf. **(3)**
+`/e/[slug]`'s "Is this you? Claim this profile" CTA stopped being a "coming
+soon" note: it links to `/claim?claim=<slug>` and lands on the same claim
+screen, so both entry points share one UI rather than two.
+Changed: `teta-pi/web` PR #49 — `src/app/claim/page.tsx` (step 5 + 409 branch
++ `?claim=` prefill), `src/app/e/[slug]/opt-out/page.tsx` (new),
+`src/app/e/[slug]/page.tsx` (CTA), `src/components/DomainProofPanel.tsx` (new,
+extracts /profile's domain→TXT→check pattern with the route injected),
+`src/lib/api.ts` (`ApiError` with status+detail, `claimFlowApi`),
+`src/stores/useOnboardingStore.ts`. `teta-pi/api` PR #32 — one field: `id` on
+`by-slug/public` (the opt-out route is id-keyed, the link carries a slug;
+`/search` already returned `id`, so nothing new is exposed).
+Risk: the two PRs are coupled — until api #32 deploys, the opt-out page can't
+resolve an id and says so explicitly rather than failing silently (the claim
+flow is unaffected). The claim's DNS check could only be verified live up to
+the TXT-instruction screen — no test domain exists to complete a real check,
+so the verified→success transition was exercised with a stub.
+Next: merge api #32 first, then web #49, re-verify on prod. After that
+`scripts/gtm/outreach_queue.py` can drop `links_are_placeholders` — both links
+it builds now lead to real pages (small infra boot; the script still mints its
+own `tetapi.dev/e/PLACEHOLDER-*` URLs and must switch to the real
+`profile_url`/`opt_out_url` `bulk-preverify` returns).
+
+## 2026-09-21 · 15.5 security · /verify-endpoint SSRF fixed (S-16) — FIX READY, awaiting merge
+Done: closed the live SSRF/port-oracle in `POST /verify-endpoint` (S-16) —
+reachable **anonymously** through the MCP `teta_verify_endpoint` tool since the
+service-key wiring (mcp #9, 2026-09-12). The route fetched a caller-supplied
+`endpoint_url` with no URL validation and `follow_redirects=True`
+(`is_active:true` for `127.0.0.1:8000/health` = a loopback/RFC1918/metadata
+scanner over the three-tenant droplet). S-2's 2026-07-14 change only added auth,
+which is not an SSRF mitigation and regressed to "anonymous" via MCP anyway.
+- **[api PR #31](https://github.com/teta-pi/api/pull/31)** (CI pytest **green**):
+  new `app/core/ssrf.py::assert_safe_url` — the shared guard for caller-supplied
+  outbound URLs: http/https only, **literal IPs rejected outright** (agent
+  endpoints are domains; collapses the IPv4/IPv6/IPv4-mapped-literal bypass
+  class), host resolved via `getaddrinfo` with every A/AAAA blocked on
+  private/loopback/link-local/reserved/multicast/unspecified (IPv4-mapped `::ffff:`
+  unwrapped), port 80/443 only → HTTP 400. Applied at `verify_endpoint` entry
+  before any fetch; both `_verify_active`/`_verify_consistency` now
+  `follow_redirects=False`. `get_current_user` **kept** (not reverted — that
+  killed the MCP tool for 2 months). 30-case `tests/test_ssrf_guard.py`.
+- **Scope check:** only caller-host fetch in the codebase. `domain_ownership`
+  already guarded (S-9); registry verifiers / Resend / OpenAI use fixed hosts;
+  tag-ping/wk do no caller-host fetch; admin `_ping` hardcoded. No other route
+  needs the helper today.
+- **Probe:** no change needed — `check_ssrf` already PASSes on the explicit 400
+  ("rejected pre-fetch") and FAILs only on 2xx + `is_active:true` (the true
+  oracle). Confirmed. `ssrf[*]` + `mcp[verify_endpoint_ssrf]` (infra#110) go green
+  on deploy.
+Changed: `teta-pi/api` `app/core/ssrf.py` (new), `app/api/routes/endpoint_verification.py`,
+`tests/test_ssrf_guard.py`. Docs (this PR): `security.md` (S-16 fix-ready, S-2
+correction, §4 SSRF), `known-issues.md` (top entry + cross-ref on the
+`teta_verify_endpoint` CLOSED note), `api.md` (`endpoint_url` rules), `roadmap.md`
+(15.5), this file.
+Risk: **merge+deploy is the manager's gate** — the worker session could not merge
+(blocked). Until #31 deploys, the SSRF is still live on prod. The fix is additive
+and CI-green; the one behavioural change for legitimate callers is that a raw-IP
+or non-80/443 agent endpoint now 400s (agent endpoints are domains, so expected).
+Residual after deploy: DNS-rebinding (resolve≠fetch) — documented, separate task
+if the owner wants IP-pinning.
+Next: manager merges [api PR #31](https://github.com/teta-pi/api/pull/31) → auto-deploy →
+live-verify (`127.0.0.1:8000/health` → 400; real public https → 200 is_active:true;
+MCP `teta_verify_endpoint` localhost → validation error) → `gh workflow run
+security-probe.yml -R teta-pi/infra` → `ssrf[*]`/`mcp[verify_endpoint_ssrf]` PASS,
+infra#110 green. Then flip S-16 to CLOSED in `security.md`.
+
+---
+
+## 2026-09-21 · 5.11 devops · fix S-19 deploy regression (rsync uid-preserve)
+Done: stopped `/opt/tetapi/api` from being re-chowned to the `hellfire` co-tenant
+on every deploy. The first post-5.9 api deploy (run `35539343701`, `1f5967c`,
+2026-09-20) had reverted the whole tree to `hellfire:hellfire 755` (181 non-root
+files), regressing S-19 — the 5.9 "rsyncs as root@ so ownership survives" note was
+wrong.
+- Root cause: `rsync -az` implies `-o -g`; running as **root** on the receiver,
+  rsync preserves the *source's numeric* uid/gid. The GitHub runner user `runner`
+  is uid/gid **1001**, which on the droplet is co-tenant **hellfire**. `.env` was
+  spared only by being `--exclude`d (stayed `root:root 600`).
+- Fix: both `rsync` steps in `teta-pi/api` `deploy.yml` ("Sync API code", "Sync
+  public certs") now pass `--chown=root:root`; "Migrate + restart" re-asserts
+  `chmod 700 /opt/tetapi/api/certs` (rsync `-p` had carried the runner's `755` dir
+  mode — same residual noted in 5.9). Chose `--chown` over `-rlptDz` for
+  explicitness; rsync `3.2.7` (droplet) / `3.2.x` (ubuntu-latest) both ≥3.1.0.
+Changed: `teta-pi/api` `.github/workflows/deploy.yml` (PR #30, autodeploy);
+`teta-pi/infra` `docs/{security,deployment,roadmap,known-issues}.md` + this file.
+Risk: low — `--chown` requires rsync ≥3.1.0 (satisfied both ends); tetapi
+api/web/mcp are root-systemd units so `root:root` ownership is correct for them.
+Verified live after autodeploy: `find /opt/tetapi/api ! -user root` → 0,
+`! -group root` → 0, certs `700 root:root`, `.env` `root:root 600`, health 200,
+api/celery-worker/celery-beat all active, `cotenant_check.sh` S-19 assert green.
+Out of scope (reported, no boot written): `cotenant_check.sh` docker-socket assert
+is a **false positive** on shos's **rootless** docker (`unix:///run/user/1002/…`,
+shos's own namespace, only `shosho-staging-*` containers) — NOT host-socket access
+(host sock `660 root:docker`, shos not in group). Belongs to the security session:
+the assert should target `unix:///var/run/docker.sock` or test group membership.
+Next: security session to tighten the `cotenant_check.sh` docker assert so rootless
+co-tenants don't trip it (turns the script fully green again).
+
+## 2026-09-20 · 1.25 backend + 14.11 camera + 3.25 web · Pi CAM device key revocation (S-21, known-issues 6.6b)
+Done: closed the standing-credential gap from the 6.6b addendum — a paired Pi
+CAM's `X-Device-Api-Key` was valid forever with no owner/device/admin way to kill
+it. [api PR #29](https://github.com/teta-pi/api/pull/29) (merged + deployed):
+migration **015** (`devices.revoked_at`, `api_key` nullable); revocation keeps the
+row but **erases** the secret (`api_key=NULL`, `is_active=false`, `revoked_at`);
+`_get_device` rejects revoked/inactive/keyless rows in Python → 401 on
+`/media/device-upload`. Three paths: `DELETE /devices/{id}` (owner-checked,
+foreign → 404), `POST /devices/self-revoke` (auth = the device's own key, so it can
+only kill itself — chosen over a second auth scheme on the DELETE to keep the
+owner route single-scheme and mirror `/register`), `DELETE /admin/devices/{id}`
+(`require_admin` + `admin_audit_log` `devices.revoke` on every call). `GET /devices`
+now lists revoked rows with `revoked_at` (`paired` counts live ones). Append-only
+`verification_events` `device_revoked` (level 0, source owner/device/admin). Re-pair
+of a revoked fingerprint mints a fresh key. `tests/test_device_revoke.py` (unit-level,
+CI green, 17 passed). [pi-cam PR #11](https://github.com/teta-pi/pi-cam/pull/11)
+(14.11): "Unlink" calls self-revoke *before* wiping SecureStore; offline → honest
+"Key revoked on this phone only — also revoke it from your profile" alert, no fake
+done. [web PR #48](https://github.com/teta-pi/web/pull/48) (3.25): per-device
+Revoke button in `/profile`'s PiCamButton, list re-fetched from the server after.
+**Live-verified on prod** (test account): generate-token → register → upload 200 →
+owner DELETE 200 → upload **401** → DELETE again idempotent (same `revoked_at`);
+re-pair (same id, new key) → upload 200 → admin DELETE → 401; re-pair → self-revoke
+→ 401. psql read-only: 3 `device_revoked` events (owner/admin/device), 2
+`admin_audit_log` rows (`already_revoked` true/false), `api_key IS NULL`,
+`alembic_version=015`. Anon DELETE 401, self-revoke without header 422.
+Changed: `docs/security.md` (A2 note, **S-21 CLOSED**), `docs/known-issues.md`
+(6.6b → CLOSED), `docs/api.md` (devices lifecycle + admin kill switch),
+`docs/database.md` (014/015 rows, `devices` table), `docs/roadmap.md` (rows
+**1.26**, 14.11, 3.25 — the boot said 1.25 but that row was already S-17, same
+collision as 1.24; branches keep `1.25`), `scripts/security/probe.py`
+(`check_s21_device_revoked`, `{device_id}` dummy sub), `fixtures.json`
+(`s21_revoked_device`: the one justified prod write — one revoked device of the
+test account, key stored without prefix, worthless by construction),
+`scripts/security/README.md`. Probe `--only s21` and `--only auth` both PASS live.
+Risk: pi-cam #11 and web #48 unmerged at time of writing — until the app build
+ships, existing phones still do local-only unlink (the *web* Revoke covers them
+once #48 is live). Downgrade of 015 deletes revoked rows (they have no key to
+restore). The test `pk_live_` key has admin role, which is how the admin path was
+exercised — nothing else changed. Side observation from the manager after this
+deploy (not this task): the api deploy reset `/opt/tetapi/api` to `hellfire:hellfire`
+again (S-19 regression — `rsync -az` as root preserves the runner's uid 1001 = hellfire
+on the box; `.env` stayed `root:root`) — tracked as 5.11 (`rsync --chown`), `deploy.yml`
+untouched here.
+Next: manager merges pi-cam #11 + web #48; owner EAS-builds the app; consider
+listing revoked devices (greyed) on `/profile` rather than hiding them, and a
+`revoked_at` filter on `GET /devices` if the list grows.
+
 ## 2026-09-20 · 5.10 devops · SH.OS SSH access ENABLED
 Done: turned on the gated last step of the co-tenant work (5.8 provisioned, 5.9
 closed S-18/19/20). SH.OS's `shos` account can now SSH in with the owner-supplied

@@ -43,6 +43,38 @@ code/config anchors:
   default-deny, only 22/80/443 reachable externally (8200/5432/6379/3001/3002/8000
   all filtered from off-box).
 
+## 🟡 `pull_top500.py`'s Glama pull now 401s (found 13.4, 2026-09-26)
+`glama.ai/api/mcp/v1/servers` returned `401 Unauthorized` on every page during
+a live run 2026-09-26 — it was working as of `13.2` (2026-08-21, "tested live
+against both"). The official-registry half still works fine (548 servers
+pulled live, merged dataset capped at the requested 500). Doesn't block GTM
+Phase 2: the merged dataset just loses Glama-only servers plus Glama's
+enrichment fields (`namespace`, `license`) on rows also in the official
+registry — 455/500 of the official-registry-only pull still have a usable
+public anchor (`domain` or `github_org`) per `13.4`'s live dry-run. Not
+investigated further (Glama may now require an API key, or changed the
+endpoint) — out of scope for `13.4` (different script); flag for whoever
+next touches `pull_top500.py`.
+
+## 🟠 FIX READY 2026-09-21 (15.5, api PR #31) — SSRF in `POST /verify-endpoint` (S-16), anonymously reachable via MCP
+Live SSRF/port-oracle: the route fetched a caller-supplied `endpoint_url` with
+**no** URL validation and `follow_redirects=True`
+(`api/app/api/routes/endpoint_verification.py` `_verify_active` L55-61,
+`_verify_consistency` L78-94, both `client.get(url, follow_redirects=True)`).
+`endpoint_url=http://127.0.0.1:8000/health` → `is_active:true`; `:1` → `false` —
+a loopback port scanner over the three-tenant droplet (tetapi :8000-8099,
+hellfire :8090/:5433, shos :8200-8299), redis/postgres on loopback, and DO
+metadata `169.254.169.254`. S-2's 2026-07-14 "fix" only added `get_current_user`
+(auth ≠ SSRF mitigation), and the MCP service-key wiring (mcp #9, 2026-09-12)
+made the tool anonymous again — see the `teta_verify_endpoint` CLOSED entry below,
+whose chosen option (a) re-opened this. **Fix (api PR #31, CI-green, awaiting
+merge+deploy):** new `app/core/ssrf.py::assert_safe_url` validates the URL before
+any fetch (http/https, no literal IPs, public-resolving host via `getaddrinfo`
+all A/AAAA, port 80/443), applied at `verify_endpoint` entry; both fetches now
+`follow_redirects=False`. `tests/test_ssrf_guard.py` (30 cases). Residual:
+DNS-rebinding (resolve≠fetch), documented in `docs/security.md` S-16. Auth kept
+(not reverted — that killed the MCP tool for 2mo).
+
 ## 🟡 `teta-pi/web` CI: `npm audit` red again (2026-09-12→18) — the 3.18 `sharp` pin (0.35.3) is now itself vulnerable
 Not investigated in depth this session (spotted while triaging inbox CI
 failure emails, `6 manager`-style read-only check). 3.18 (2026-08-06) fixed
@@ -219,9 +251,15 @@ at least call it with a stored device_id if local state is already gone),
 and add an "unlink"/"revoke" action next to each device row in whatever
 `/profile`/`/settings` UI now lists paired cameras (`GET /devices`,
 shipped 2026-09-11).
-Status: NEW, OPEN, HIGH — this is a real standing-credential exposure, not
-a UI polish issue; recommend treating it with similar urgency to the
-`/auth/agent-key` lockdown already in flight (api PR #23).
+Status: ✅ **CLOSED 2026-09-20** (`docs/security.md` S-21) — [api PR #29](https://github.com/teta-pi/api/pull/29)
+(1.25: migration 015 `devices.revoked_at` + nullable `api_key`; revocation erases the
+secret; `DELETE /devices/{id}` owner, `POST /devices/self-revoke` device,
+`DELETE /admin/devices/{id}` admin + audit; `GET /devices` shows `revoked_at`;
+`device_revoked` verification_event), [pi-cam PR #11](https://github.com/teta-pi/pi-cam/pull/11)
+(14.11: "Unlink" calls self-revoke first, honest "revoked on this phone only" when
+offline), [web PR #48](https://github.com/teta-pi/web/pull/48) (3.25: per-device
+Revoke on `/profile`). Live-verified on prod after deploy (see changelog) and
+guarded by `probe.py` `check_s21_device_revoked`. Previously: NEW, OPEN, HIGH.
 
 ### 🟠 `POST /admin/entities/bulk-preverify` returns broken `profile_url`/`opt_out_url` (wrong domain + no page behind the link)
 `api/app/api/routes/admin.py`'s bulk-preverify response builds both URLs on
@@ -258,6 +296,21 @@ is left anywhere in `app/`. **Still open as a frontend dependency:** the
 `/e/[slug]/opt-out` page in `teta-pi/web` does not exist (404) — tracked
 as 3.x, must call `POST /businesses/{id}/opt-out?token=` after resolving
 the slug via `GET /businesses/by-slug/{slug}/public`.
+**FULLY CLOSED 2026-09-26 (3.24, `teta-pi/web` PR #49 + `teta-pi/api` PR #32)**
+— the frontend half now exists: `src/app/e/[slug]/opt-out/page.tsx` resolves
+the slug via `by-slug/public`, then one button calls
+`POST /businesses/{id}/opt-out?token=…`. No form, no login (the `docs/gtm.md`
+guardrail). Every backend outcome gets its own honest text — missing token ·
+403 bad token · 400 not eligible · 404 · and `by-slug` 404 rendered as
+"already opted out or never there", which is the *expected* state on a second
+visit since opt-out sets `is_public=false`. It deliberately does **not** fire
+on page load: mail scanners and link previewers GET every URL in a message and
+would opt people out on the recipient's behalf — the click is the consent.
+api PR #32 adds `id` to the `by-slug/public` payload (the route is id-keyed
+and the link carries a slug; `/search` already returned `id`, so nothing new
+is exposed). Live-verified on prod end-to-end: temp `bulk-preverify` row →
+page → 403 on a wrong token → real 200 removal from the page's own button →
+`by-slug`/`/search`/`/badge` all 404 afterwards.
 
 ### 🟠 `/claim` wizard has no path to claim a pre-verified-unclaimed profile (1.11's frontend half doesn't exist)
 Backend (`1.11`, shipped since the last QA pass) correctly 409s
@@ -281,15 +334,31 @@ already exists and works on the backend.
 `claim_url`/`business_id` from the body, and route into a domain-ownership
 claim step (reuse the existing `/verify/domain/start`+`/check` UI — same
 underlying service, `domain_ownership.py`).
-Status: OPEN, HIGH — GTM Phase 2's core loop mechanic doesn't exist on the
-frontend yet, even though the backend is ready.
+Status: **CLOSED 2026-09-26 (3.24, `teta-pi/web` PR #49)** — `/claim` now
+special-cases the 409 (`preVerifiedConflictOf` reads `business_id`/`slug` off
+the structured detail; `api.ts` gained an `ApiError` carrying status+detail)
+and branches into a new step 5: *"A profile for X already exists"* → domain
+proof via `POST /{id}/claim/domain/start` + `/check` → `owner_id` transferred,
+`claim_status=claimed`, success screen reads "Profile claimed." instead of
+"You're live." The `/e/[slug]` CTA below was wired into the **same** screen
+(`/claim?claim=<slug>`, prefilled from the public payload) rather than built
+twice, as this entry asked. Shared `DomainProofPanel` extracts the
+domain→TXT→check pattern `/profile`'s Domain `MethodCard` has had since 3.13.
+Live-verified on prod up to the TXT-instruction screen (the DNS check itself
+can't pass without control of a real domain — the verified→success transition
+was exercised with a stubbed check; documented, not glossed).
 **Update 2026-09-12** (`teta-pi/web` PR #44): `/e/[slug]` now shows a
 "Is this you? Claim this profile" CTA on pre-verified-unclaimed profiles,
 but it's a placeholder (expands a "coming soon" note) — same root gap as
 this entry, not a fix for it. Whoever picks this up should wire both
 entry points (the `/claim` 409 case above, and this CTA) into the same
 real domain-ownership claim step in one pass rather than building it
-twice.
+twice. **Done that way 2026-09-26 (3.24, PR #49)**: the CTA is now a link to
+`/claim?claim=<slug>` — name/kind prefilled from this same public payload,
+landing on the step-5 claim screen the organic 409 reaches. The entity id the
+CTA needs comes from api PR #32's `id` field; against an older API the
+prefilled name reproduces the slug and the backend's own 409 supplies it, so
+the flow degrades instead of breaking.
 
 ### 🟠 `POST /auth/agent-key` — unauthenticated, unlimited, undocumented account+key mint, called by nothing
 `api/app/api/routes/auth.py:347-358` (`create_agent_key`) has no auth
@@ -490,6 +559,12 @@ skips the full 2.2 scoped-key system for now. **Live-verified**: a real
 verdict (`FAILED — endpoint did not respond`, for a non-agent test URL) —
 no more 401, no more `Not authenticated`.
 Status: CLOSED.
+**Follow-up (15.5, 2026-09-21):** option (a) made this route reachable by any
+anonymous MCP caller again — and it still had **no** SSRF host-validation (the
+line above saying "the SSRF fix's host-validation covers the core risk" was
+wrong; that validation never existed on this route until now). That is S-16;
+fixed in **api PR #31** with `app/core/ssrf.py::assert_safe_url` — see the
+top-of-file entry and `docs/security.md` S-16.
 
 ### 🟡 NEW — `teta_verify_entity`/`teta_get_proof`/`teta_get_profile`/`teta_verify_claim` proof links point at raw JSON, not the public page
 `teta_search`/`teta_resolve_intent` proof links correctly go to
@@ -2434,3 +2509,36 @@ Cloudflare / hellfire-zone concern (**not** TETA+PI infra, no boot written): to
 route the subdomain to our origin, set Flexible SSL for `shos.hellfiresol.com` (CF
 → origin `:80`) or add a `:443` origin cert + `listen 443` server for this host.
 Does not affect SSH access, which is fully enabled.
+
+## ✅ S-19 regressed on every deploy — `rsync -az` re-chowned `/opt/tetapi/api` to `hellfire` (5.11, 2026-09-21, FIXED)
+5.9 closed S-19 (`chown -R root:root /opt/tetapi/api`) and asserted "deploy.yml
+rsyncs as `root@` so ownership survives". That was wrong. The first post-5.9
+deploy (run `35539343701`, `1f5967c`, 2026-09-20) reverted the whole tree to
+`hellfire:hellfire 755` (181 non-root files; certs dir `755`). Cause: `rsync -az`
+implies `-o -g`, and running as **root** on the receiver rsync preserves the
+*source's numeric* uid/gid — the GitHub runner user `runner` is uid/gid **1001**,
+which on the droplet is co-tenant **hellfire**. `.env` was spared only because it
+is `--exclude`d (stayed `root:root 600`). **Fix (5.11):** both `rsync` steps in
+`teta-pi/api` `deploy.yml` now pass `--chown=root:root`, and "Migrate + restart"
+re-asserts `chmod 700 /opt/tetapi/api/certs` (rsync `-p` had carried the runner's
+`755` dir mode). rsync `3.2.7` on the droplet / `3.2.x` on ubuntu-latest both
+support `--chown` (needs ≥3.1.0). Verified after the 5.11 deploy: `find
+/opt/tetapi/api ! -user root | wc -l` → 0, `! -group root` → 0, certs `700
+root:root`, health 200, all services active, `cotenant_check.sh` S-19 assert
+green. `teta-pi/api` PR #30.
+
+## 🟠 `cotenant_check.sh` docker-socket assert is a false positive on rootless docker (found 5.11, 2026-09-21, out of scope)
+Discovered while verifying 5.11: `cotenant_check.sh` now exits 1 on
+`FAIL: shos can use the host docker socket (must NOT be in docker group)`, but
+this is a **false positive, not a breach**. `id shos` shows no docker group;
+`getent group docker` = `bob,hellfire` only; the host socket is `660 root:docker`
+and genuinely unreachable by shos. The assert does a bare `docker ps`, which for
+shos resolves to their **rootless** daemon at `unix:///run/user/1002/docker.sock`
+(context `rootless`, showing only SH.OS's own `shosho-staging-*` containers in
+shos's user namespace) — the intended, safe setup, no host root. The check should
+target the host socket specifically (e.g.
+`DOCKER_HOST=unix:///var/run/docker.sock docker ps`) or test docker-group
+membership directly, so rootless co-tenants don't trip it. **Out of 5.11 scope
+(devops/S-19) and belongs to the security session — reported to manager, no boot
+written, check logic left untouched.** The S-19 ownership assert in the same
+script is green.

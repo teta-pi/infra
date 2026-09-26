@@ -76,8 +76,20 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   entities, everything else 404s. `POST /businesses/{id}/blocks` honours
   `is_public` in the payload (default `true`) since 1.22 — before that every
   block was created public and could only be made private by a follow-up PATCH.
-- `routes/media.py` — `/media/upload` (JWT), `/media/device-upload` (api_key),
-  local storage under `UPLOAD_DIR`, served at `/media/local/{id}/{name}`.
+- `routes/media.py` — `/media/upload` (JWT), `/media/device-upload`
+  (`X-Device-Api-Key`, 401 once the device is revoked), local storage under
+  `UPLOAD_DIR`, served at `/media/local/{id}/{name}`.
+- `routes/media.py::devices_router` — Pi CAM pairing + lifecycle (`/devices`):
+  `POST /devices/generate-token` (owner, 15-min QR token), `POST /devices/register`
+  (device, token → `api_key`; a revoked fingerprint re-pairing gets a fresh key),
+  `GET /devices` (owner: `paired` + every device incl. revoked ones with
+  `revoked_at`, 14.5/1.25). **Revocation (1.25, S-21)** — the row is kept, the
+  secret erased (`api_key=NULL`, `is_active=false`, `revoked_at`), one
+  `device_revoked` verification_event (level 0, source `owner|device|admin`),
+  idempotent: `DELETE /devices/{device_id}` (owner; foreign/missing → 404),
+  `POST /devices/self-revoke` (auth = `X-Device-Api-Key`, so a device can only
+  kill itself — what the pi-cam "Unlink" button calls), and the admin kill
+  switch below.
 
 ## Search & intent
 - `routes/search.py` — `/search` keyword+level search over published entities.
@@ -85,7 +97,16 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   lookup (see `docs/registries.md`).
 - `routes/intent.py` — `POST /resolve-intent`: TWIRA-ranked (falls back to keyword
   when no embeddings), returns per-component breakdown + first_verified_at.
-- `routes/endpoint_verification.py` — `/verify-endpoint`.
+- `routes/endpoint_verification.py` — `POST /verify-endpoint` (auth: any active
+  account's `pk_live_`/JWT — incl. the MCP service key; 5/min/IP). Body
+  `{endpoint_url, entity_id?}`. Makes up to two server-side GETs of `endpoint_url`,
+  so it is SSRF-guarded (S-16, 15.5): **`endpoint_url` must be**
+  (a) `http`/`https`, (b) a **domain name — not a literal IP** (agent endpoints
+  are domain-based), (c) a host that resolves only to **public** addresses (no
+  private/loopback/link-local/reserved/metadata), (d) port **80 or 443**.
+  Anything else → **400**. Redirects are not followed (a 3xx counts as not-active).
+  Validation lives in `app/core/ssrf.py::assert_safe_url` — the shared guard any
+  future caller-supplied-URL route must use.
 
 ## Claims (waitlist) — `routes/claims.py`
 `POST /claim` (201 + position, 409 idempotent, rate-limit 5/min/IP),
@@ -122,7 +143,10 @@ mix, claim→verified funnel — see `docs/analytics.md`), `/admin/users`
 (GDPR), `POST /admin/users/{id}/anonymize`, `GET /admin/users/{id}/flags`
 (disposable email / dup registry_id / country mismatch), `POST
 /admin/entities/{id}/validate` (re-check registry → append-only event),
-`/admin/claims`, `/admin/entities`, `/admin/audit-log`.
+`/admin/claims`, `/admin/entities`, `/admin/audit-log`, `DELETE
+/admin/devices/{id}` (1.25 kill switch for a paired Pi CAM whose owner lost
+both the phone and account access — same effect as the owner's revoke, plus an
+`admin_audit_log` `devices.revoke` row on every call).
 
 `POST /admin/entities/bulk-preverify` (roadmap 1.11, GTM Phase 2 blocker) —
 body `{items: [{name, entity_type?, country?, description?, domain?,

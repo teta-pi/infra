@@ -120,6 +120,7 @@ def _dummy_for(path: str) -> str:
         "{user_id}": "00000000-0000-0000-0000-000000000000",
         "{entity_id}": "sec-probe-nonexistent",
         "{claim_id}": "00000000-0000-0000-0000-000000000000",
+        "{device_id}": "00000000-0000-0000-0000-000000000000",
         "{slug}": "sec-probe-nonexistent",
         "{file_id}": "sec-probe",
         "{filename}": "probe.txt",
@@ -547,6 +548,69 @@ def check_mcp(rep: Report) -> None:
             pass
 
 
+# ── S-21 — a revoked Pi CAM device key is dead (api 1.25) ─────────────────────
+def check_s21_device_revoked(rep: Report) -> None:
+    """Fixture: one device paired to the test account and then revoked via
+    DELETE /devices/{id} (the only prod write this net has ever justified —
+    done once, by hand, in the 1.25 PR; see README). The key is stored
+    without its `pk_live_` prefix so no secret scanner trips on a string that
+    is, by construction, worthless. Two asserts:
+      1. POST /media/device-upload with that key → 401 (never 2xx; never 422
+         either — 422 would mean the header was accepted and the body was the
+         problem, i.e. the key authenticated);
+      2. owner's GET /devices still lists the fixture device with
+         `revoked_at` set (proves the row is revoked, not re-paired/deleted —
+         if it's gone the check SKIPs honestly rather than PASSing on absence).
+    """
+    fx = _load_fixtures().get("s21_revoked_device")
+    if not fx:
+        rep.add("s21_device_revoked", SKIP, "no s21 fixture configured")
+        return
+    dev_id = fx["device_id"]
+    dead_key = "pk_live_" + fx["revoked_key_suffix"]
+    with _client() as c:
+        try:
+            r = c.post(f"{API}/api/v1/media/device-upload",
+                       headers={"X-Device-Api-Key": dead_key},
+                       files={"file": ("probe.txt", b"sec-probe", "text/plain")})
+        except Exception as e:  # noqa: BLE001
+            rep.add("s21_device_revoked", SKIP, f"request error: {e}")
+            return
+    if r.status_code != 401:
+        rep.add("s21_device_revoked", FAIL,
+                f"device-upload with the revoked key returned {r.status_code} (expected 401): "
+                f"{r.text[:120]!r}")
+        return
+
+    key = _api_key()
+    if not key:
+        rep.add("s21_device_revoked", PASS,
+                "revoked key → 401 on device-upload (row state unverified: no test key)")
+        return
+    with _client(key) as c:
+        try:
+            lst = c.get(f"{API}/api/v1/devices")
+        except Exception as e:  # noqa: BLE001
+            rep.add("s21_device_revoked", SKIP, f"request error on GET /devices: {e}")
+            return
+    if lst.status_code != 200:
+        rep.add("s21_device_revoked", SKIP, f"GET /devices → {lst.status_code}")
+        return
+    rows = {d.get("id"): d for d in lst.json().get("devices", [])}
+    row = rows.get(dev_id)
+    if row is None:
+        rep.add("s21_device_revoked", SKIP,
+                f"fixture device {dev_id} not in the test account's GET /devices "
+                "(deleted or re-homed) — re-create per README")
+    elif not row.get("revoked_at"):
+        rep.add("s21_device_revoked", FAIL,
+                f"fixture device {dev_id} has revoked_at=null — it was re-paired or the "
+                "revocation was lost; the 401 above is then only 'unknown key'")
+    else:
+        rep.add("s21_device_revoked", PASS,
+                f"revoked key → 401 on device-upload; GET /devices shows revoked_at={row['revoked_at']}")
+
+
 CHECKS = {
     "auth": check_auth_surface,
     "ssrf": check_ssrf,
@@ -554,6 +618,7 @@ CHECKS = {
     "s1": check_s1_traversal,
     "s8": check_s8_private_blocks,
     "private-entity": check_private_entity_exposure,
+    "s21": check_s21_device_revoked,
     "secrets": check_secrets,
     "headers": check_headers,
     "mcp": check_mcp,
