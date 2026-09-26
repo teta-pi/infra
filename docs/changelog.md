@@ -6,6 +6,45 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-26 · 13.4 gtm · outreach queue uses real pre-verification links
+Done: last technical step before the first real Phase-2 outreach message.
+`scripts/gtm/outreach_queue.py build` no longer invents
+`tetapi.dev/e/PLACEHOLDER-{id}` links — it calls the live
+`POST /admin/entities/bulk-preverify` (1.11) and takes real
+`profile_url`/`opt_out_url`/`badge_url` from `created[]` into the queue.
+Dataset rows map to API items via `domain` (parsed from the registry's
+`website`) / `github_org` (parsed from the `repo` URL); `npm_package` passed
+through for when the dataset gains it. Since this writes to prod, `build`
+defaults to `--dry-run` (shows what would be created, writes nothing) and
+only calls the API with `--create`; `skipped[]` (slug exists / no anchor)
+goes into the queue JSON, never silently dropped. `approve` now live-checks
+all three links return `200` (GET only — never the opt-out POST) before
+flipping status, catching a domain regression automatically instead of
+trusting links minted once. Added `optout` subcommand for cleaning up
+test/mistaken rows via the real endpoint. Updated the `gtm-drafts.md` §3
+template to name the page's "Pre-verified · Unclaimed" label, matching what
+1.11's frontend indicator (PR #44) actually shows.
+Changed: `scripts/gtm/outreach_queue.py`, `docs/gtm-drafts.md` §3,
+`scripts/gtm/README.md`, `docs/gtm.md`, `docs/roadmap.md` (new row 13.4).
+Risk: none to prod config; the script can now write real Business rows —
+`--dry-run` default + explicit `--create` + the ≤200/batch server cap are
+the guardrails. Full-dataset dry-run (500 official-registry rows; Glama pull
+now 401s, see known-issues.md) found 455/500 (91%) have a usable public
+anchor and are one `--create` away from real profiles; 45/500 permanently
+lack one. Did not run `--create` against the full 500 — deliberately left
+to the owner (guardrail: legitimacy before outreach; creating ~455 live
+profiles is a one-way action, not a side effect of this task). Live-tested
+end-to-end: `--dry-run` on 3 real rows, `--create` on 1 real row (all 3
+links confirmed live 200), `approve` passed, then correctly refused after
+cleanup (badge 404s post-opt-out), test row removed via `optout`.
+Next: owner decides when to run `--create` for real (full or partial batch)
+and starts sending approved items per docs/gtm.md Phase 2 guardrails
+(one message per author, no follow-up). Separately, `pull_top500.py`'s
+Glama pull now 401s — was working as of 13.2 (2026-08-21), reduces dataset
+coverage/enrichment but doesn't block Phase 2 (official registry alone is
+enough); flagged in known-issues.md, not fixed here (different script, out
+of this session's scope).
+
 ## 2026-09-26 · 3.24 frontend · claim-409 branch + opt-out page
 Done: closed the last two frontend gaps blocking GTM Phase 2 outreach
 (`known-issues.md` §6.6, both marked CLOSED). **(1)** `/claim` recognises the

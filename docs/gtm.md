@@ -209,10 +209,14 @@ broken claim form kills the loop at step 2.** Claim flow shipped in
   rest of `routes/admin.py`) rather than a script hitting the normal
   entity-creation API 500 times — the resulting profiles need a distinct
   `claim_status=pre_verified_unclaimed` flag the normal creation path
-  doesn't set, so a thin wrapper script would've had nothing to wrap. Not
-  live-verified yet — see `docs/known-issues.md` "1.11 bulk pre-verification
-  import" and `docs/roadmap.md` row 1.11 for what's still open before real
-  outreach starts.
+  doesn't set, so a thin wrapper script would've had nothing to wrap.
+  **Live-verified 2026-09-11** (hotfixed same day, `VARCHAR(20)` too short
+  for `pre_verified_unclaimed` — see `docs/known-issues.md`), frontend
+  "Pre-verified · Unclaimed" indicator shipped 2026-09-12. `scripts/gtm/
+  outreach_queue.py` wired to call this endpoint for real links as of
+  **`13.4`** (2026-09-26) — see that row in `docs/roadmap.md` for what's
+  actually ready to send: 455/500 of the current top-500 pull have a usable
+  public anchor.
 - Step 2 (outreach) — **owner: Bob**, one message per author, using the
   guardrail language above verbatim. Not automatable without owner review
   of every message (this is exactly the kind of "acting on the plan"

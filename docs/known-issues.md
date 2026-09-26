@@ -3,6 +3,19 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 `pull_top500.py`'s Glama pull now 401s (found 13.4, 2026-09-26)
+`glama.ai/api/mcp/v1/servers` returned `401 Unauthorized` on every page during
+a live run 2026-09-26 — it was working as of `13.2` (2026-08-21, "tested live
+against both"). The official-registry half still works fine (548 servers
+pulled live, merged dataset capped at the requested 500). Doesn't block GTM
+Phase 2: the merged dataset just loses Glama-only servers plus Glama's
+enrichment fields (`namespace`, `license`) on rows also in the official
+registry — 455/500 of the official-registry-only pull still have a usable
+public anchor (`domain` or `github_org`) per `13.4`'s live dry-run. Not
+investigated further (Glama may now require an API key, or changed the
+endpoint) — out of scope for `13.4` (different script); flag for whoever
+next touches `pull_top500.py`.
+
 ## 🟠 FIX READY 2026-09-21 (15.5, api PR #31) — SSRF in `POST /verify-endpoint` (S-16), anonymously reachable via MCP
 Live SSRF/port-oracle: the route fetched a caller-supplied `endpoint_url` with
 **no** URL validation and `follow_redirects=True`
