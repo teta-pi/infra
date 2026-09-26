@@ -16,7 +16,7 @@ code/config anchors:
   — `-a` (=`-ogtpr…`) preserves the runner checkout's uid **1001**, which is
   `hellfire` on the droplet. Fix: `--chown=root:root` / `--no-owner --no-group` on
   both rsyncs + a one-time `chown -R root:root /opt/tetapi/api; chmod 700 certs`.
-- **S-21 (🔴):** `getent group docker` = `bob,hellfire`; hellfire ∈ docker == root
+- **S-24 (🔴):** `getent group docker` = `bob,hellfire`; hellfire ∈ docker == root
   over the host (`/var/run/docker.sock` is `root:docker`). Fix: rootless docker for
   hellfire (as shos) + remove from group. shos is correctly NOT in docker and runs
   rootless (`shosho-staging-web` on `127.0.0.1:8200`).
