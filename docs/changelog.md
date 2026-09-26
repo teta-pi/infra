@@ -6,6 +6,41 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-26 · 3.24 frontend · claim-409 branch + opt-out page
+Done: closed the last two frontend gaps blocking GTM Phase 2 outreach
+(`known-issues.md` §6.6, both marked CLOSED). **(1)** `/claim` recognises the
+409 `POST /businesses` returns when a slug belongs to a
+`pre_verified_unclaimed` row and branches into a real domain-ownership claim
+(`/claim/domain/start` + `/check` → `owner_id` transferred,
+`claim_status=claimed`) instead of the old generic "Could not save your
+profile". **(2)** New `/e/[slug]/opt-out?token=…` page — the route behind
+every outreach message's `opt_out_url` since 1.23, which until now 404'd:
+resolves the slug via `by-slug/public`, one button, no form, no login, and an
+honest text for each backend outcome (403 · 400 · 404 · already-opted-out).
+It does not fire on load, on purpose — mail scanners GET every link in a
+message, and would opt people out on the recipient's behalf. **(3)**
+`/e/[slug]`'s "Is this you? Claim this profile" CTA stopped being a "coming
+soon" note: it links to `/claim?claim=<slug>` and lands on the same claim
+screen, so both entry points share one UI rather than two.
+Changed: `teta-pi/web` PR #49 — `src/app/claim/page.tsx` (step 5 + 409 branch
++ `?claim=` prefill), `src/app/e/[slug]/opt-out/page.tsx` (new),
+`src/app/e/[slug]/page.tsx` (CTA), `src/components/DomainProofPanel.tsx` (new,
+extracts /profile's domain→TXT→check pattern with the route injected),
+`src/lib/api.ts` (`ApiError` with status+detail, `claimFlowApi`),
+`src/stores/useOnboardingStore.ts`. `teta-pi/api` PR #32 — one field: `id` on
+`by-slug/public` (the opt-out route is id-keyed, the link carries a slug;
+`/search` already returned `id`, so nothing new is exposed).
+Risk: the two PRs are coupled — until api #32 deploys, the opt-out page can't
+resolve an id and says so explicitly rather than failing silently (the claim
+flow is unaffected). The claim's DNS check could only be verified live up to
+the TXT-instruction screen — no test domain exists to complete a real check,
+so the verified→success transition was exercised with a stub.
+Next: merge api #32 first, then web #49, re-verify on prod. After that
+`scripts/gtm/outreach_queue.py` can drop `links_are_placeholders` — both links
+it builds now lead to real pages (small infra boot; the script still mints its
+own `tetapi.dev/e/PLACEHOLDER-*` URLs and must switch to the real
+`profile_url`/`opt_out_url` `bulk-preverify` returns).
+
 ## 2026-09-21 · 15.5 security · /verify-endpoint SSRF fixed (S-16) — FIX READY, awaiting merge
 Done: closed the live SSRF/port-oracle in `POST /verify-endpoint` (S-16) —
 reachable **anonymously** through the MCP `teta_verify_endpoint` tool since the

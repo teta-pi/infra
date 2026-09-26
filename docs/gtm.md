@@ -171,6 +171,20 @@ load** — doesn't touch `api.tetapi.dev` or the server at all.
 broken claim form kills the loop at step 2.** Claim flow shipped in
 `3.4`/`1.3` — dependency is already satisfied.
 
+- [x] **Claim flow live for *pre-verified* profiles** — 2026-09-26, `3.24`
+      (`teta-pi/web` PR #49 + `teta-pi/api` PR #32). The self-registration
+      wizard was never the gap; the outreach-specific path was: `/claim`
+      swallowed the 409 that `POST /businesses` returns for an imported slug,
+      so the only claim route a recipient of an outreach message can take
+      dead-ended in a generic error. Now it branches into a real
+      domain-ownership claim (`/claim/domain/start`+`/check`), reachable both
+      organically and from `/e/[slug]`'s "Is this you?" CTA.
+- [x] **Instant opt-out live** — same PR. `opt_out_url` in every outreach
+      message (`app.tetapi.dev/e/{slug}/opt-out?token=…`, minted since `1.23`)
+      now has a real page: one click, no form, no login, honest text for every
+      outcome. This was the *"instant opt-out/removal"* guardrail below being
+      quietly unmet — the link 404'd from the day it started being generated.
+
 | Step | Action |
 |---|---|
 | 1 | From the Phase-1 dataset, create pre-verified L1 profiles for top-500 MCP servers: public data only (GitHub org, domain, npm package). |
@@ -295,7 +309,7 @@ today.
 | Badge SVG endpoint + counter | Mykhailo | **`1.10`** (new) | — |
 | `llms.txt` + tool description rewrite | Bob + Mykhailo | `10.2` (llms.txt) + `2.5` (tool descriptions) | — |
 | Top-500 dataset script | Mykhailo | **`13.3`** (new) | — |
-| Claim outreach (Phase 2) | Bob | Bob, guardrails verbatim above | Phase 0 complete + claim flow live (already true) |
+| Claim outreach (Phase 2) | Bob | Bob, guardrails verbatim above | Phase 0 complete + claim flow live (the *pre-verified* claim path and the opt-out page landed 2026-09-26, `3.24` — see Phase 2 above; Phase 0 is still the open half) |
 | Show HN + Discord post | Bob | Bob; `13.2` drafts copy only | Listings live |
 
 ---

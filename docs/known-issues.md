@@ -243,6 +243,21 @@ is left anywhere in `app/`. **Still open as a frontend dependency:** the
 `/e/[slug]/opt-out` page in `teta-pi/web` does not exist (404) — tracked
 as 3.x, must call `POST /businesses/{id}/opt-out?token=` after resolving
 the slug via `GET /businesses/by-slug/{slug}/public`.
+**FULLY CLOSED 2026-09-26 (3.24, `teta-pi/web` PR #49 + `teta-pi/api` PR #32)**
+— the frontend half now exists: `src/app/e/[slug]/opt-out/page.tsx` resolves
+the slug via `by-slug/public`, then one button calls
+`POST /businesses/{id}/opt-out?token=…`. No form, no login (the `docs/gtm.md`
+guardrail). Every backend outcome gets its own honest text — missing token ·
+403 bad token · 400 not eligible · 404 · and `by-slug` 404 rendered as
+"already opted out or never there", which is the *expected* state on a second
+visit since opt-out sets `is_public=false`. It deliberately does **not** fire
+on page load: mail scanners and link previewers GET every URL in a message and
+would opt people out on the recipient's behalf — the click is the consent.
+api PR #32 adds `id` to the `by-slug/public` payload (the route is id-keyed
+and the link carries a slug; `/search` already returned `id`, so nothing new
+is exposed). Live-verified on prod end-to-end: temp `bulk-preverify` row →
+page → 403 on a wrong token → real 200 removal from the page's own button →
+`by-slug`/`/search`/`/badge` all 404 afterwards.
 
 ### 🟠 `/claim` wizard has no path to claim a pre-verified-unclaimed profile (1.11's frontend half doesn't exist)
 Backend (`1.11`, shipped since the last QA pass) correctly 409s
@@ -266,15 +281,31 @@ already exists and works on the backend.
 `claim_url`/`business_id` from the body, and route into a domain-ownership
 claim step (reuse the existing `/verify/domain/start`+`/check` UI — same
 underlying service, `domain_ownership.py`).
-Status: OPEN, HIGH — GTM Phase 2's core loop mechanic doesn't exist on the
-frontend yet, even though the backend is ready.
+Status: **CLOSED 2026-09-26 (3.24, `teta-pi/web` PR #49)** — `/claim` now
+special-cases the 409 (`preVerifiedConflictOf` reads `business_id`/`slug` off
+the structured detail; `api.ts` gained an `ApiError` carrying status+detail)
+and branches into a new step 5: *"A profile for X already exists"* → domain
+proof via `POST /{id}/claim/domain/start` + `/check` → `owner_id` transferred,
+`claim_status=claimed`, success screen reads "Profile claimed." instead of
+"You're live." The `/e/[slug]` CTA below was wired into the **same** screen
+(`/claim?claim=<slug>`, prefilled from the public payload) rather than built
+twice, as this entry asked. Shared `DomainProofPanel` extracts the
+domain→TXT→check pattern `/profile`'s Domain `MethodCard` has had since 3.13.
+Live-verified on prod up to the TXT-instruction screen (the DNS check itself
+can't pass without control of a real domain — the verified→success transition
+was exercised with a stubbed check; documented, not glossed).
 **Update 2026-09-12** (`teta-pi/web` PR #44): `/e/[slug]` now shows a
 "Is this you? Claim this profile" CTA on pre-verified-unclaimed profiles,
 but it's a placeholder (expands a "coming soon" note) — same root gap as
 this entry, not a fix for it. Whoever picks this up should wire both
 entry points (the `/claim` 409 case above, and this CTA) into the same
 real domain-ownership claim step in one pass rather than building it
-twice.
+twice. **Done that way 2026-09-26 (3.24, PR #49)**: the CTA is now a link to
+`/claim?claim=<slug>` — name/kind prefilled from this same public payload,
+landing on the step-5 claim screen the organic 409 reaches. The entity id the
+CTA needs comes from api PR #32's `id` field; against an older API the
+prefilled name reproduces the slug and the backend's own 409 supplies it, so
+the flow degrades instead of breaking.
 
 ### 🟠 `POST /auth/agent-key` — unauthenticated, unlimited, undocumented account+key mint, called by nothing
 `api/app/api/routes/auth.py:347-358` (`create_agent_key`) has no auth
