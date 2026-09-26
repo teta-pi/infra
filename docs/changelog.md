@@ -6,6 +6,72 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-26 · 5.12 devops · SH.OS back-office vhost (`bo.shos.hellfiresol.com`) + basic-auth gate
+Done: second co-tenant vhost for SH.OS, requested by their S1 DevOps (2026-09-26) and
+approved by the manager: `bo.shos.hellfiresol.com` → `http://127.0.0.1:8202` (their staff
+back-office). Pre-checked before touching nginx: 8202 listens on `127.0.0.1` only
+(alongside 8200/8201), inside the allotted 8200–8299, rootless docker under `shos`; ufw
+exposes only 22/80/443.
+
+Copy of the 5.10 pattern (`listen 80`, `snippets/security-headers.conf`,
+`proxy_read_timeout 60s`). **No `:80` → `https` redirect**, deliberately: this zone
+terminates TLS at Cloudflare and CF fetches the origin over `:80`, so an origin-side
+redirect would loop. HTTPS enforcement stays a Cloudflare setting ("Always Use HTTPS",
+owner action).
+
+Gated in the same change, per SH.OS's own request — a staff back-office must not be
+publicly reachable ungated while their Cloudflare Access isn't in front of it yet:
+`auth_basic "SHOSHO back-office (staging)"` + `auth_basic_user_file` declared in
+`server{}`; the single `location /` sets no `auth_basic`, so it inherits (the same
+inheritance trap 5.6 hit with `add_header`). `apache2-utils` is **not** on the box and was
+deliberately not installed — the bcrypt `$2b$` hash came from the system `crypt`
+(libxcrypt `METHOD_BLOWFISH`), which is what `htpasswd -B` would produce and nginx 1.24
+verifies via `crypt_r()`; the live 200 below is the proof it verifies. Password generated
+**on the server** (`openssl rand -base64 24`), never written to a server file, never
+committed, never printed into a session — piped straight into the **owner's**
+`~/.tetapi/shos-bo-basicauth` (`600`), format `bo.shos.hellfiresol.com  shos-bo  <password>`.
+`nginx -t` green → `systemctl reload nginx` (reload, not restart).
+
+Verified against the origin with a `Host` header (DNS for `bo.` does not exist yet):
+anonymous → **401** with `WWW-Authenticate: Basic realm="SHOSHO back-office (staging)"` and
+all four security headers; `-u shos-bo:<pw>` on `/login` → **200** (proves the proxy reaches
+:8202); authed `/` → 307 (their own redirect); wrong password and anonymous `/login` → 401.
+No collateral: `shos.hellfiresol.com`, `app`/`api`/`mcp`/`tetapi.dev`, `hellfiresol.com`,
+`stats` all match their pre-change baseline (200/200/200/404/200/301/303), api `/health`,
+app and landing 200 over HTTPS, and an unknown `Host` still falls through to
+`api.tetapi.dev` — the new vhost is name-based and did not become the default server.
+8202 (and 8200/8201) still loopback-only; ufw unchanged.
+
+Also corrected a stale 5.10 statement while verifying: public
+`https://shos.hellfiresol.com` **now** serves SH.OS's app through our `:80` vhost (the
+CF-fronted response carries our own `security-headers.conf` set), so the "CF serves the
+hellfire apex" caveat in `docs/deployment.md` no longer holds and was rewritten.
+
+Changed: `deploy/nginx/bo.shos.hellfiresol.com.conf` (new); `docs/deployment.md`
+(co-tenant section — new vhost subsection, gate rationale + rotation, verification table,
+owner actions; two stale CF-routing paragraphs corrected); `docs/security.md` B6 (new
+publicly-routable co-tenant surface + its gate, and why basic auth is a stopgap, not
+identity); `docs/roadmap.md` 5.12. Prod: `/etc/nginx/sites-available/bo.shos.hellfiresol.com`
++ sites-enabled symlink, `/etc/nginx/.htpasswd-shos-bo` (`640 root:www-data`).
+
+Risk: low, additive. The vhost is name-based, so nothing else can be routed to it; it opens
+no new port (proxy target is loopback, already listening) and ufw is untouched. Worst cases:
+(a) the shared basic-auth secret leaks — it is one password for all SH.OS staff, not
+identity, unrate-limited, and only as private as the CF↔origin hop, which is why it is
+explicitly a stopgap until CF Access; (b) if `/etc/nginx/.htpasswd-shos-bo` is ever removed
+without removing the vhost, the host answers 500 instead of failing open — acceptable
+(fails closed), but the file is prod-only state that no deploy recreates: rotating or
+restoring it means re-running the documented block. The owner's creds file is the single
+copy of the password; losing it means rotating, not recovering.
+
+Next: owner does the two Cloudflare/DNS actions (A record `bo.shos.hellfiresol.com` →
+`164.90.235.66`, **proxied**; "Always Use HTTPS" for the zone) and hands
+`~/.tetapi/shos-bo-basicauth` to SH.OS; re-check the host publicly over HTTPS once DNS is
+live. The gate is lifted only on a separate SH.OS request, after their Cloudflare Access is
+in front of the host.
+
+---
+
 ## 2026-09-20 · 15.7 security · co-tenancy re-audit (read-only + on-box)
 Done: authorized read-only re-audit of the now-3-tenant droplet (bob/hellfire/shos),
 first full co-tenancy pass since 15.3. No prod writes, no exploitation (dir 15 RoE).
