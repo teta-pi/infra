@@ -118,11 +118,11 @@ already published) and created a pre-verified profile:
 
   [link to profile]
 
-This is not us claiming to have registered you or speak for you — it's a
-snapshot of what's already public, timestamped and attested. Claiming the
-profile is free and takes under a minute; once claimed you get a verified
-badge for your README and basic analytics on which agents are checking
-you out.
+The page is labeled "Pre-verified · Unclaimed" — we're not claiming to
+have verified or registered you, just attesting what's already public,
+timestamped. Claiming the profile is free and takes under a minute; once
+claimed you get a verified badge for your README and basic analytics on
+which agents are checking you out.
 
 If you'd rather this didn't exist, one click removes it — no form, no
 waiting: [instant opt-out/removal link].
