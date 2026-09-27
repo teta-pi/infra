@@ -36,6 +36,12 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   - `POST /{id}/verify/domain/start` + `/check` — Domain Ownership: DNS TXT
     (via DNS-over-HTTPS, no resolver dependency) or a `.well-known` file
     token, same mechanism as the WordPress plugin. Writes `domain_verified`.
+    The submitted domain is normalized (`normalize_domain`, see the claim
+    routes below) before the token is keyed, so `https://WWW.Example.com:443/`
+    and `example.com.` are the same domain and the instructions always name
+    the canonical host. Unlike the claim routes this is **not** anchor-bound —
+    the caller already owns the entity; see `security.md` S-22/§5.2 for why
+    that is a deliberate deferral and what the real fix needs.
   - Document upload: **not implemented** — UI-only "Coming soon" is 3.4's job.
   - `POST` / `DELETE /{id}/legal-entity` — link/unlink a brand to a verified
     legal entity (`businesses.legal_entity_id`); requires the caller to own
@@ -46,7 +52,16 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
     see `/admin/entities/bulk-preverify` below): no owner check (the current
     owner is the system import account), gated on `claim_status` instead;
     reuses the same `domain_ownership` service as the normal
-    `/verify/domain/*` flow. On success transfers `owner_id` to the caller,
+    `/verify/domain/*` flow. **The claimed domain must equal the entity's
+    anchor** (`pre_verified_source.domain`, recorded at import) — since 1.27
+    (`security.md` S-22) both routes `403` when it doesn't, naming the anchor,
+    and `403` when the entity has no domain anchor at all (imported from a
+    `github_org`/`npm_package` only — a github-based proof path is a separate
+    task). Comparison is on the normalized host
+    (`domain_ownership.normalize_domain`: scheme, userinfo, port, path, `www.`,
+    trailing root dot and case removed, IDN folded to punycode) and is
+    **exact** — a subdomain of the anchor is not accepted, in either
+    direction. On success transfers `owner_id` to the caller,
     sets `claim_status=claimed`, writes `domain_verified` + `claimed`
     verification_events. `POST /businesses` itself 409s (with the existing
     entity's id/slug) instead of creating a duplicate when the slug already

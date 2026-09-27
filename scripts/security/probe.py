@@ -611,6 +611,61 @@ def check_s21_device_revoked(rep: Report) -> None:
                 f"revoked key → 401 on device-upload; GET /devices shows revoked_at={row['revoked_at']}")
 
 
+# ── S-22 — a claim must prove the entity's own anchor (api 1.27) ──────────────
+def check_s22_claim_anchor(rep: Report) -> None:
+    """Fixture: one permanent `pre_verified_unclaimed` entity of the test
+    account whose anchor is `example-anchor.test` — an RFC 6761 reserved TLD,
+    so the row is **unclaimable by construction** (nobody can ever hold the
+    DNS for it), the same "worthless by design" trick as the S-21 key.
+
+    Assert: `POST /claim/domain/check` with a *foreign* domain → 403. That is
+    the exploit request itself, and it stays read-only in both outcomes:
+      - fixed  → 403 before anything is touched;
+      - broken → 200 `{"verified": false}` (no verification token exists for
+        that domain, so no ownership can transfer) — a FAIL we can see without
+        ever completing a takeover.
+    `/claim/domain/start` is deliberately *not* probed: a regressed `start`
+    would mint a Redis token, i.e. a write (§ Rules of engagement).
+    """
+    fx = _load_fixtures().get("s22_claim_anchor")
+    if not fx:
+        rep.add("s22_claim_anchor", SKIP, "no s22 fixture configured")
+        return
+    key = _api_key()
+    if not key:
+        rep.add("s22_claim_anchor", SKIP, "no test API key (the claim route requires auth)")
+        return
+    ent = fx["entity_id"]
+    with _client(key) as c:
+        try:
+            r = c.post(f"{API}/api/v1/businesses/{ent}/claim/domain/check",
+                       json={"domain": fx["foreign_domain"]})
+        except Exception as e:  # noqa: BLE001
+            rep.add("s22_claim_anchor", SKIP, f"request error: {e}")
+            return
+    if r.status_code == 403:
+        rep.add("s22_claim_anchor", PASS,
+                f"claim/domain/check with a non-anchor domain → 403 "
+                f"(anchor={fx['anchor_domain']}): {r.json().get('detail', '')[:80]!r}")
+        return
+    if r.status_code == 400:
+        # claim_status gate answered first — the fixture stopped being
+        # pre_verified_unclaimed (claimed or opted out), so this run proves
+        # nothing about the anchor check.
+        rep.add("s22_claim_anchor", SKIP,
+                f"fixture {ent} is no longer pre_verified_unclaimed ({r.text[:120]!r}) — "
+                "re-create per README")
+        return
+    if r.status_code == 404:
+        rep.add("s22_claim_anchor", SKIP, f"fixture entity {ent} is gone — re-create per README")
+        return
+    rep.add("s22_claim_anchor", FAIL,
+            f"claim/domain/check with a non-anchor domain returned {r.status_code} "
+            f"(expected 403) — S-22 regressed: the claim flow no longer binds the proven "
+            f"domain to the entity's anchor, so any signed-up user can take over any "
+            f"pre-verified profile. Body: {r.text[:160]!r}")
+
+
 CHECKS = {
     "auth": check_auth_surface,
     "ssrf": check_ssrf,
@@ -619,6 +674,7 @@ CHECKS = {
     "s8": check_s8_private_blocks,
     "private-entity": check_private_entity_exposure,
     "s21": check_s21_device_revoked,
+    "s22": check_s22_claim_anchor,
     "secrets": check_secrets,
     "headers": check_headers,
     "mcp": check_mcp,
