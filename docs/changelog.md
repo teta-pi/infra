@@ -6,6 +6,66 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-30 · 5.15 devops · origin TLS (S-25) — CSRs generated, blocked on owner CF action
+Done: picked up S-25 (Cloudflare↔origin hop is cleartext/Flexible SSL, **and** origin
+`:443` has no per-host vhost at all — the only `:443` block on the box is the `hellfire`
+co-tenant's own Certbot vhost, so it silently answers *any* SNI, ours included; confirmed
+live 2026-09-30, `curl -k --resolve <host>:443:164.90.235.66 https://<host>/` for
+app/api/mcp/stats.tetapi.dev all return the ~30970-byte hellfire apex under
+`CN=hellfiresol.com`). Fix order is mandatory (certs → `:443` vhosts → default-SNI-reject
+→ verify from origin → only then flip CF to Full-strict), and step 1 — Cloudflare Origin
+CA certificate issuance — is dashboard-only; this session had SSH/sudo on the droplet but
+no Cloudflare credentials. Rather than wait idle, generated both zones' private keys
+**and** CSRs on the server itself (`openssl req -new -newkey rsa:2048 -nodes`, `-nodes`
+key never leaves `/etc/ssl/private/`, `600 root:root`): `tetapi.dev` zone
+(`CN=tetapi.dev`, SAN `tetapi.dev,*.tetapi.dev` — covers app/api/mcp/stats/www/apex in
+one cert) and `hellfiresol.com` zone scoped to just `shos.hellfiresol.com` +
+`bo.shos.hellfiresol.com` (explicit SANs, **not** a zone wildcard — the hellfire
+apex/www vhost stays untouched on its own Let's Encrypt cert). Verified both CSRs'
+subject/SAN with `openssl req -noout -subject -text` before handing them to the owner.
+
+Also shipped the regression test **ahead of** the fix (read-only, safe to merge now):
+`scripts/security/probe.py::check_origin_tls_identity` (`--only origin-tls`) dials the
+origin IP directly per our-own hostname's SNI (bypassing Cloudflare on purpose — that's
+the untrusted hop) and compares the served leaf cert's CN/SAN (via the `openssl` CLI, no
+new Python dependency) against the expected hostname — deliberately **not** a response
+body-size comparison, which the check's own docstring argues against: a byte count is an
+implementation detail of someone else's site, not an identity proof. Ran it live against
+prod: **RED for all 5 hosts** (app/api/mcp/stats.tetapi.dev, tetapi.dev apex), each
+showing `CN=hellfiresol.com` — independently reconfirms the finding, not just SH.OS's
+report. Expected to flip PASS once the `:443` vhosts + default-reject land.
+
+Changed: `docs/security.md` (new §5 **S-25** row + rewrote the §6.3 CF-SSL-mode residual
+note to point at it), `docs/deployment.md` (new "Origin TLS (Cloudflare Origin CA)" runbook
+section: the 6-step fix order + a "CSR handoff" subsection with the exact commands run and
+the owner's next action), `docs/known-issues.md` (new S-25 entry), `docs/roadmap.md` (new
+5.15 row + a "Blocked — waiting on keys/DNS" row), `scripts/security/probe.py`
+(`check_origin_tls_identity`, registered as `origin-tls`), `scripts/security/README.md`
+(checks table + local-run note). Prod: `/etc/ssl/private/{tetapi.dev,
+shos.hellfiresol.com}.origin.key` (new, `600 root:root`, never synced/committed),
+`/root/{tetapi.dev,shos.hellfiresol.com}.origin.csr` (new, `600 root:root`, public CSR
+text handed to the owner in-session). **No nginx or Cloudflare change made** — `:80`
+vhosts, `:443` (hellfire's only), and every public URL are byte-for-byte unchanged.
+
+Risk: none from this session's actual changes (key generation + docs + a read-only probe
+check are the only things that touched prod, and the check makes zero write requests).
+The **live** risk is S-25 itself, unchanged by this session: the CF→origin hop stays
+cleartext and origin `:443` stays SNI-promiscuous until the fix ships. The one operational
+hazard to flag forward: **do not** flip any tetapi.dev/hellfiresol.com CF zone to
+Full/Full-strict before the `:443` vhosts + default-reject are live and verified — doing
+so today would make Cloudflare trust the hellfire vhost's content under our own hostnames.
+
+Next: owner pastes the two CSRs into Cloudflare (SSL/TLS → Origin Server → Create
+Certificate → "use my own CSR", per-zone, exact steps in `deployment.md`) and hands back
+the two signed PEMs. Next devops session then: drops the certs at
+`/etc/ssl/certs/*.origin.pem`, writes the five `:443` server blocks (app/api/mcp/stats,
+shos+bo.shos) with the shared security-headers snippet included in each, adds the
+`default_server { ssl_reject_handshake on; }` catch-all without touching HF's own vhost
+file, `nginx -t` → reload, verifies every host from the origin directly (own content,
+own-named cert; unknown SNI hard-fails), re-runs `probe.py --only origin-tls` (expect
+PASS), and only then — as a separate owner-approved step, after SH.OS verifies their two
+hosts externally — flips the CF zones to Full(-strict).
+
 ## 2026-09-26 · 5.12 devops · SH.OS back-office vhost (`bo.shos.hellfiresol.com`) + basic-auth gate
 Done: second co-tenant vhost for SH.OS, requested by their S1 DevOps (2026-09-26) and
 approved by the manager: `bo.shos.hellfiresol.com` → `http://127.0.0.1:8202` (their staff

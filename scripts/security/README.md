@@ -41,6 +41,11 @@ python3 scripts/security/probe.py --include-heavy
 Needs Python 3.12 + `httpx` (the only non-stdlib dep, mirroring
 `scripts/gtm/pull_top500.py`). On macOS with a python.org install you may need
 `SSL_CERT_FILE=$(python3 -m certifi) …` (same note as `scripts/gtm/README.md`).
+The `origin-tls` check additionally shells out to the `openssl` CLI (present
+by default on GitHub's `ubuntu-latest` runners and any dev machine) rather
+than adding a certificate-parsing library — SKIPs, doesn't fail, if it's
+missing. Origin IP defaults to `164.90.235.66`, override with
+`SEC_PROBE_ORIGIN_IP`.
 
 Exit code is `1` if any check **FAIL**s (drives the workflow red), `0`
 otherwise. **SKIP never fails the run** — it means "could not assert honestly"
@@ -68,6 +73,7 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 | `secrets` | `/.env`, `/.git/config`, `/api/certs/` unreachable; no `pk_live_` in openapi; flags `/docs`+`/redoc` as an owner question | secrets §4 |
 | `headers` | HSTS + nosniff + frame-options on all four hosts (fix is devops, §6.3) | headers §4 |
 | `mcp` | `teta_search` works anon (by design); `teta_verify_endpoint` won't fetch loopback | S-11/S-16 |
+| `origin-tls` | dials the origin IP directly (bypassing Cloudflare) per our-own hostname's SNI and compares the served cert's CN/SAN to that hostname, not response body size — a byte match is someone else's site's implementation detail, not identity | S-25 (honestly RED until the `:443` vhosts + default-reject land) |
 | `rate_limit` | `verify-endpoint` 5/min limiter trips (default); badge/tag-ping under `--include-heavy` | rate-limiting §4 |
 
 ## On-box co-tenant asserts (S-18 / S-19 / S-20) live in `cotenant_check.sh`, not here

@@ -141,6 +141,102 @@ Start value is `max-age=86400` (1 day), **no** `includeSubDomains`, **no**
    browser-baked, effectively irreversible commitment (submits the apex to the
    HSTS preload list). Not planned.
 
+## Origin TLS (Cloudflare Origin CA) — S-25, in progress since 2026-09-30
+
+`docs/security.md` S-25: Cloudflare reaches this origin over plain `:80`
+(Flexible SSL) — the CF→origin hop is cleartext on the public internet — and
+origin `:443` has no per-host vhost at all, so it silently falls through to
+the `hellfire` co-tenant's own Certbot vhost for **any** SNI, ours included.
+Fix order is mandatory (§5 S-25 has the full reasoning) and this repo/session
+is currently stopped at step 1:
+
+1. **Cloudflare Origin CA certs, one per zone** — `tetapi.dev` (covers
+   app./api./mcp./stats. + apex/www via a `*.tetapi.dev` SAN) and
+   `hellfiresol.com` scoped to just `shos.` + `bo.shos.` (explicit SANs, not a
+   zone-wide wildcard — the hellfire apex/www vhost is untouched, stays on its
+   existing Let's Encrypt/Certbot cert).
+2. Per-host `:443` server blocks for app/api/mcp/stats.tetapi.dev and
+   shos/bo.shos.hellfiresol.com, same `proxy_pass` as the existing `:80`
+   blocks, `include snippets/security-headers.conf` in every `server{}` (5.6's
+   inheritance trap: a directive re-declared in a `location{}` replaces what
+   it inherited, so don't re-add headers there). `bo.shos`'s `auth_basic` gate
+   must be re-declared on the `:443` block too. `:80` blocks stay exactly as
+   they are — **no redirect** while CF is still Flexible (an origin-side
+   redirect on `:80` would loop, same reasoning as the shos/bo.shos vhosts).
+3. A `default_server { listen 443 ssl default_server; ssl_reject_handshake on; }`
+   catch-all (nginx ≥1.19.4 — **confirmed 1.24.0 on this box**) so an
+   unrecognized SNI hard-fails the handshake instead of quietly getting
+   whatever `:443` vhost nginx picked first. `hellfiresol.com.conf` is **not
+   ours to edit** — if it's currently the implicit default for `:443` (it is:
+   today it's the *only* `:443` block on the box), our new default-reject
+   block must simply outrank it without touching its content; if that turns
+   out not to be achievable without editing the hellfire file, stop and raise
+   it with HF via the manager, don't edit their vhost unilaterally.
+4. `nginx -t` → `systemctl reload nginx` (same reload-not-restart discipline
+   as every other nginx change here).
+5. Verify **from the origin directly**, before touching Cloudflare:
+   `curl -k --resolve <host>:443:164.90.235.66 https://<host>/` returns that
+   host's own content under a cert valid for that name (not the ~30970-byte
+   hellfire apex); an unresolvable/unrecognized SNI fails the handshake
+   outright. `:80` and every public URL stay unchanged at this stage.
+6. **Only then**, as a separate owner-approved step: flip the affected CF
+   zones from Flexible to Full(-strict) and drop the Flexible rule (owner
+   action in the CF dashboard) — never before step 5 passes, since Full mode
+   is exactly what makes the origin's `:443` answer authoritative for
+   Cloudflare. SH.OS verifies their two hosts externally before this flips.
+
+### Origin CA cert — CSR handoff (blocked on owner, 5.15, 2026-09-30)
+
+Cloudflare Origin CA certificates can only be **issued** from the CF
+dashboard (SSL/TLS → Origin Server → Create Certificate) — no API token for
+this exists in the repo/server, so session 5.15 could not do this step
+itself. Instead of waiting idle, it generated the private key **and** the CSR
+**on the server** (so the private key is never transmitted anywhere, not even
+to Cloudflare) and handed the owner just the CSR to paste in.
+
+Generated 2026-09-30, on `tetapi` (`164.90.235.66`), as root:
+```bash
+umask 077
+openssl req -new -newkey rsa:2048 -nodes \
+  -keyout /etc/ssl/private/tetapi.dev.origin.key \
+  -out /root/tetapi.dev.origin.csr \
+  -subj "/CN=tetapi.dev" \
+  -addext "subjectAltName=DNS:tetapi.dev,DNS:*.tetapi.dev"
+
+openssl req -new -newkey rsa:2048 -nodes \
+  -keyout /etc/ssl/private/shos.hellfiresol.com.origin.key \
+  -out /root/shos.hellfiresol.com.origin.csr \
+  -subj "/CN=shos.hellfiresol.com" \
+  -addext "subjectAltName=DNS:shos.hellfiresol.com,DNS:bo.shos.hellfiresol.com"
+```
+Both keys are `600 root:root` in `/etc/ssl/private/` — **never synced, never
+committed, never pasted into a session**. The CSRs (public by nature) were
+printed to the owner in-session and are also sitting at
+`/root/{tetapi.dev,shos.hellfiresol.com}.origin.csr` on the box.
+
+**Owner action to unblock the next session:**
+1. Cloudflare dashboard → the `tetapi.dev` zone → SSL/TLS → Origin Server →
+   Create Certificate → **"Use my own private key and CSR"** → paste
+   `/root/tetapi.dev.origin.csr`'s contents → hostnames `tetapi.dev`,
+   `*.tetapi.dev` (should auto-fill from the CSR's SAN) → validity 15 years
+   (no rotation automation exists; matches the "long-lived, CF-trusted" Origin
+   CA design) → Create.
+2. Repeat in the `hellfiresol.com` zone with
+   `/root/shos.hellfiresol.com.origin.csr`, hostnames `shos.hellfiresol.com` +
+   `bo.shos.hellfiresol.com` only — **do not** request the apex/www (that
+   stays on hellfire's own Certbot cert, untouched).
+3. Cloudflare returns the **signed certificate** (PEM) for each — paste those
+   back to the next devops session (or drop them at
+   `/etc/ssl/certs/tetapi.dev.origin.pem` and
+   `/etc/ssl/certs/shos.hellfiresol.com.origin.pem` on the server directly,
+   `644 root:root` — certs are public, only the keys need `600`). That
+   unblocks step 2 above (the `:443` vhosts) in the next session.
+
+Why Origin CA and not another CA: free, long-lived (up to 15y), trusted only
+by Cloudflare's edge (exactly the trust boundary we want for the CF→origin
+hop — it isn't meant to be publicly trusted), and has no coupling to
+hellfire's own Let's Encrypt/Certbot rotation on the same box.
+
 ## Secrets — server `.env` only (`/opt/tetapi/api/.env`), never in git
 `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `RESEND_API_KEY`, `PII_ENCRYPTION_KEY`
 (Fernet), `ENVIRONMENT=production`, plus optional `OPENAI_API_KEY`,
