@@ -3,6 +3,24 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🟡 15.8 (2026-10-01) — two leftovers found while de-privileging the probe
+Both out of 15.8's scope (one task = one task), both want a decision:
+
+- **`agent@tetapi.dev` holds a live `pk_live_` key** (`role=admin`, `is_agent=true`,
+  `is_active=true`) — the founder-seeded operations-agent account from migration
+  `007_roles_admin_audit.py`, confirmed legitimate in 15.4 and left untouched then. It is
+  a **second standing admin credential**; no consumer for it is known (it is not in any
+  GitHub secret — every org/repo secret list was enumerated in 15.8 — and no `infra`
+  script reads it). If nothing uses it, `api_key = NULL` on that row removes a credential
+  nobody is watching. Owner/manager call, not a dir-15 unilateral change.
+- **`probe.py::check_secrets` can drop a check silently.** Both its request loops use
+  `except Exception: continue`, so a transient network error produces **no result line at
+  all** instead of a SKIP — observed live on 2026-10-01 (`secrets[/docs]` vanished from one
+  full run; counts went 22/5/2 instead of 22/5/3). That contradicts the net's own rule
+  ("SKIP never a fake PASS — it means could not assert honestly"), and a disappearing check
+  is harder to notice than a SKIP. One-line fix per loop: `rep.add(f"secrets[{p}]", SKIP,
+  f"request error: {e}")`. Same pattern is worth a grep elsewhere in the file.
+
 ## 🔴 15.7 co-tenancy re-audit (2026-09-20) — hellfire→root ×2, latent claim-takeover, redis pass in journal
 Read-only + on-box authorized pass (dir 15). Full write-up + severity ranking in
 `docs/security.md` §5 (S-19 reopened, S-21/S-22/S-23 new) and §5.1 (H-1…H-6). The
