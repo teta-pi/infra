@@ -3,6 +3,27 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🔴 15.8 (2026-10-01) — LIVE: api.tetapi.dev 521, fail2ban banned Cloudflare's edge
+Full write-up as **S-27** in `docs/security.md` §5. Short version: nginx has no
+Cloudflare real-ip restore, so access logs show the CF edge IP as the client; the
+`nginx-scanners` jail banned `104.23.199.47` (10:53:22) and `104.23.199.46` (10:53:55),
+and Cloudflare then could not reach the origin — `api.tetapi.dev` served **521** to the
+public for >2h while the origin stayed healthy. The requests that tripped the jail are
+`probe.py`'s own S-1 traversal / `auth_surface` checks (User-Agent
+`tetapi-security-probe/1.0`), so the daily 06:17 UTC cron re-arms this every day.
+
+Needs a privileged unban first (the 15.8 session's sandbox blocked it, and
+`unban-ip.yml` only knows the `sshd` jail):
+
+```
+sudo fail2ban-client set nginx-scanners unbanip 104.23.199.47
+sudo fail2ban-client set nginx-scanners unbanip 104.23.199.46
+```
+
+Then the real fix (devops): CF real-ip restore in nginx, CF ranges in fail2ban
+`ignoreip` meanwhile. Until then every ban this jail issues is a self-inflicted
+outage — and an attacker can trigger it on purpose through CF.
+
 ## 🟡 15.8 (2026-10-01) — two leftovers found while de-privileging the probe
 Both out of 15.8's scope (one task = one task), both want a decision:
 

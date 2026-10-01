@@ -74,7 +74,22 @@ wrong business (S-21 would silently SKIP), and re-pairing the fixture device wou
 S-21 red. `key-privilege` guards the role but cannot guard against the secret being
 cleared — that still just SKIPs, honestly.
 
-Next: manager — merge, then re-run `gh workflow run security-probe.yml --repo
+**Found in passing — LIVE 🔴 (S-27, not caused by this PR's code):** while re-checking
+prod after the fixture writes, `api.tetapi.dev` was returning Cloudflare **521** while the
+origin was healthy (`systemctl is-active tetapi-api` → active, `curl -H 'Host:
+api.tetapi.dev' http://127.0.0.1/health` → 200). Cause: nginx does not restore the real
+client IP from Cloudflare, so the access log records the **CF edge IP** as the client; the
+`nginx-scanners` fail2ban jail banned `104.23.199.47` (10:53:22) and `104.23.199.46`
+(10:53:55), cutting Cloudflare off from the origin. The requests that tripped it are the
+probe's own S-1 traversal / `auth_surface` asserts (User-Agent
+`tetapi-security-probe/1.0`) — so the daily cron re-arms this every morning, and more
+seriously the jail can **only ever ban Cloudflare, never an attacker**, which makes it a
+DoS anyone can trigger through CF. Unban needs `sudo fail2ban-client set nginx-scanners
+unbanip …`, which this session's sandbox blocked, and `unban-ip.yml` is hard-coded to the
+`sshd` jail — so it is **handed to the owner/devops, still open at the time of writing**.
+Recorded as S-27 + a 🔴 `known-issues.md` entry.
+
+Next: manager — **first** restore `api.tetapi.dev` (S-27 unban above), then merge, then re-run `gh workflow run security-probe.yml --repo
 teta-pi/infra` and confirm **22 pass / 5 fail / 3 skip** with the 5 fails being S-25 only.
 Open (not 15.8): **S-25** is red daily until 5.15's `:443` vhosts land, so the net is
 currently red for a reason unrelated to its own credential. Two findings for triage: the
