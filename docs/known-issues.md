@@ -31,6 +31,24 @@ code/config anchors:
   `opted_out`=6) → latent, but this is the 1.11 flow that gates GTM Phase 2. Fix:
   require `normalize_domain(payload.domain) == normalize_domain(business.pre_verified_source["domain"])`
   before the `owner_id`/`claim_status` transfer (`businesses.py:522-523`).
+  🟠 **FIX READY 2026-09-27 (1.27, [api PR #33](https://github.com/teta-pi/api/pull/33) —
+  green in CI, still open, so prod is unchanged; latent throughout).** `_assert_claim_domain_matches_anchor`
+  gates `/claim/domain/check` **and** `/claim/domain/start`: anchor mismatch → 403
+  naming the real anchor; no domain anchor (github/npm-only import, or no
+  `pre_verified_source`) → 403. **Exact match, no subdomain either way** — a tenant
+  of `*.github.io` must not claim the apex, and its operator must not claim every
+  tenant. The one existing `normalize_domain` was extended (userinfo, trailing dot,
+  `www.`, IDN→punycode) rather than duplicated, and it is the same helper that mints
+  the Redis token key. Regression: api `tests/test_claim_anchor_match.py` (30 tests)
+  + `probe.py` `s22_claim_anchor` (fixture anchored to the reserved
+  `example-anchor.test`). **Note (behaviour change, intended):** `normalize_domain`
+  now folds `www.` and a trailing root dot, so a `/verify/domain/start` token minted
+  for `www.example.com` before the deploy is keyed as `example.com` after it — any
+  in-flight token (24h TTL) must be re-started. Two follow-ups filed, not
+  improvised: a claim path for github/npm-only anchors (51 of the 455 creatable
+  top-500 rows), and a declared-domain column + disclosing *which* domain was
+  verified (the owner-side trust-inflation half of S-22, left unbound on purpose —
+  `docs/security.md` §5.2).
 - **S-23 (🟡):** `journalctl -u tetapi-celery-worker` prints
   `redis://:<PASSWORD>@127.0.0.1:6379//` (celery banner) — root/adm-readable only
   (shos denied), but leaks the S-20 secret on any journal export.
