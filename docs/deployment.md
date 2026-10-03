@@ -141,6 +141,102 @@ Start value is `max-age=86400` (1 day), **no** `includeSubDomains`, **no**
    browser-baked, effectively irreversible commitment (submits the apex to the
    HSTS preload list). Not planned.
 
+## Origin TLS (Cloudflare Origin CA) — S-25, in progress since 2026-09-30
+
+`docs/security.md` S-25: Cloudflare reaches this origin over plain `:80`
+(Flexible SSL) — the CF→origin hop is cleartext on the public internet — and
+origin `:443` has no per-host vhost at all, so it silently falls through to
+the `hellfire` co-tenant's own Certbot vhost for **any** SNI, ours included.
+Fix order is mandatory (§5 S-25 has the full reasoning) and this repo/session
+is currently stopped at step 1:
+
+1. **Cloudflare Origin CA certs, one per zone** — `tetapi.dev` (covers
+   app./api./mcp./stats. + apex/www via a `*.tetapi.dev` SAN) and
+   `hellfiresol.com` scoped to just `shos.` + `bo.shos.` (explicit SANs, not a
+   zone-wide wildcard — the hellfire apex/www vhost is untouched, stays on its
+   existing Let's Encrypt/Certbot cert).
+2. Per-host `:443` server blocks for app/api/mcp/stats.tetapi.dev and
+   shos/bo.shos.hellfiresol.com, same `proxy_pass` as the existing `:80`
+   blocks, `include snippets/security-headers.conf` in every `server{}` (5.6's
+   inheritance trap: a directive re-declared in a `location{}` replaces what
+   it inherited, so don't re-add headers there). `bo.shos`'s `auth_basic` gate
+   must be re-declared on the `:443` block too. `:80` blocks stay exactly as
+   they are — **no redirect** while CF is still Flexible (an origin-side
+   redirect on `:80` would loop, same reasoning as the shos/bo.shos vhosts).
+3. A `default_server { listen 443 ssl default_server; ssl_reject_handshake on; }`
+   catch-all (nginx ≥1.19.4 — **confirmed 1.24.0 on this box**) so an
+   unrecognized SNI hard-fails the handshake instead of quietly getting
+   whatever `:443` vhost nginx picked first. `hellfiresol.com.conf` is **not
+   ours to edit** — if it's currently the implicit default for `:443` (it is:
+   today it's the *only* `:443` block on the box), our new default-reject
+   block must simply outrank it without touching its content; if that turns
+   out not to be achievable without editing the hellfire file, stop and raise
+   it with HF via the manager, don't edit their vhost unilaterally.
+4. `nginx -t` → `systemctl reload nginx` (same reload-not-restart discipline
+   as every other nginx change here).
+5. Verify **from the origin directly**, before touching Cloudflare:
+   `curl -k --resolve <host>:443:164.90.235.66 https://<host>/` returns that
+   host's own content under a cert valid for that name (not the ~30970-byte
+   hellfire apex); an unresolvable/unrecognized SNI fails the handshake
+   outright. `:80` and every public URL stay unchanged at this stage.
+6. **Only then**, as a separate owner-approved step: flip the affected CF
+   zones from Flexible to Full(-strict) and drop the Flexible rule (owner
+   action in the CF dashboard) — never before step 5 passes, since Full mode
+   is exactly what makes the origin's `:443` answer authoritative for
+   Cloudflare. SH.OS verifies their two hosts externally before this flips.
+
+### Origin CA cert — CSR handoff (blocked on owner, 5.15, 2026-09-30)
+
+Cloudflare Origin CA certificates can only be **issued** from the CF
+dashboard (SSL/TLS → Origin Server → Create Certificate) — no API token for
+this exists in the repo/server, so session 5.15 could not do this step
+itself. Instead of waiting idle, it generated the private key **and** the CSR
+**on the server** (so the private key is never transmitted anywhere, not even
+to Cloudflare) and handed the owner just the CSR to paste in.
+
+Generated 2026-09-30, on `tetapi` (`164.90.235.66`), as root:
+```bash
+umask 077
+openssl req -new -newkey rsa:2048 -nodes \
+  -keyout /etc/ssl/private/tetapi.dev.origin.key \
+  -out /root/tetapi.dev.origin.csr \
+  -subj "/CN=tetapi.dev" \
+  -addext "subjectAltName=DNS:tetapi.dev,DNS:*.tetapi.dev"
+
+openssl req -new -newkey rsa:2048 -nodes \
+  -keyout /etc/ssl/private/shos.hellfiresol.com.origin.key \
+  -out /root/shos.hellfiresol.com.origin.csr \
+  -subj "/CN=shos.hellfiresol.com" \
+  -addext "subjectAltName=DNS:shos.hellfiresol.com,DNS:bo.shos.hellfiresol.com"
+```
+Both keys are `600 root:root` in `/etc/ssl/private/` — **never synced, never
+committed, never pasted into a session**. The CSRs (public by nature) were
+printed to the owner in-session and are also sitting at
+`/root/{tetapi.dev,shos.hellfiresol.com}.origin.csr` on the box.
+
+**Owner action to unblock the next session:**
+1. Cloudflare dashboard → the `tetapi.dev` zone → SSL/TLS → Origin Server →
+   Create Certificate → **"Use my own private key and CSR"** → paste
+   `/root/tetapi.dev.origin.csr`'s contents → hostnames `tetapi.dev`,
+   `*.tetapi.dev` (should auto-fill from the CSR's SAN) → validity 15 years
+   (no rotation automation exists; matches the "long-lived, CF-trusted" Origin
+   CA design) → Create.
+2. Repeat in the `hellfiresol.com` zone with
+   `/root/shos.hellfiresol.com.origin.csr`, hostnames `shos.hellfiresol.com` +
+   `bo.shos.hellfiresol.com` only — **do not** request the apex/www (that
+   stays on hellfire's own Certbot cert, untouched).
+3. Cloudflare returns the **signed certificate** (PEM) for each — paste those
+   back to the next devops session (or drop them at
+   `/etc/ssl/certs/tetapi.dev.origin.pem` and
+   `/etc/ssl/certs/shos.hellfiresol.com.origin.pem` on the server directly,
+   `644 root:root` — certs are public, only the keys need `600`). That
+   unblocks step 2 above (the `:443` vhosts) in the next session.
+
+Why Origin CA and not another CA: free, long-lived (up to 15y), trusted only
+by Cloudflare's edge (exactly the trust boundary we want for the CF→origin
+hop — it isn't meant to be publicly trusted), and has no coupling to
+hellfire's own Let's Encrypt/Certbot rotation on the same box.
+
 ## Secrets — server `.env` only (`/opt/tetapi/api/.env`), never in git
 `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `RESEND_API_KEY`, `PII_ENCRYPTION_KEY`
 (Fernet), `ENVIRONMENT=production`, plus optional `OPENAI_API_KEY`,
@@ -196,10 +292,11 @@ one provisioned to the strict model below.
 > a hard ceiling because the slice could spill to the 2 GB swapfile — fixed with
 > `MemorySwapMax=0` and by dropping `MemoryHigh` (see the limits table). Residual
 > notes: postgres `127.0.0.1:5432` is TCP-reachable from `shos` but password-gated
-> (SCRAM, not `trust`); and the public `shos.hellfiresol.com` still resolves to the
-> hellfire apex site via Cloudflare — the CF SSL mode is Full so CF reaches origin
-> `:443` (hellfire's default vhost), not our `:80` shos vhost. That routing is a
-> Cloudflare/hellfire-zone fix, not TETA+PI infra.
+> (SCRAM, not `trust`). The public-routing caveat noted at enable time is **resolved**:
+> as of 2026-09-26 `https://shos.hellfiresol.com` serves SH.OS's own app through our
+> `:80` vhost (verified — the response carries *our* `security-headers.conf` set,
+> `Strict-Transport-Security: max-age=86400` + `X-Frame-Options: DENY`, behind
+> `server: cloudflare`). The hellfire-zone CF setting was aligned outside TETA+PI infra.
 
 ### The account (done, on prod)
 - User `shos`, **uid 1002**, `--disabled-password`, groups **`shos` + `users` only**
@@ -265,11 +362,89 @@ ssh tetapi "sudo mv /tmp/shos.hellfiresol.com.conf /etc/nginx/sites-available/sh
 ```
 The origin correctly returns **502** until SH.OS's app listens on `127.0.0.1:8200`
 (their first port; they tell the manager if they need another in 8200–8299).
-⚠ **Public routing caveat:** `https://shos.hellfiresol.com` via Cloudflare currently
-serves the hellfire apex site, not this origin — CF SSL mode is Full so CF reaches
-origin `:443` (hellfire's default vhost), never our `:80`. Aligning that (Flexible
-SSL for the subdomain, or a `:443` origin cert for this host) is a Cloudflare /
-hellfire-zone change, outside TETA+PI infra.
+✅ **Public routing — resolved 2026-09-26** (was: CF served the hellfire apex site
+because the zone's SSL mode reached origin `:443`). `https://shos.hellfiresol.com`
+now serves SH.OS's app through this `:80` vhost; verified by our own security headers
+appearing in the CF-fronted response. Origin stays `listen 80` — **do not add a
+`:80` → `https` redirect to any host in this zone**: CF fetches the origin over `:80`,
+so an origin-side redirect loops. HTTPS enforcement is Cloudflare's "Always Use
+HTTPS" (owner action, per zone).
+
+### Second SH.OS vhost: `bo.shos.hellfiresol.com` (staff back-office) — DONE 5.12, 2026-09-26
+Requested by SH.OS (S1 DevOps, 2026-09-26), approved by the manager session. File:
+`deploy/nginx/bo.shos.hellfiresol.com.conf` — same pattern as the first vhost
+(`listen 80`, shared `snippets/security-headers.conf`, `proxy_read_timeout 60s`),
+`proxy_pass http://127.0.0.1:8202`. Pre-deploy checks: `8202` listens on `127.0.0.1`
+only (alongside 8200/8201), inside the allotted **8200–8299**, rootless docker under
+`shos`; ufw still exposes only 22/80/443.
+
+**No `:80` → `https` redirect** (deliberate, see the routing note above — CF terminates
+TLS and fetches the origin over `:80`; an origin redirect would loop).
+
+🔒 **Basic auth is part of this vhost, on SH.OS's own request** — the back-office must
+not be publicly reachable ungated while Cloudflare Access is not yet in front of it.
+Realm `SHOSHO back-office (staging)`, user `shos-bo`, file
+`/etc/nginx/.htpasswd-shos-bo` (`640 root:www-data`). Declared in `server{}` so it
+covers the whole host; the single `location /` sets no `auth_basic` of its own and
+therefore inherits it (same inheritance trap 5.6 hit with `add_header` — a directive
+re-declared in a location *replaces* the inherited one).
+
+`apache2-utils` is **not installed** on the box and was deliberately not added: the
+hash was generated with the system `crypt` (libxcrypt, `METHOD_BLOWFISH`), which
+produces the same **bcrypt `$2b$`** hash `htpasswd -B` would, and nginx 1.24 verifies
+it via `crypt_r()`. The password was generated **on the server** with
+`openssl rand -base64 24`, never written to a server file, never committed, and never
+printed to a session — it was piped straight into `~/.tetapi/shos-bo-basicauth`
+(`600`) on the **owner's machine**, format
+`bo.shos.hellfiresol.com  shos-bo  <password>`. Owner hands it to SH.OS.
+
+```bash
+# how the gate was created (password never lands in argv or a server file):
+ssh tetapi 'sudo bash -s' <<'EOS' > ~/.tetapi/shos-bo-basicauth
+set -euo pipefail
+pw="$(openssl rand -base64 24)"
+hash="$(PW="$pw" python3 -c 'import os,crypt; print(crypt.crypt(os.environ["PW"], crypt.mksalt(crypt.METHOD_BLOWFISH)))')"
+case "$hash" in '$2'*) ;; *) echo "BCRYPT FAILED" >&2; exit 1;; esac
+umask 027
+printf 'shos-bo:%s\n' "$hash" > /etc/nginx/.htpasswd-shos-bo
+chown root:www-data /etc/nginx/.htpasswd-shos-bo
+chmod 640 /etc/nginx/.htpasswd-shos-bo
+printf 'bo.shos.hellfiresol.com  shos-bo  %s\n' "$pw"
+EOS
+chmod 600 ~/.tetapi/shos-bo-basicauth
+
+# then the vhost itself:
+scp deploy/nginx/bo.shos.hellfiresol.com.conf tetapi:/tmp/bo.shos.hellfiresol.com.conf
+ssh tetapi "sudo mv /tmp/bo.shos.hellfiresol.com.conf /etc/nginx/sites-available/bo.shos.hellfiresol.com && \
+  sudo ln -sf /etc/nginx/sites-available/bo.shos.hellfiresol.com /etc/nginx/sites-enabled/bo.shos.hellfiresol.com && \
+  sudo nginx -t && sudo systemctl reload nginx"
+```
+
+⛔ **Do not lift the gate unilaterally.** It comes off only on a separate SH.OS request,
+once their Cloudflare Access sits in front of the host. Rotating the password = re-run
+the block above (it overwrites both files).
+
+**Verified 2026-09-26** (no DNS record yet, so tested against the origin with a `Host`
+header):
+
+| Check | Result |
+|---|---|
+| `curl -I -H 'Host: bo.shos.hellfiresol.com' http://164.90.235.66/` | **401** + `WWW-Authenticate: Basic realm="SHOSHO back-office (staging)"` + all four security headers (HSTS, nosniff, `X-Frame-Options: DENY`, Referrer-Policy) |
+| same with `-u shos-bo:<pw>` on `/login` | **200** (their health path — proves the proxy reaches `:8202`) |
+| authed `GET /` | **307** (their app's own redirect) |
+| wrong password, and anonymous `/login` | **401** |
+| `shos.hellfiresol.com`, `app`/`api`/`mcp`/`tetapi.dev`, `hellfiresol.com`, `stats` | unchanged vs. the pre-change baseline (200/200/200/404/200/301/303); api `/health`, app, landing all 200 over HTTPS |
+| unknown `Host` (`random.invalid`) | still falls through to `api.tetapi.dev` — the new vhost is name-based only and did **not** become the default server |
+| `ss -ltn` / `ufw` | `8202` (and 8200/8201) still `127.0.0.1`-only; externally still only 22/80/443 |
+
+**Owner actions still outstanding** (not TETA+PI infra):
+1. **DNS** — `bo.shos.hellfiresol.com` → `164.90.235.66`, **proxied** (orange cloud) in
+   the hellfire Cloudflare zone. No A record exists yet, so the host is unreachable by
+   name until this is done.
+2. **Cloudflare "Always Use HTTPS"** for the zone/host — HTTPS enforcement lives at CF,
+   never at the origin (see the redirect-loop note above).
+3. Hand `~/.tetapi/shos-bo-basicauth` (login + password) to SH.OS over their own
+   channel.
 
 ### Enabling SSH access (the gated last step) — DONE 5.10, 2026-09-20
 1. **Owner generates the key on their OWN machine** (never on the server):

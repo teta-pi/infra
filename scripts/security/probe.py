@@ -39,6 +39,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -548,6 +550,107 @@ def check_mcp(rep: Report) -> None:
             pass
 
 
+# ── j. S-25 — origin :443 must not answer a foreign SNI with a foreign cert ───
+ORIGIN_IP = os.environ.get("SEC_PROBE_ORIGIN_IP", "164.90.235.66")
+ORIGIN_TLS_HOSTS = ["app.tetapi.dev", "api.tetapi.dev", "mcp.tetapi.dev",
+                    "stats.tetapi.dev", "tetapi.dev"]
+
+
+def _origin_leaf_cert_pem(host: str, timeout: float = TIMEOUT) -> str | None:
+    """Dial the origin IP directly on :443 (bypassing Cloudflare on purpose —
+    that's the untrusted hop S-25 is about) with SNI=host, and return whatever
+    leaf certificate nginx hands back, PEM-encoded. Trust is not evaluated
+    (Origin CA certs aren't in a public trust store, and that's not the
+    question here) — only *which* cert nginx chose to serve for that SNI."""
+    try:
+        proc = subprocess.run(
+            ["openssl", "s_client", "-connect", f"{ORIGIN_IP}:443", "-servername", host],
+            input="", capture_output=True, text=True, timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    out = proc.stdout
+    start, end = out.find("-----BEGIN CERTIFICATE-----"), out.find("-----END CERTIFICATE-----")
+    if start == -1 or end == -1:
+        return None
+    return out[start:end + len("-----END CERTIFICATE-----")]
+
+
+def _cert_names(pem: str, timeout: float = 5.0) -> tuple[str | None, list[str]]:
+    """CN + SAN dNSNames of a PEM cert, via `openssl x509` (no new Python dep)."""
+    try:
+        proc = subprocess.run(
+            ["openssl", "x509", "-noout", "-subject", "-ext", "subjectAltName"],
+            input=pem, capture_output=True, text=True, timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None, []
+    cn, sans = None, []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("subject="):
+            m = re.search(r"CN\s*=\s*([^,]+)", line)
+            if m:
+                cn = m.group(1).strip()
+        elif line.startswith("DNS:"):
+            sans = [part.strip()[4:] for part in line.split(",") if part.strip().startswith("DNS:")]
+    return cn, sans
+
+
+def _cert_names_match(host: str, cn: str | None, sans: list[str]) -> bool:
+    names = set(filter(None, [cn, *sans]))
+    if host in names:
+        return True
+    # a wildcard SAN (*.tetapi.dev) legitimately covers one single-level subdomain
+    return any(n.startswith("*.") and host.endswith(n[1:]) and host.count(".") == n.count(".")
+               for n in names)
+
+
+def check_origin_tls_identity(rep: Report) -> None:
+    """S-25 (docs/security.md): Cloudflare fetches this origin over plain :80
+    (Flexible SSL) — that hop is the vulnerable one, and it's a separate,
+    already-documented residual. This check is about the *second* half of
+    S-25: today the origin has no per-host :443 vhost at all, so whatever
+    :443 server{} block nginx happens to pick first (currently the hellfire
+    co-tenant's own Certbot vhost, CN=hellfiresol.com) silently answers ANY
+    SNI, including ours, with a cert and content that are not ours. If
+    Cloudflare's SSL mode were ever moved to Full (without fixing this first),
+    it would start trusting whatever the origin hands back for our hostnames.
+
+    Deliberately compares certificate CN/SAN identity, not response body size:
+    a byte-count match is an implementation detail of *someone else's* site
+    that changes on every edit to their content and proves nothing about which
+    certificate nginx chose — a TLS handshake's entire job is to prove
+    identity, so that's what this asserts directly.
+
+    Dials the origin IP directly (bypassing Cloudflare) on purpose — that's
+    the hop this finding is about, and it's still read-only (TLS handshake
+    only, no data exchanged). Scope stays our-own-infra only (ORIGIN_TLS_HOSTS)
+    per the rules of engagement; the SH.OS hosts (shos./bo.shos.hellfiresol.com)
+    are a different tenant and are verified manually, not by this net.
+
+    Expected RED until the real fix ships (per-host :443 vhosts with Cloudflare
+    Origin CA certs + a `default_server` that rejects unrecognized SNI);
+    PASS after. SKIP means the handshake itself didn't complete (openssl
+    missing on the runner, network egress blocked, network hiccup) — not
+    evidence either way."""
+    for host in ORIGIN_TLS_HOSTS:
+        pem = _origin_leaf_cert_pem(host)
+        if pem is None:
+            rep.add(f"origin_tls_identity[{host}]", SKIP,
+                    f"origin :443 TLS handshake for SNI={host} against {ORIGIN_IP} "
+                    "didn't complete (openssl missing / network / reset)")
+            continue
+        cn, sans = _cert_names(pem)
+        if _cert_names_match(host, cn, sans):
+            rep.add(f"origin_tls_identity[{host}]", PASS,
+                    f"origin :443 for SNI={host} serves a cert naming it (CN={cn}, SAN={sans})")
+        else:
+            rep.add(f"origin_tls_identity[{host}]", FAIL,
+                    f"origin :443 for SNI={host} served a cert for a DIFFERENT name "
+                    f"(CN={cn}, SAN={sans}) — S-25: no per-host :443 vhost / default-reject yet")
+
+
 # ── S-21 — a revoked Pi CAM device key is dead (api 1.25) ─────────────────────
 def check_s21_device_revoked(rep: Report) -> None:
     """Fixture: one device paired to the test account and then revoked via
@@ -678,6 +781,7 @@ CHECKS = {
     "secrets": check_secrets,
     "headers": check_headers,
     "mcp": check_mcp,
+    "origin-tls": check_origin_tls_identity,
 }
 
 

@@ -2560,3 +2560,32 @@ membership directly, so rootless co-tenants don't trip it. **Out of 5.11 scope
 (devops/S-19) and belongs to the security session — reported to manager, no boot
 written, check logic left untouched.** The S-19 ownership assert in the same
 script is green.
+
+## 🔴 S-25 — Cloudflare↔origin hop is cleartext, and origin `:443` silently answers as `hellfire` for any SNI (found 5.15, 2026-09-30, IN PROGRESS)
+Reported by SH.OS devops (2026-09-29), independently re-verified by the manager
+(2026-09-30): every host on this box (`api`/`app`/`mcp`/`stats.tetapi.dev`,
+`shos.hellfiresol.com`) is `listen 80` only, so Cloudflare's SSL mode being
+Flexible means the CF→origin hop carries `pk_live_` Bearer keys, JWT, email
+login codes, Pi CAM `X-Device-Api-Key`, admin ops, the `bo.shos` basic-auth
+password, and SH.OS guest PII **in cleartext** over the public internet
+segment between Cloudflare and `164.90.235.66` — our HSTS headers and the
+browser padlock only cover the browser↔CF hop and create a false impression
+of end-to-end TLS. Separately, origin `:443` has **no per-host vhost at all** —
+the only `:443` server block on the box is the `hellfire` co-tenant's own
+Certbot vhost (`CN=hellfiresol.com`), and with nothing marking a
+`default_server` for `:443`, nginx falls back to it for **any** SNI, ours
+included: confirmed live (`curl -k --resolve <host>:443:164.90.235.66
+https://<host>/` and `scripts/security/probe.py --only origin-tls`, all 5 of
+our hosts return the ~30970-byte hellfire apex under `CN=hellfiresol.com`,
+not their own content). Not exploitable *today* only because Cloudflare never
+reaches origin `:443` while the zones are Flexible — but flipping to
+Full/Full-strict **before** fixing this would make CF start trusting whatever
+the origin serves per-SNI, i.e. silently show the hellfire site under our own
+domains with a valid-looking padlock. Full finding + fix order + status:
+`docs/security.md` §5 S-25; runbook: `docs/deployment.md` "Origin TLS
+(Cloudflare Origin CA)". **Blocked on the owner** — Origin CA cert issuance is
+a Cloudflare-dashboard-only action; session 5.15 generated the private
+keys + CSRs on the server instead and handed the owner the CSRs (see the
+deployment.md CSR-handoff section) rather than waiting idle. Regression test
+already shipped and is honestly RED: `scripts/security/probe.py --only
+origin-tls`.
