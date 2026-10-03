@@ -6,6 +6,65 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-09-27 · 1.27 backend · S-22: a domain claim must prove the entity's anchor
+Done: closed the code half of the 🔴 **S-22** pre-verified-entity takeover (the URGENT
+gate in front of GTM Phase 2) — [api PR #33](https://github.com/teta-pi/api/pull/33),
+pytest green. `POST /businesses/{id}/claim/domain/check` passed a **caller-supplied**
+`payload.domain` to `domain_ownership` and, on a successful proof, did
+`owner_id = current_user.id; claim_status = "claimed"` — nothing ever compared that
+domain to the entity's imported anchor (`pre_verified_source["domain"]`, written by
+`admin.py::bulk_preverify_entities`), so any signed-up user could take over any
+`pre_verified_unclaimed` profile by proving a throwaway domain **they** own. The
+`claim_status` gate held; the hole was purely the missing anchor match.
+
+`_assert_claim_domain_matches_anchor` now requires
+`normalize_domain(payload.domain) == anchor_domain(pre_verified_source)` **before** the
+proof is even looked at, on `/claim/domain/check` **and** `/claim/domain/start`
+(no DNS instructions minted for a domain that can never complete the claim):
+mismatch → 403 naming the real anchor; no domain anchor (github/npm-only import, or no
+`pre_verified_source`) → 403.
+
+Three judgement calls, argued rather than assumed:
+1. **Exact match, no subdomain in either direction.** `sub.anchor` would let any tenant
+   of a shared host (`*.github.io`, `*.vercel.app`) claim the apex's entity; a parent
+   would let that host's operator claim every tenant; separating the two needs a
+   public-suffix list we don't carry. Cosmetics (`www.`, case, port, scheme, trailing
+   dot, IDN) are folded by normalization, so no honest owner is tripped.
+2. **One `normalize_domain`, extended — not a second helper.** It already existed in
+   `services/verification/domain_ownership.py` and is also the function that mints the
+   Redis token key, so the domain a token was issued for and the domain matched against
+   the anchor can never disagree. Now also strips userinfo/trailing root dot/`www.` and
+   folds IDN → punycode.
+3. **Owner-side `/verify/domain/check` left unbound — conscious deferral**, in the route
+   docstring and `security.md` §5.2: the caller already owns the entity (trust-inflation,
+   not takeover) and there is nothing to bind to — `businesses` has no declared-domain
+   column and the public payload never says *which* domain was proven (it lives in an
+   opaque `payload_hash`), while multi-domain owners are legitimate.
+
+Changed: api `app/api/routes/businesses.py`, `app/services/verification/domain_ownership.py`,
+new `tests/test_claim_anchor_match.py` (30 tests; full suite 77 passed; **verified
+non-vacuous** — disabling the two call sites turns 9 red). infra `docs/security.md`
+§5 + new §5.2, `docs/known-issues.md`, `docs/roadmap.md` (row 1.27), `docs/api.md`,
+`scripts/security/probe.py` (`check_s22_claim_anchor`, §6.2 rule) + `README.md`.
+
+Risk: `normalize_domain` now folds `www.` and a trailing root dot, so a
+`/verify/domain/start` token minted for `www.example.com` before the deploy is keyed as
+`example.com` after it — any in-flight token (24h TTL) must be re-started. Intended, and
+the only behaviour change outside the claim gate. The 403 on github/npm-only anchors is
+correct but leaves **51 of the 455 creatable top-500 rows unclaimable** until a
+github-based proof path exists (`security.md` §5.2) — an outreach-conversion gap, not a
+security one.
+
+Next: **api PR #33 is still open — merge is the owner's action** (this session's
+`gh pr merge` was permission-blocked). After it deploys: create the `s22_claim_anchor`
+prod fixture via `bulk-preverify` (anchor `example-anchor.test` — RFC 6761 reserved, so
+the row is unclaimable by construction), run `probe.py --only s22` → PASS, flip
+`security.md` S-22 to ✅ CLOSED. The fixture is deliberately **not** created before the
+deploy: a claimable pre-verified row while the hole is open would manufacture the
+exposure. Both SKIP branches of the new check were exercised live, read-only, on
+2026-09-27. **`outreach_queue.py --create` on the 455 rows must wait for that deploy —
+see the session report.**
+
 ## 2026-09-30 · 5.15 devops · origin TLS (S-25) — CSRs generated, blocked on owner CF action
 Done: picked up S-25 (Cloudflare↔origin hop is cleartext/Flexible SSL, **and** origin
 `:443` has no per-host vhost at all — the only `:443` block on the box is the `hellfire`
