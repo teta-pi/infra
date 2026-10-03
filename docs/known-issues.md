@@ -2543,7 +2543,7 @@ membership directly, so rootless co-tenants don't trip it. **Out of 5.11 scope
 written, check logic left untouched.** The S-19 ownership assert in the same
 script is green.
 
-## 🔴 S-25 — Cloudflare↔origin hop is cleartext, and origin `:443` silently answers as `hellfire` for any SNI (found 5.15, 2026-09-30, IN PROGRESS)
+## 🟡 S-25 — Cloudflare↔origin hop is cleartext, and origin `:443` silently answers as `hellfire` for any SNI (found 5.15, 2026-09-30; steps 1-5 fixed 5.16, 2026-10-03)
 Reported by SH.OS devops (2026-09-29), independently re-verified by the manager
 (2026-09-30): every host on this box (`api`/`app`/`mcp`/`stats.tetapi.dev`,
 `shos.hellfiresol.com`) is `listen 80` only, so Cloudflare's SSL mode being
@@ -2565,9 +2565,18 @@ Full/Full-strict **before** fixing this would make CF start trusting whatever
 the origin serves per-SNI, i.e. silently show the hellfire site under our own
 domains with a valid-looking padlock. Full finding + fix order + status:
 `docs/security.md` §5 S-25; runbook: `docs/deployment.md` "Origin TLS
-(Cloudflare Origin CA)". **Blocked on the owner** — Origin CA cert issuance is
-a Cloudflare-dashboard-only action; session 5.15 generated the private
-keys + CSRs on the server instead and handed the owner the CSRs (see the
-deployment.md CSR-handoff section) rather than waiting idle. Regression test
-already shipped and is honestly RED: `scripts/security/probe.py --only
-origin-tls`.
+(Cloudflare Origin CA)".
+
+**Update (5.16, 2026-10-03): steps 1-5 done.** The 5.15 assumption that
+Origin CA cert issuance needed the CF dashboard was wrong — the existing API
+token authorizes `POST /client/v4/certificates` directly; both zones' certs
+were issued, verified, and installed, the per-host `:443` vhosts + a
+`default_server`/`ssl_reject_handshake` catch-all are live, and every host
+was verified from the origin directly (own cert, own content, unknown SNI
+rejected). `scripts/security/probe.py --only origin-tls` is now **5/5 PASS**
+(was RED). **Still open: step 6**, the actual Cloudflare SSL-mode flip to
+Full(-strict) — deliberately not done yet, gated on SH.OS independently
+verifying their two hosts externally and manager/owner sign-off (see
+deployment.md "Step 6"). Until that flips, the CF→origin hop is still
+cleartext (the *first* half of this finding is unresolved); only the
+*second* half (origin `:443` impersonating `hellfire` for our SNI) is fixed.

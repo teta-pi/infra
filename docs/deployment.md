@@ -90,10 +90,15 @@ the server** (`ssh tetapi "cat /etc/nginx/sites-available/<name>"`).
 | `deploy/nginx/app.tetapi.dev.conf` | `app.tetapi.dev` |
 | `deploy/nginx/mcp.tetapi.dev.conf` | `mcp.tetapi.dev` |
 | `deploy/nginx/tetapi.dev.conf` | **`teta-pi`** (landing — note the different name) |
+| `deploy/nginx/shos.hellfiresol.com.conf` | `shos.hellfiresol.com` |
+| `deploy/nginx/bo.shos.hellfiresol.com.conf` | `bo.shos.hellfiresol.com` |
+| `deploy/nginx/stats.tetapi.dev.conf` | `stats.tetapi.dev` (tracked since 5.16; see "Origin TLS" above) |
+| `deploy/nginx/default-tls-reject.conf` | `default-tls-reject` (new since 5.16 — needs `ln -s` into `sites-enabled`, not already present there) |
 | `deploy/nginx/snippets/security-headers.conf` | `/etc/nginx/snippets/security-headers.conf` |
 
 Not tracked in this repo (server-only, out of the 5.6 header rollout):
-`stats.tetapi.dev` (GoatCounter), `teta`, `hellfiresol.com`, `default`.
+`teta`, `hellfiresol.com`, `default`. `hellfiresol.com` especially is **not
+ours to edit** — it's the `hellfire` co-tenant's own Certbot-managed vhost.
 
 ### Applying an nginx change (the manual step)
 ```bash
@@ -108,7 +113,10 @@ ssh tetapi "systemctl reload nginx"   # reload, NOT restart (zero-drop)
 ```
 If `nginx -t` fails: do **not** reload, restore the previous file(s), report.
 `reload` re-reads config with no dropped connections; `restart` would blip all
-sites — never use it for a config change.
+sites — never use it for a config change. A **new** site file (one that isn't
+already in `sites-enabled`, e.g. `default-tls-reject` added in 5.16) also
+needs `ssh tetapi "sudo ln -s /etc/nginx/sites-available/<name> /etc/nginx/sites-enabled/<name>"`
+once — `scp`/`mv` alone only updates `sites-available`.
 
 ## Security response headers (5.6, 2026-09-15)
 TLS terminates at **Cloudflare** (all four hosts answer `server: cloudflare`;
@@ -141,14 +149,15 @@ Start value is `max-age=86400` (1 day), **no** `includeSubDomains`, **no**
    browser-baked, effectively irreversible commitment (submits the apex to the
    HSTS preload list). Not planned.
 
-## Origin TLS (Cloudflare Origin CA) — S-25, in progress since 2026-09-30
+## Origin TLS (Cloudflare Origin CA) — S-25, steps 1-5 done 2026-10-03 (5.16)
 
 `docs/security.md` S-25: Cloudflare reaches this origin over plain `:80`
 (Flexible SSL) — the CF→origin hop is cleartext on the public internet — and
 origin `:443` has no per-host vhost at all, so it silently falls through to
 the `hellfire` co-tenant's own Certbot vhost for **any** SNI, ours included.
-Fix order is mandatory (§5 S-25 has the full reasoning) and this repo/session
-is currently stopped at step 1:
+Fix order is mandatory (§5 S-25 has the full reasoning). Steps 1-5 are done;
+step 6 (the actual CF zone flip) is a separate, owner/manager-gated action —
+see "Step 6" below.
 
 1. **Cloudflare Origin CA certs, one per zone** — `tetapi.dev` (covers
    app./api./mcp./stats. + apex/www via a `*.tetapi.dev` SAN) and
@@ -185,14 +194,77 @@ is currently stopped at step 1:
    is exactly what makes the origin's `:443` answer authoritative for
    Cloudflare. SH.OS verifies their two hosts externally before this flips.
 
-### Origin CA cert — CSR handoff (blocked on owner, 5.15, 2026-09-30)
+### Step 2 implementation notes (5.16)
 
-Cloudflare Origin CA certificates can only be **issued** from the CF
-dashboard (SSL/TLS → Origin Server → Create Certificate) — no API token for
-this exists in the repo/server, so session 5.15 could not do this step
-itself. Instead of waiting idle, it generated the private key **and** the CSR
-**on the server** (so the private key is never transmitted anywhere, not even
-to Cloudflare) and handed the owner just the CSR to paste in.
+- **nginx 1.24.0 predates the standalone `http2` directive** (added in
+  1.25.1) — `http2 on;` as its own line is an "unknown directive" on this
+  box. Every `:443` block here uses the older `listen 443 ssl http2;` form
+  instead. Because `http2`/`ssl`/etc. are effectively per-**socket**, not
+  per-server, on this nginx version, `nginx -t` emits a handful of harmless
+  "protocol options redefined for 0.0.0.0:443" warnings whenever a block
+  sharing that socket doesn't declare the exact same listen parameters —
+  the one real, permanent source is hellfire's own `hellfiresol.com.conf`
+  (`listen 443 ssl;`, no `http2`, **not ours to edit**). Confirmed this is
+  cosmetic: SNI→server-block dispatch (and so which cert/content is served)
+  is unaffected; `nginx -t` still reports success, and the live per-host
+  verification in step 5 passed for all 7 hosts.
+- `stats.tetapi.dev` was **server-only** before this session (see the old
+  "Not tracked in this repo" note below — now out of date for this one host).
+  Brought into the repo as `deploy/nginx/stats.tetapi.dev.conf` since adding
+  its `:443` block required editing it anyway; `:80` content copied verbatim
+  (still no `security-headers.conf` include, preserving its pre-existing
+  exception).
+- `deploy/nginx/default-tls-reject.conf` → server path
+  `/etc/nginx/sites-available/default-tls-reject`, symlinked into
+  `sites-enabled` (new file, needs its own `ln -s`, not just an `scp`/`mv`
+  over an existing name like the other six). Additive only — no existing
+  file touched to make it win the `:443` default.
+
+### Origin CA cert — issuance (done 2026-10-03, session 5.16)
+
+The CSRs were generated on the server in 5.15 (see below) and handed to the
+owner on the assumption that Origin CA certificate issuance is Cloudflare
+**dashboard-only**. That assumption turned out to be wrong: the CF API token
+at `~/.tetapi/cf_api_token` (owner's machine, scope `Zone SSL&Certificates:Edit`
++ `Zone Settings:Edit` + `Config Rules:Edit` on the `tetapi.dev` and
+`hellfiresol.com` zones) authorizes `POST /client/v4/certificates` directly
+with a plain `Authorization: Bearer` header — **no separate Origin CA Service
+Key was needed**, and no owner dashboard step either. Request body per cert:
+`{"hostnames": [...], "request_type": "origin-rsa", "requested_validity": 5475, "csr": "<CSR contents>"}`.
+Both zones' CSRs (from `/root/{tetapi.dev,shos.hellfiresol.com}.origin.csr`)
+were submitted this way; both came back `success: true` with a signed PEM in
+`result.certificate`.
+
+Before installing, each returned cert was checked: `openssl x509 -noout
+-subject -ext subjectAltName -dates` (SAN matches the CSR's, `notAfter` is
+~15 years out — 2041-09-29) and a modulus/MD5 comparison against the
+corresponding private key (`openssl x509 -noout -modulus | openssl md5` vs.
+`openssl rsa -noout -modulus | openssl md5`) to confirm they're a real pair
+before anything references them. Installed at
+`/etc/ssl/certs/tetapi.dev.origin.pem` and
+`/etc/ssl/certs/shos.hellfiresol.com.origin.pem`, `644 root:root` (certs are
+public; only the `.key` files need `600`).
+
+**Renewal:** `requested_validity: 5475` (15 years, the Origin CA max) was
+chosen deliberately — there is no rotation automation, matching the
+"long-lived, CF-trusted" design Origin CA is meant for. Next renewal isn't
+due until ~2041; if it's ever needed sooner (key compromise, SAN change),
+repeat this same API call with a fresh CSR against the existing key (or a new
+one) and swap the `.pem` file — no CF dashboard interaction required, now
+that the Bearer-token path is confirmed to work.
+
+### Origin CA cert — CSR handoff (session 5.15, 2026-09-30, historical)
+
+Cloudflare Origin CA certificates were assumed to be issuable only from the
+CF dashboard (SSL/TLS → Origin Server → Create Certificate) — no API token
+for this existed in the repo/server at the time, so session 5.15 could not do
+this step itself. Instead of waiting idle, it generated the private key
+**and** the CSR **on the server** (so the private key is never transmitted
+anywhere, not even to Cloudflare) and handed the owner just the CSR to paste
+in. **This turned out not to be necessary** (see "Origin CA cert — issuance"
+above, 5.16, used the API directly instead) but is kept here for the record
+and because the key-generation commands are still exactly how these keys were
+made.
 
 Generated 2026-09-30, on `tetapi` (`164.90.235.66`), as root:
 ```bash
@@ -214,28 +286,36 @@ committed, never pasted into a session**. The CSRs (public by nature) were
 printed to the owner in-session and are also sitting at
 `/root/{tetapi.dev,shos.hellfiresol.com}.origin.csr` on the box.
 
-**Owner action to unblock the next session:**
-1. Cloudflare dashboard → the `tetapi.dev` zone → SSL/TLS → Origin Server →
-   Create Certificate → **"Use my own private key and CSR"** → paste
-   `/root/tetapi.dev.origin.csr`'s contents → hostnames `tetapi.dev`,
-   `*.tetapi.dev` (should auto-fill from the CSR's SAN) → validity 15 years
-   (no rotation automation exists; matches the "long-lived, CF-trusted" Origin
-   CA design) → Create.
-2. Repeat in the `hellfiresol.com` zone with
-   `/root/shos.hellfiresol.com.origin.csr`, hostnames `shos.hellfiresol.com` +
-   `bo.shos.hellfiresol.com` only — **do not** request the apex/www (that
-   stays on hellfire's own Certbot cert, untouched).
-3. Cloudflare returns the **signed certificate** (PEM) for each — paste those
-   back to the next devops session (or drop them at
-   `/etc/ssl/certs/tetapi.dev.origin.pem` and
-   `/etc/ssl/certs/shos.hellfiresol.com.origin.pem` on the server directly,
-   `644 root:root` — certs are public, only the keys need `600`). That
-   unblocks step 2 above (the `:443` vhosts) in the next session.
-
 Why Origin CA and not another CA: free, long-lived (up to 15y), trusted only
 by Cloudflare's edge (exactly the trust boundary we want for the CF→origin
 hop — it isn't meant to be publicly trusted), and has no coupling to
 hellfire's own Let's Encrypt/Certbot rotation on the same box.
+
+### Step 6 — flipping Cloudflare to Full(-strict) (not done yet, 5.16)
+
+Deliberately **not** done this session, per the mandatory fix order: it's the
+one step that makes CF start trusting the origin's `:443` response
+per-SNI, so it must come strictly after steps 1-5 are verified (they are) and
+after independent confirmation nothing on the SH.OS side breaks. Sequence for
+whoever picks this up next:
+1. Manager asks SH.OS to verify `shos.hellfiresol.com` and
+   `bo.shos.hellfiresol.com` externally (public internet, not from-origin) —
+   they should look unchanged (still served via Cloudflare, same content);
+   this is a pre-check, not something this fix should need to change for them
+   at this stage since CF is still Flexible.
+2. `tetapi.dev` zone: `PATCH /zones/{id}/settings/ssl` → `"value": "strict"`.
+3. `hellfiresol.com` zone: the zone is already `ssl=full`, but a Configuration
+   Rule added 2026-09-26 forces `shos.*` back down to Flexible — find it via
+   `GET /zones/{id}/rulesets` (phase `http_config_settings` or similar) and
+   remove **only that rule**, not the zone's SSL mode or any other ruleset
+   entry.
+4. After **each** change: re-verify all 7 hosts publicly (normal DNS, through
+   Cloudflare, no `--resolve`) return 200/expected codes with correct content,
+   and re-run `scripts/security/probe.py` (full, not just `--only
+   origin-tls`) for regressions elsewhere. If anything is wrong, roll back
+   immediately (`ssl` back to `flexible` / restore the Configuration Rule) —
+   at this stage a mismatch means CF is trusting the wrong origin content
+   under our domain or SH.OS's.
 
 ## Secrets — server `.env` only (`/opt/tetapi/api/.env`), never in git
 `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `RESEND_API_KEY`, `PII_ENCRYPTION_KEY`
