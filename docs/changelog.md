@@ -6,6 +6,78 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-03 · 5.16 devops · origin TLS (S-25) — Origin CA certs issued, :443 vhosts + default-reject live, steps 1-5 of 6 done
+Done: picked up where 5.15 stopped (blocked on owner issuing 2 Origin CA certs from the
+CF dashboard). Turned out that assumption was wrong — the CF API token at
+`~/.tetapi/cf_api_token` (`Zone SSL&Certificates:Edit` scope) authorizes
+`POST /client/v4/certificates` directly with a plain Bearer header, no separate Origin CA
+Service Key and no dashboard step needed. Submitted both zones' CSRs (generated in 5.15,
+still on the server): `tetapi.dev` (`*.tetapi.dev` SAN) and `hellfiresol.com` scoped to
+just `shos.`/`bo.shos.` — both came back `success: true`, 15-year validity
+(`requested_validity=5475`, expires 2041-09-29). Verified each signed PEM before using it:
+`openssl x509 -noout -subject -ext subjectAltName -dates` (SAN matches the CSR) and a
+modulus/MD5 comparison against the private key on the server (confirms a real pair, not
+just a syntactically valid cert). Installed at `/etc/ssl/certs/{tetapi.dev,
+shos.hellfiresol.com}.origin.pem` (644 root:root).
+
+Added `:443` server blocks to every host: `app`/`api`/`mcp`/`stats.tetapi.dev` +
+`tetapi.dev` apex (new `tetapi.dev.origin.pem`), `shos`/`bo.shos.hellfiresol.com` (new
+`shos.hellfiresol.com.origin.pem`, `auth_basic` re-declared — it does not inherit across
+`server{}` blocks). `:80` left exactly as-is, no redirect (CF is still Flexible; an
+origin-side redirect would loop). Discovered nginx 1.24.0 on this box predates the
+standalone `http2` directive (added 1.25.1) — `http2 on;` is an "unknown directive" here;
+used the older `listen 443 ssl http2;` form instead, confirmed by a throwaway test vhost
+before touching real configs. `stats.tetapi.dev` was server-only (never tracked in this
+repo); brought it in as `deploy/nginx/stats.tetapi.dev.conf` since its `:443` block needed
+writing anyway — `:80` content copied verbatim, still no security-headers include
+(preserves its pre-existing exception from the 5.6 rollout).
+
+Added `deploy/nginx/default-tls-reject.conf` (`listen 443 ssl http2 default_server;
+ssl_reject_handshake on;`) as a new site, symlinked into `sites-enabled` — additive only,
+the `hellfire` co-tenant's own Certbot vhost (`hellfiresol.com.conf`, not ours to edit)
+is untouched and still correctly matches its own SNI. Backed up all live server configs
+to a local scratchpad before touching anything. `nginx -t` passed (two harmless "protocol
+options redefined for 0.0.0.0:443" warnings — hellfire's `listen 443 ssl;` has no `http2`,
+confirmed cosmetic: doesn't affect which cert/content gets served per SNI) → `systemctl
+reload nginx`.
+
+Verified from the origin directly, bypassing Cloudflare, before touching anything CF-side:
+all 7 hosts (`curl -k --resolve <host>:443:164.90.235.66 https://<host>/`) return their own
+real content under a cert whose CN/SAN actually names them (not hellfire's ~30970-byte
+apex); `nosuchhost.tetapi.dev` hard-fails the TLS handshake (`tlsv1 unrecognized name`,
+confirmed via `curl -v`); `hellfiresol.com`/`www.hellfiresol.com` under their own SNI still
+get 200 + their real ~30970-byte body under `CN=hellfiresol.com` (their vhost is completely
+unaffected). `scripts/security/probe.py --only origin-tls`: **5/5 PASS** (was honestly RED
+since 5.15). Full `scripts/security/probe.py` run: 26 pass / 0 fail / 3 skip — no
+regressions anywhere else. Public `:80` and every CF-fronted URL unchanged throughout
+(spot-checked `api.tetapi.dev/health` via both the real DNS path and `:80` direct).
+
+**Deliberately stopped before step 6** (flipping the CF zones to Full/Full-strict) — the
+mandatory fix order requires SH.OS to independently verify their two hosts externally
+first, plus owner/manager sign-off, since this is the step that makes Cloudflare start
+trusting the origin's `:443` answer per-SNI. Reported to the manager for that
+coordination; no CF zone settings or Configuration Rules were touched this session — only
+the Origin CA certificate-issuance endpoint was called.
+
+Changed: `deploy/nginx/{app,api,mcp,tetapi.dev,shos.hellfiresol.com,
+bo.shos.hellfiresol.com}.conf` (added `:443` blocks), new
+`deploy/nginx/stats.tetapi.dev.conf` and `deploy/nginx/default-tls-reject.conf`,
+`docs/security.md` (S-25 row → 🟡, steps 1-5 done), `docs/deployment.md` (Origin TLS
+runbook rewritten: issuance-via-API supersedes the CSR-handoff-to-owner assumption, step 2
+implementation notes, step 6 runbook for the next session), `docs/known-issues.md` (S-25
+update), `docs/roadmap.md` (new 5.16 row, closed the stale "waiting on keys" entry).
+Risk: the CF→origin hop is still cleartext until step 6 lands (first half of S-25
+unresolved) — anyone picking this up must not skip the SH.OS external-verification
+pre-check before flipping CF, or a mismatch could serve the wrong content under a domain
+with a now-valid-looking padlock. `default-tls-reject` makes `:443` behavior change for
+any SNI nginx doesn't recognize — low risk (only affects direct-to-origin-IP probing,
+which isn't how real traffic arrives while CF is Flexible) but worth knowing if a future
+host is added and someone forgets to give it its own `:443` block.
+Next: manager coordinates SH.OS external verification of `shos.`/`bo.shos.
+hellfiresol.com`, then owner-approved step 6 (flip `tetapi.dev` CF SSL to strict, remove
+the 2026-09-26 shos Configuration Rule) — see `docs/deployment.md` "Step 6" for the exact
+sequence and rollback plan.
+
 ## 2026-09-27 · 1.27 backend · S-22: a domain claim must prove the entity's anchor
 Done: closed the code half of the 🔴 **S-22** pre-verified-entity takeover (the URGENT
 gate in front of GTM Phase 2) — [api PR #33](https://github.com/teta-pi/api/pull/33),
