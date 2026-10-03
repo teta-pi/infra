@@ -6,6 +6,54 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-03 · 1.27 backend · S-22 CLOSED — merged, deployed, live-verified
+Done: [api PR #33](https://github.com/teta-pi/api/pull/33) merged and deployed
+(`Deploy to Production` green on `main@b036778`); `pytest`/CodeQL green,
+pre-existing Bandit/pip-audit failures on `main` are unrelated to this change
+(flagged, not ours to fix here). S-22 is now ✅ **CLOSED** in `security.md`.
+
+Live-verified on prod immediately after the deploy, read-only except for one
+permanent fixture:
+1. Created `teta-security-s-22-probe-fixture` via `bulk-preverify`
+   (`business_id=6a9c6cb8-c88d-40c9-b4bd-f9adee7a4091`, anchor
+   `example-anchor.test` — RFC 6761 reserved, unclaimable by construction).
+2. The exploit request itself: `claim/domain/check` **and** `/start` with
+   `attacker-throwaway-s22.test` → **403**, naming the real anchor
+   (`"This profile is anchored to example-anchor.test — ..."`).
+3. `/start` with a cosmetic variant of the anchor (`WWW.Example-Anchor.test`)
+   → **200** with DNS instructions for the normalized `example-anchor.test` —
+   proves the gate matches correctly, not just rejects everything.
+4. `probe.py --only s22` → **PASS**. Full net: **22 pass · 0 fail · 3 skip**
+   (2 skips are the pre-existing `/docs`/`/redoc` owner question, 1 is the
+   opt-in heavy rate-limit group) — no regressions anywhere else.
+
+The fixture is **kept permanently** (not opted out) as the probe's
+`s22_claim_anchor` row — `fixtures.json` updated, `scripts/security/README.md`
+documents why. DB confirmed via psql right before the fix: `self_registered=18,
+opted_out=10, pre_verified_unclaimed=0` (now 1 — the fixture) — the exposure
+window never opened.
+
+Changed: infra `docs/security.md` (S-22 → CLOSED), `docs/known-issues.md`,
+`docs/roadmap.md` (row 1.27 → done), `scripts/security/fixtures.json`
+(`s22_claim_anchor` entry).
+
+Risk: none new. The `www.`/trailing-dot normalization change from the api fix
+means any `verify/domain/start` token minted before 2026-10-03 for a
+`www.`-prefixed or trailing-dot domain is now keyed under the bare host —
+such a token (24h TTL, so already expired by the time this merged) would have
+needed a restart; no reports of that happening.
+
+Next: **GTM Phase 2 gate is clear.** `outreach_queue.py --create` on the 455
+anchored top-500 rows is now safe to run against prod (claim flow verified
+live). Two things worth doing before/alongside the real run, not blockers:
+(a) 51 of the 455 rows are `github_org`-only and will 403 on any domain claim
+attempt until the follow-up github-proof task (`security.md` §5.2) ships —
+either hold those 51 back or word their outreach message accordingly; (b) the
+owner-side `verify/domain/check` trust-inflation deferral (§5.2, declared-domain
+column) remains open, lower severity, not a GTM blocker.
+
+---
+
 ## 2026-09-27 · 1.27 backend · S-22: a domain claim must prove the entity's anchor
 Done: closed the code half of the 🔴 **S-22** pre-verified-entity takeover (the URGENT
 gate in front of GTM Phase 2) — [api PR #33](https://github.com/teta-pi/api/pull/33),

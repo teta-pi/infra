@@ -145,6 +145,9 @@ fixture.
 
 ## The S-22 fixture — one pre-verified row, unclaimable by construction
 
+Created 2026-10-03, right after the 1.27 fix deployed: `teta-security-s-22-probe-fixture` (`business_id=6a9c6cb8-c88d-40c9-b4bd-f9adee7a4091`), via `bulk-preverify`,
+anchor `example-anchor.test`. Kept permanently.
+
 `check_s22_claim_anchor` needs an entity that is **`pre_verified_unclaimed` on
 prod**: `_get_claimable_business` runs before the anchor check, so on any other
 row the API answers `400` (wrong `claim_status`) and the anchor gate is never
