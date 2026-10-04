@@ -6,6 +6,55 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-04 · 6.8 QA · pre-GTM full QA pass — 2 new 🔴 blockers, gate RED
+Done: full live E2E QA sweep on prod across all 5 owner-requested streams
+(creation, search/indexing, camera↔page sync, verified-blocks-from-camera,
+regressions). QA only, nothing fixed. Method: direct prod code read
+(`/opt/tetapi/api`), read-only `psql`, `journalctl`, live curl with the
+owner's admin test key, and a real MCP JSON-RPC session against
+`mcp.tetapi.dev/mcp` (actual `initialize`→`tools/call`, not REST-pretending).
+Changed: `docs/known-issues.md` §6.8 (full findings), `docs/roadmap.md` 6.8
+row. No app code touched.
+Risk: **2 new 🔴 blockers, escalated live to `TTPI · MANAGER` during the
+session (not held for this write-up):**
+1. `c2pa_verified=true` is 100% self-reported client JSON — `c2pa-python`
+   isn't even installed on prod, and the "signature" check is a substring
+   match on client-supplied strings, no crypto, no use of the device's
+   registered public key. Forgeable by anyone with a device key.
+2. `media.bitcoin_confirmed` / `verification_events.ots_status` can **never**
+   reach confirmed — `app/services/bitcoin.py::verify_proof()` fetches the
+   OTS calendar's upgraded timestamp and discards it instead of merging it
+   into the proof before checking for a Bitcoin attestation. Not a timing
+   issue — structurally permanent regardless of how long you wait.
+Also filed (🟠, non-blocking): entity-level `is_public:false` ignored at
+`POST /businesses` creation; `original_hash`/`content_hash` key-naming split
+across 3 near-duplicate serializers (root cause of the owner's "original_hash
+always null" observation — the hash is computed and stored fine, just
+renamed on 2 of 3 read paths); `GET /proof` doesn't expose enough
+(signature/cert_pem) for independent third-party C2PA verification; device
+QR pairing (`POST /devices/generate-token`) can silently attach to the wrong
+business for any multi-business account — **self-reproduced by accident this
+session** (test pairing landed on tetakta's real entity instead of a new test
+entity), self-revoked within the same minute, tetakta's real device
+(`b8ad9e35`) confirmed untouched before and after via `psql`.
+Confirmed NOT regressed, no action needed: block-level `is_public` (1.22),
+bulk-preverify URLs + claim-409 + opt-out flow (1.23/3.24), private-entity
+404 (S-17), claiming someone else's domain fails safely (1.27/S-22),
+TLS/origin liveness (S-25), new-entity search latency (<1 min), new-block
+embedding + semantic (`resolve-intent`/`teta_resolve_intent`) discovery.
+All test entities/blocks/devices created this session were cleaned up before
+session end (listed in `docs/known-issues.md` §6.8) — nothing of this
+session's own making is left public/active on prod.
+Next: **GTM Phase 2 stays blocked** until both 🔴 items are fixed (c2pa
+signature verification needs a real cryptographic check against
+`device_public_key`; bitcoin confirmation needs the one-line `ts.merge()`
+fix in `verify_proof()`) and re-verified live. The 4 🟠 items don't block the
+gate but should land before outreach starts (claim-flow privacy default,
+hash-field naming, proof completeness, device-pairing business selection).
+C2/C3 (device list display, owner-revoke→401) and a live UI click-through of
+`/claim` and `/profile` were not reached this pass — flagged for whoever
+picks up the 🔴 fixes to re-verify live at the same time.
+
 ## 2026-10-03 · 5.16 devops · origin TLS (S-25) — Origin CA certs issued, :443 vhosts + default-reject live, steps 1-5 of 6 done
 Done: picked up where 5.15 stopped (blocked on owner issuing 2 Origin CA certs from the
 CF dashboard). Turned out that assumption was wrong — the CF API token at

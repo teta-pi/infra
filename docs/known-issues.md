@@ -3,6 +3,285 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 6.8 — pre-GTM full QA pass (2026-10-04)
+
+Full live E2E sweep on prod per the owner's pre-GTM gate (roadmap 6.2 skeleton,
+re-run): creation (A), indexing/search (B), camera↔page sync (C), verified
+blocks from camera (D), regressions (E). QA only — nothing fixed except where
+marked trivial. All test entities/blocks/devices created this session were
+cleaned up (listed at the end). Method: direct code read on `/opt/tetapi/api`
+(prod checkout), `psql` read-only queries, `journalctl` log reads, live curl
+against `api.tetapi.dev`/`app.tetapi.dev` with the owner's own admin
+`pk_live_` test key, and a real MCP JSON-RPC session against
+`mcp.tetapi.dev/mcp` (not REST-via-curl-pretending — actual `initialize` →
+`tools/call`). No UI click-through was done this session (budget); every
+finding below is verified via code + live API/DB, not inferred.
+
+### 🔴 `c2pa_verified=true` is self-reported JSON, not a cryptographic check — forgeable by anyone with a device key
+`api/app/services/c2pa.py`:
+- `c2pa-python` is **not installed** on prod (confirmed: `python3 -c "import
+  c2pa"` → `ModuleNotFoundError`, run directly in `/opt/tetapi/venv`). So
+  `extract_c2pa_manifest()` (reads the actual image bytes) always returns
+  `None` — the only way a manifest ever gets attached is the client-supplied
+  `manifest_json` form field on `POST /media/device-upload`
+  (`routes/media.py::device_upload_media`), which is **plain JSON the
+  uploading client writes itself**.
+- `verify_pi_camera_signature()` performs **zero cryptographic verification**.
+  It does a case-insensitive substring match: `claim_generator` contains
+  "picam"/"pi cam"/"pi camera", and `signature_info.issuer` contains the same
+  or "device key". That's the entire check. `Device.device_public_key`
+  (registered at pairing) is never read by this function or anywhere near it
+  — grepped `c2pa.py` and `media.py`, no reference.
+- **Impact:** anyone holding a valid `X-Device-Api-Key` (any paired device,
+  not a real PiCAM) can `POST /media/device-upload` any file with
+  `manifest_json={"claim_generator":"PiCam","signature_info":{"issuer":"device
+  key"}}` and get `c2pa_verified=true` + the "verified" proof entry
+  (confirmed via `GET /businesses/{id}/proof`, which lists it as a
+  `c2pa_proofs[]` entry with a signer label) — with no real device, no real
+  signature, no real photo provenance. This directly contradicts the "signed
+  evidence" / "cryptographically verifiable" language in
+  `docs/verification-rework.md` and the GTM proof narrative.
+- **Why the DB looks the way it does:** all 16 `media` rows on tetakta's "Pi
+  CAM Captures" block have a non-null `c2pa_manifest` (checked via `psql`) —
+  not because c2pa-python extracted anything, but because every single one
+  went through `device-upload` (even old QA test fixtures: `probe.txt` ×3
+  from the S-21 revocation test, `qa-test.png`, `ttpi_test_upload.txt`, etc.
+  all carry a manifest attempt). The 3 with `c2pa_verified=true` are the real
+  PiCAM captures from 2026-09-10/11/12 whose `manifest_json` happened to say
+  the right strings; the 3 `c2pa_verified=false` duplicates (`a08b17c3...`
+  hash, identical across all 3 rows) are literally the same `probe.txt` file
+  uploaded 3× during a prior session's device-auth test, with a manifest that
+  didn't match the string check — **not a signature bug, just test
+  fixtures**, resolves "3 of 6 without c2pa" cleanly.
+- Escalated live to `TTPI · MANAGER` during this session (see transcript) —
+  not waiting for PR merge to flag it, per run rules.
+- **Fix shape (not applied — QA pass):** either install `c2pa-python` and
+  verify the manifest against the image bytes server-side, or — simpler,
+  since PiCAM already signs with its own device key at pairing — require the
+  device to sign a server-chosen nonce/the upload's own `original_hash` with
+  `device_public_key` and verify that signature in `device_upload_media`
+  instead of trusting client-supplied manifest strings.
+Status: 🔴 NEW, OPEN. **Top candidate for #1 GTM Phase 2 blocker** — the
+product's core trust claim for camera-sourced "verified" content doesn't hold.
+
+### 🔴 `bitcoin_confirmed` can never become `true` — `verify_proof()` discards the calendar upgrade it fetches
+Root cause of the owner's observation ("celery mentions OTS 1345×/week,
+`bitcoin_confirmed`=0 ever"). Two **independent** OTS pipelines exist and the
+owner's two data points are from different ones — worth separating before
+describing the fix:
+- `app/workers/tasks/twira.py::ots_lifecycle` (beat, every 30 min) stamps
+  **`verification_events.ots_status`** (pending→anchored→confirmed) — this is
+  the one generating almost all the "OTS"/"bitcoin" log volume (`journalctl -u
+  tetapi-celery-worker --since '7 days ago' | grep -ic 'ots\|bitcoin'` → 1847).
+  Confirmed via `psql`: all 30 `verification_events` rows are stuck at
+  `ots_status='anchored'`, **0 ever reach `confirmed'`**, despite every single
+  30-min run logging `"OTS lifecycle: 0 stamped, 0 confirmed"` with no errors.
+- `app/workers/tasks/bitcoin.py::check_bitcoin_confirmations` (beat, hourly)
+  is the one that actually drives **`media.bitcoin_confirmed`** — the field
+  the owner is asking about. Confirmed via `psql`: of 16 media rows, 8 have
+  `bitcoin_proof` set and `bitcoin_confirmed=false`; the other 8 have no proof
+  at all (pre-dated celery, 2026-07-25 per `docs/deployment.md` 5.4). Every
+  hourly run logs `{'checked': 8, 'confirmed': 0}` — same 8, forever.
+- **Root cause (same bug class in both pipelines' verify step),
+  `app/services/bitcoin.py::verify_proof()`:**
+  ```python
+  for url in calendars:
+      try:
+          cal = RemoteCalendar(url)
+          cal.get_timestamp(ts.msg)   # <-- return value DISCARDED
+          break
+      except Exception:
+          continue
+  ```
+  `RemoteCalendar.get_timestamp()` returns an **upgraded** `Timestamp` object
+  (the one that, once Bitcoin has confirmed the calendar's merkle root,
+  carries a `BitcoinBlockHeaderAttestation`). The code fetches it and then
+  throws it away — it never does `ts.merge(upgraded)`. The subsequent
+  `for attestation in ts.all_attestations()` loop only ever sees whatever was
+  embedded in the **original proof at submission time** (seconds after
+  upload), which structurally cannot contain a Bitcoin attestation yet (OTS
+  calendars take hours before a Bitcoin block even exists to attest to). So
+  `verify_proof()` is **guaranteed to always return `confirmed:false`**,
+  independent of how long you wait — it's not a timing/calibration issue, the
+  upgrade step is a no-op by construction. Same missing-merge bug in
+  `twira.py::_ots_lifecycle_async`'s confirm step (it calls `verify_proof`
+  too) — explains both pipelines being stuck identically.
+- No exceptions are being swallowed (checked `journalctl` for "OpenTimestamps
+  submission failed"/"OTS calendar...failed"/"OTS verification failed" over 7
+  days — zero hits) — this isn't a connectivity/calendar-server problem, it's
+  the merge call that's missing.
+- **Fix (not applied):** `app/services/bitcoin.py::verify_proof`, replace the
+  discarded `cal.get_timestamp(ts.msg)` with `upgraded = cal.get_timestamp(ts.msg); ts.merge(upgraded)`
+  before checking `ts.all_attestations()`. Same shape fixes `ots_lifecycle`'s
+  confirm step since it calls the same function.
+Status: 🔴 NEW, OPEN — root cause fully diagnosed, not fixed (QA pass).
+**#2 candidate GTM blocker**: every "Bitcoin-confirmed" proof claim in
+GTM/landing copy is currently unreachable in production, forever, not just slow.
+
+### 🟠 `POST /businesses` silently ignores `is_public:false` — every new entity is forced public at creation
+`routes/businesses.py::create_business` (line ~219) hardcodes
+`is_public=True, is_published=True` on the new `Business()` regardless of
+`BusinessCreate.is_public` (schema accepts the field, line 20 of
+`schemas/business.py` — it's just never read in the handler). Live-verified:
+`POST /businesses {"name":"QA68 Private Entity","is_public":false}` → DB row
+has `is_public=true`; the entity was publicly resolvable
+(`GET /{id}/preview` 200, full data, anonymous) immediately after creation.
+This is a **different code path** than the 1.22 fix (block-level `is_public`,
+re-verified below as still correct) — entity-level `is_public` at creation
+was apparently never wired up at all. **Impact:** a user/agent who expects to
+build a draft profile privately before publishing is public from the first
+`POST`, with no error telling them so — directly relevant to GTM Phase 2's
+own "legitimacy before outreach" sequencing if pre-verified-import or
+self-registration flows ever rely on a private-by-default start.
+**Fix (not applied):** `is_public=payload.is_public if payload.is_public is not None else True` (or `False` if "private by default" is the intended product behavior — ask the owner which).
+Status: 🟠 NEW, OPEN.
+
+### 🟡 `is_public:false` at creation IS respected at the block level — confirmed, no regression (A3)
+Re-verified 1.22 live: `POST /businesses/{id}/blocks {"is_public":false}` →
+block correctly absent from `GET /businesses/by-slug/{slug}/public`'s
+`blocks[]`, while a sibling `is_public:true` block on the same entity shows
+up. No regression. (Contrast with the entity-level bug immediately above —
+two different bugs, don't conflate when fixing.)
+
+### 🟠 Public media payload serializes `media.original_hash` as two different key names depending on endpoint
+`GET /blocks/{id}` and the DB column (`models/media.py`) both use
+`original_hash`; the web app's own `PublicBlockMedia` TS interface
+(`teta-pi/web/src/app/e/[slug]/blocks/[blockId]/page.tsx`) expects
+`original_hash` too, and gets it correctly from that endpoint. But
+`GET /businesses/by-slug/{slug}/public` and `GET /businesses/{id}/preview`
+(`routes/businesses.py` lines ~689 and ~755, the agent-facing one too)
+rename the same value to `content_hash` in their `media_list` construction
+(`"content_hash": m.original_hash`). Live-verified: `/by-slug/.../public` for
+tetakta returns `"original_hash": null` (key absent → always null) +
+`"content_hash": "<real sha256>"` for every media item, including the 3
+c2pa-verified ones — this is almost certainly the exact mismatch behind the
+owner's "original_hash = null for ALL media" observation. The hash **is**
+computed and stored correctly (confirmed in `psql` — no media row has a null
+`original_hash` column); it's purely a serialization-naming inconsistency
+across three near-duplicate serializers. Both routes do correctly include the
+real file URL (as `media_url`, not missing).
+**Fix (not applied):** pick one key (`original_hash`, matching the DB column
+and the one frontend type that already depends on it) and use it in all three
+serializers (`/blocks/{id}`, `/by-slug/{slug}/public`, `/{id}/preview`).
+Status: 🟠 NEW, OPEN. Explains A5 — not a data-loss bug, a naming bug.
+
+### 🟠 `GET /businesses/{id}/proof` doesn't expose enough to let a third party independently verify C2PA
+Live-checked (read-only, tetakta's real c2pa block, no writes): the response
+gives `manifest_hash` (sha256) and a truncated `signer` label
+(`"PiCAM/NzNh··MA=="`) per `c2pa_proofs[]` entry, but not the actual ECDSA
+signature, the `cert_pem`, or the `root_ca_pem` that `c2pa.py`'s own
+docstring says exist specifically "so verifiers can validate without trusting
+TETA+PI servers." Those fields live in `media.c2pa_manifest.teta_pi_verification`
+(confirmed present in the DB column) but aren't surfaced by `/proof`. As
+shipped, a third-party agent calling `teta_get_proof` gets a hash + a label
+it must simply trust from TETA+PI's own server — it cannot do the
+independent signature check the architecture doc promises is possible.
+Separately, `bitcoin_proofs: []` is empty for tetakta despite 3 media having
+a submitted (if never-confirmed, see above) `bitcoin_proof` — consistent with
+the bitcoin bug, not a second issue.
+Status: 🟠 NEW, OPEN. Relevant to D4/GTM's "machine-verifiable proof" claim.
+
+### 🟠 `POST /devices/generate-token` can silently mint a pairing QR for the wrong business, with zero indication
+`devices_router.generate_registration_token` does
+`select(Business).where(Business.owner_id == current_user.id).limit(1)` —
+no ordering, no "which business is open in the UI" context. For an account
+that owns exactly one business this is harmless; for any account owning
+**more than one** (true of every admin/test account by now, and plausible
+for any real user who creates a second profile), the QR/token silently
+attaches to whichever business the query happens to return first — not
+necessarily the one the user has open in `/profile`.
+**Live-reproduced (by accident, caught and reversed within the same minute):**
+called `POST /devices/generate-token` with the owner's admin test key
+immediately after creating a new test business (`QA68 Test Co`) specifically
+to keep device-pairing tests off `tetakta` per this session's own
+instructions — the token came back for `entity_name: "tetakta"`
+(`eced734c-...`), not the new test business, because the admin account owns
+many businesses from QA history. The emulated device
+(`device_fingerprint: qa68-emu-fp-001`, `label: "QA68 Emulated Cam"`) landed
+on tetakta's real entity. **Self-revoked immediately**
+(`POST /devices/self-revoke`, confirmed `revoked_at` set, confirmed tetakta's
+real device `b8ad9e35` untouched — `is_active=true`, `revoked_at` empty,
+checked via `psql` before and after). No lasting effect, but it demonstrates
+the bug is real and trivially triggerable, not a theoretical edge case.
+**Impact:** a real user with two businesses (e.g. testing a rebrand, or
+running two profiles) could tap "Connect Camera" from `/profile` on business
+B and have captures silently attributed to business A instead, with the
+response body being the only place the mismatch is even visible (the QR
+itself carries no business identifier the phone shows a human).
+**Fix (not applied):** `generate_registration_token` needs a `business_id` in
+its request body (frontend already has it — it's the page the button is on)
+instead of inferring "the caller's business" via an unordered `.limit(1)`.
+Status: 🟠 NEW, OPEN.
+
+### ✅ Confirmed working, no regression (fast checks, live on prod)
+- **A2** `POST /businesses` with `pk_live_` key → 201, registry-free, works.
+- **A3** block-level `is_public` respected (see entry above) — 1.22 holds.
+- **A4** real file/video upload → `media_id`, persists correctly across a
+  fresh `GET` (web's `handleFileUpload` already works around the upload
+  response not echoing `storage_url`/`original_hash` — see minor note below —
+  by refetching the block; not a live bug for the web UI today).
+- **B1** new entity findable via `GET /search?q=` immediately (<1 min,
+  effectively synchronous) and via a real MCP `teta_search` call
+  (`verified_only:false` — correctly empty with the documented
+  `default:true` omitted, exactly per the tool's own schema, not a bug).
+- **B2** new block's embedding generated near-immediately (checked `psql`,
+  `embedding IS NOT NULL` within ~15 min of creation) and found via
+  `POST /resolve-intent` / MCP `teta_resolve_intent` on block-description
+  keywords the entity name doesn't contain — semantic path works. `/search`
+  itself does not match block body text (name/registry-field match only) —
+  this looks like intentional endpoint scoping (`resolve-intent` = semantic,
+  `/search` = keyword/name), not a bug; flagging only so nobody "fixes" it
+  without checking with the owner first.
+- **B4** private/unpublished entity: confirmed 404 on `by-slug/.../public`
+  immediately after `PATCH is_public=false` — S-17 holds (this session's own
+  cleanup doubled as the regression check).
+- **E1** `bulk-preverify` → real `profile_url`/`opt_out_url`/`badge_url` on
+  `app.tetapi.dev`, claim-409 on duplicate name, full opt-out flow
+  (page 200 → API 200 → `by-slug` 404 after) — 1.23/3.24 hold, no regression.
+- **E2** claiming a domain you don't control (`github.com`) correctly returns
+  `{"verified": false}` and does **not** transfer `claim_status`/`owner_id` —
+  no security bypass. Minor-only nit: the failure is HTTP 200 with a false
+  flag, not the 403 `docs/known-issues.md`'s own 1.27/S-22 write-up implies;
+  functionally harmless, cosmetic status-code mismatch only, not re-filing.
+- **E4** `tetapi.dev`, `app.tetapi.dev`, `api.tetapi.dev/health` all 200 over
+  TLS; `mcp.tetapi.dev/mcp` answers (400 on a bare unauthenticated GET is
+  expected Streamable-HTTP behavior, not an outage — a real `initialize`
+  POST against it worked throughout this session, see B1/D above).
+
+### Minor note (not filed separately): `MediaUploadResponse` doesn't declare `storage_url`/`original_hash`
+`routes/media.py::upload_media` computes and returns `storage_url` in its
+dict, but `schemas/media.py::MediaUploadResponse` doesn't declare that field
+(or `original_hash`), so FastAPI's `response_model` silently strips it —
+live-confirmed, the real HTTP response has neither key. Harmless for
+`teta-pi/web` today (it already refetches the block instead of trusting the
+upload response — see its own comment at `profile/page.tsx:1833`), but any
+other API consumer (a future mobile app, a third-party integration) that
+trusts the documented/schema'd response shape gets an incomplete answer and
+has to know to re-fetch. Cheap fix whenever someone's in that file: add the
+two fields to the schema.
+
+**Streams not reached this session (budget):** C2/C3 (`GET /devices`
+display + owner-side revoke-then-401) and a live UI click-through of A1
+(`/claim` wizard end-to-end as a human) and A4 (`/profile` upload button)
+were not exercised directly — C1's accidental repro above already exercised
+register+self-revoke end-to-end and both behaved correctly, so C2/C3 are
+low-risk but unconfirmed this pass. Flag for whoever picks up the device
+bug fix above to close out C2/C3 live at the same time.
+
+**Test artifacts created this session, all cleaned up before session end:**
+- `QA68 Test Co` (`e40718b8-...`) — `is_public` PATCHed to `false`.
+  Included 1 public + 1 private block, 1 photo + 1 video upload.
+- `QA68 Private Entity` (`5251cd0a-...`) — created to reproduce the
+  `is_public:false`-ignored bug; `is_public` PATCHed to `false` after.
+- `QA68 Preverified Inc` (`5d6fd6a6-...`) — created via `bulk-preverify`,
+  opted out via the real token flow (`claim_status=opted_out`, confirmed
+  404 on `by-slug`).
+- 1 emulated device (`qa68-emu-fp-001`) accidentally paired to **tetakta's
+  real entity** (see device-pairing bug above) — self-revoked within the
+  same minute; tetakta's real device (`b8ad9e35`) confirmed untouched
+  throughout (`is_active=true`, no `revoked_at`, checked before and after).
+No entity, block, or device created by this session remains public/active on prod.
+
 ## 🔴 15.7 co-tenancy re-audit (2026-09-20) — hellfire→root ×2, latent claim-takeover, redis pass in journal
 Read-only + on-box authorized pass (dir 15). Full write-up + severity ranking in
 `docs/security.md` §5 (S-19 reopened, S-21/S-22/S-23 new) and §5.1 (H-1…H-6). The
