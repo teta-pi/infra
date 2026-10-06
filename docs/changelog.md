@@ -6,6 +6,36 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-06 · 14.12 camera · pi-cam's device crypto was fake — now real ECDSA P-256; new backend task 1.29
+Done: `teta-pi/pi-cam` session fixed its `modules/crypto` — `generateKeypair()`
+used to SHA-256 a random seed and wrap the hash in a fake PEM header (not a
+key at all), `sign()` was HMAC-SHA256, despite docs/`algorithm:'ECDSA-P256'`
+claiming real ECDSA/Secure Enclave. Prod confirmed 0 of 5 registered devices
+had a valid key. Now real ECDSA P-256 via `react-native-quick-crypto`
+(origin-checked first against the no-RU/BY-authors rule — `@noble/curves`,
+`elliptic`, and the PKI.js/ASN1.js family were all ruled out as
+Russian-origin-authored before landing on this one), private key in
+SecureStore, **not** hardware-backed. Also fixed a real bug: `signMedia()`
+hashed `sha256(base64(bytes))` instead of the raw bytes, so its content hash
+could never have matched a backend hash of the uploaded file. Device now
+signs the raw-bytes hash and sends it as new `content_signature`/
+`signature_alg` fields on `POST /media/device-upload` — contract specified
+in `docs/api.md`.
+Changed: `docs/api.md` (new device-upload signature subsection), `docs/
+roadmap.md` (14.12 entry + new **1.29** backend task, not started), this
+changelog. App-side changes are all in `teta-pi/pi-cam` (see its own
+`docs/changelog.md`), not this repo.
+Risk: backend does not verify `content_signature` yet (1.29 unstarted) —
+device-upload currently accepts the new fields without checking them, so
+there's no enforcement gap introduced, just an unimplemented check. The
+pi-cam session could not verify any of this on a real device (sandbox can't
+reach `dl.google.com`/EAS); owner verification still needed before this is
+trusted end-to-end.
+Next: a backend session picks up **1.29** — implement `content_signature`
+verification on `/media/device-upload` per the `docs/api.md` contract.
+Separately, owner runs a pi-cam EAS build to confirm the real keygen/sign
+works on-device.
+
 ## 2026-10-03 · 5.16 devops · origin TLS (S-25) — Origin CA certs issued, :443 vhosts + default-reject live, steps 1-5 of 6 done
 Done: picked up where 5.15 stopped (blocked on owner issuing 2 Origin CA certs from the
 CF dashboard). Turned out that assumption was wrong — the CF API token at
