@@ -91,14 +91,19 @@ the server** (`ssh tetapi "cat /etc/nginx/sites-available/<name>"`).
 | `deploy/nginx/mcp.tetapi.dev.conf` | `mcp.tetapi.dev` |
 | `deploy/nginx/tetapi.dev.conf` | **`teta-pi`** (landing — note the different name) |
 | `deploy/nginx/shos.hellfiresol.com.conf` | `shos.hellfiresol.com` |
-| `deploy/nginx/bo.shos.hellfiresol.com.conf` | `bo.shos.hellfiresol.com` |
+| `deploy/nginx/bo-shos.hellfiresol.com.conf` | `bo-shos.hellfiresol.com` (renamed from `bo.shos.hellfiresol.com` in 5.17 — see "Origin TLS" below) |
 | `deploy/nginx/stats.tetapi.dev.conf` | `stats.tetapi.dev` (tracked since 5.16; see "Origin TLS" above) |
 | `deploy/nginx/default-tls-reject.conf` | `default-tls-reject` (new since 5.16 — needs `ln -s` into `sites-enabled`, not already present there) |
+| `deploy/nginx/default-http-reject.conf` | `default-http-reject` (new since 5.17 — same `ln -s` requirement; see "Origin TLS" below / S-26) |
 | `deploy/nginx/snippets/security-headers.conf` | `/etc/nginx/snippets/security-headers.conf` |
 
 Not tracked in this repo (server-only, out of the 5.6 header rollout):
-`teta`, `hellfiresol.com`, `default`. `hellfiresol.com` especially is **not
-ours to edit** — it's the `hellfire` co-tenant's own Certbot-managed vhost.
+`teta`, `hellfiresol.com`. `hellfiresol.com` is **not ours to edit** — it's
+the `hellfire` co-tenant's own Certbot-managed vhost. `teta` is a legacy
+`listen 80; server_name _;` vhost predating `default-http-reject` (no
+`default_server` flag of its own — found while diagnosing S-26, see below;
+its literal `server_name _` never matched real traffic since `_` isn't a
+wildcard to nginx, just an ordinary string).
 
 ### Applying an nginx change (the manual step)
 ```bash
@@ -149,7 +154,7 @@ Start value is `max-age=86400` (1 day), **no** `includeSubDomains`, **no**
    browser-baked, effectively irreversible commitment (submits the apex to the
    HSTS preload list). Not planned.
 
-## Origin TLS (Cloudflare Origin CA) — S-25, steps 1-5 done 2026-10-03 (5.16)
+## Origin TLS (Cloudflare Origin CA) — S-25 CLOSED 2026-10-04 (5.15/5.16); S-26 added 5.17
 
 `docs/security.md` S-25: Cloudflare reaches this origin over plain `:80`
 (Flexible SSL) — the CF→origin hop is cleartext on the public internet — and
@@ -193,6 +198,11 @@ see "Step 6" below.
    action in the CF dashboard) — never before step 5 passes, since Full mode
    is exactly what makes the origin's `:443` answer authoritative for
    Cloudflare. SH.OS verifies their two hosts externally before this flips.
+
+> **Note (5.17):** steps 1-6 above describe the state as of 5.16, when the
+> back-office host was still named `bo.shos.hellfiresol.com`. It was renamed
+> to `bo-shos.hellfiresol.com` in 5.17 (see "SAN update + :80 default-reject"
+> below) — the fix order and reasoning are unchanged, only that one hostname.
 
 ### Step 2 implementation notes (5.16)
 
@@ -291,15 +301,18 @@ by Cloudflare's edge (exactly the trust boundary we want for the CF→origin
 hop — it isn't meant to be publicly trusted), and has no coupling to
 hellfire's own Let's Encrypt/Certbot rotation on the same box.
 
-### Step 6 — flipping Cloudflare to Full(-strict) (not done yet, 5.16)
+### Step 6 — flipping Cloudflare to Full(-strict) — ✅ DONE 2026-10-04 (docs #135)
 
-Deliberately **not** done this session, per the mandatory fix order: it's the
-one step that makes CF start trusting the origin's `:443` response
-per-SNI, so it must come strictly after steps 1-5 are verified (they are) and
-after independent confirmation nothing on the SH.OS side breaks. Sequence for
-whoever picks this up next:
+Deliberately **not** done in 5.16 itself, per the mandatory fix order — it's
+the one step that makes CF start trusting the origin's `:443` response
+per-SNI, so it had to come strictly after steps 1-5 were verified and after
+independent confirmation nothing on the SH.OS side broke. **Completed
+2026-10-04**: `tetapi.dev` → strict, the `shos.*` Flexible Configuration Rule
+deleted, zero 525/526 across all 7 hosts post-flip (see `docs/security.md`
+S-25, now CLOSED). Sequence that was followed, kept here for the record:
 1. Manager asks SH.OS to verify `shos.hellfiresol.com` and
-   `bo.shos.hellfiresol.com` externally (public internet, not from-origin) —
+   `bo-shos.hellfiresol.com` (named `bo.shos.hellfiresol.com` at the time;
+   renamed 5.17) externally (public internet, not from-origin) —
    they should look unchanged (still served via Cloudflare, same content);
    this is a pre-check, not something this fix should need to change for them
    at this stage since CF is still Flexible.
@@ -316,6 +329,112 @@ whoever picks this up next:
    immediately (`ssl` back to `flexible` / restore the Configuration Rule) —
    at this stage a mismatch means CF is trusting the wrong origin content
    under our domain or SH.OS's.
+
+### `bo.shos` → `bo-shos` rename + SAN update (5.17)
+
+The owner renamed SH.OS's back-office DNS record from
+`bo.shos.hellfiresol.com` to `bo-shos.hellfiresol.com`: Cloudflare's free
+Universal SSL only covers **one** subdomain level under the zone apex
+(`*.hellfiresol.com`), so a two-label name (`bo.shos.`) could never get a
+valid edge certificate — a single-label name (`bo-shos.`) can. Old DNS
+record removed, new one resolves (confirmed 2026-10-05: `bo.shos...` NXDOMAIN,
+`bo-shos...` resolves to the usual CF anycast pair).
+
+Steps taken, origin-side (same CSR/cert discipline as the original 5.16
+issuance — verify before install, revoke the old cert only after the
+replacement is confirmed working):
+1. **New CSR, same private key** (`/etc/ssl/private/shos.hellfiresol.com.origin.key`
+   — never regenerated, only re-used):
+   ```bash
+   openssl req -new -key /etc/ssl/private/shos.hellfiresol.com.origin.key \
+     -out /root/shos.hellfiresol.com.origin.csr.new \
+     -subj "/CN=shos.hellfiresol.com" \
+     -addext "subjectAltName=DNS:shos.hellfiresol.com,DNS:bo-shos.hellfiresol.com"
+   ```
+   `bo.shos.hellfiresol.com` dropped from the SAN — a dead DNS record kept in
+   a live cert's SAN is a strictly larger attack surface for no benefit.
+2. Submitted via the same `POST /client/v4/certificates` Bearer-token call as
+   5.16 (`hostnames: ["shos.hellfiresol.com", "bo-shos.hellfiresol.com"]`,
+   `request_type: origin-rsa`, `requested_validity: 5475`) — run from the
+   **owner's machine** (`~/.tetapi/cf_api_token`), not the server; the token
+   never leaves local disk. `success: true`, new cert valid to 2041-10-01.
+3. Verified the returned PEM before touching the server: SAN matches the
+   CSR, `notAfter` ~15y out, and a pubkey-hash comparison against the
+   existing private key confirms it's a real pair for that key — same
+   checks as 5.16, run locally this time since the token lives there.
+4. Installed at `/etc/ssl/certs/shos.hellfiresol.com.origin.pem` (644
+   root:root, same filename — only the SAN changed, the path stays since
+   both vhosts reference it). Old cert backed up first to
+   `/root/shos.hellfiresol.com.origin.pem.bak-5.17` before being overwritten.
+5. `deploy/nginx/bo.shos.hellfiresol.com.conf` → `git mv`'d to
+   `deploy/nginx/bo-shos.hellfiresol.com.conf`; both `server_name` lines
+   (`:80` and `:443`) updated to `bo-shos.hellfiresol.com`. Everything else
+   (basic-auth gate, `proxy_pass http://127.0.0.1:8202`, security headers)
+   unchanged — see "Second SH.OS vhost" below for the current full file.
+6. Deployed: new file → `/etc/nginx/sites-available/bo-shos.hellfiresol.com`
+   + symlinked into `sites-enabled`; old
+   `sites-available/sites-enabled/bo.shos.hellfiresol.com` removed (backed
+   up to `/root/bo.shos.hellfiresol.com.sites-available.bak-5.17` first).
+   `nginx -t` → `systemctl reload nginx`.
+7. Verified from the origin directly (before revoking the old cert):
+   `bo-shos.hellfiresol.com` :443 with SNI → **401** (gate) under the new
+   cert; `shos.hellfiresol.com`, all 5 tetapi hosts, and `hellfiresol.com`
+   :443 unchanged; `scripts/security/probe.py` full run — 26 pass / 0 fail
+   (no regressions). Then verified publicly through Cloudflare:
+   `https://bo-shos.hellfiresol.com/` → **401** (was 525 before the rename
+   — DNS pointed nowhere resolvable, now edge TLS + gate both work).
+8. **Only then**, old cert revoked via `DELETE /client/v4/certificates/{id}`
+   (the one with SAN `bo.shos.hellfiresol.com` + `shos.hellfiresol.com`,
+   found via `GET /client/v4/certificates?zone_id=<hellfiresol.com zone id>`
+   since the id wasn't recorded anywhere from 5.16) — `success: true`,
+   `revoked_at` returned. Re-verified `bo-shos`/`shos` still 200/401 after
+   revocation (origin never referenced the old cert file after step 4, so
+   this was just closing the loop, not a live dependency).
+
+### `:80` unrecognized-Host default route — S-26 (5.17)
+
+Found while re-checking routing during the rename above:
+`curl -H "Host: totally-unknown-name.example" http://164.90.235.66/` → 200,
+body from `api.tetapi.dev`. No `:80` server block declared itself
+`default_server`, so nginx fell back to the first one loaded for that
+socket (alphabetical `sites-enabled` glob → `api.tetapi.dev`) for **any**
+unrecognized `Host` header — the `:80` sibling of the S-25 `:443` gap 5.16
+closed. Anyone pointing their own domain at this droplet's IP got our API's
+response under their own hostname.
+
+Fix: `deploy/nginx/default-http-reject.conf` (new, see `docs/security.md`
+S-26 for the full write-up) — `listen 80 default_server; server_name _;
+return 444;`, additive only, same pattern as `default-tls-reject.conf`.
+`444` (nginx-specific: close the connection, no response at all) chosen over
+`421 Misdirected Request` to match the minimal-disclosure spirit of
+`ssl_reject_handshake` on the `:443` side.
+
+**ACME check before deploying this** (hellfire's own Certbot renews over
+this box's `:80` and must not break): authenticator is the certbot `nginx`
+plugin (confirmed via `/etc/letsencrypt/renewal/hellfiresol.com.conf`),
+which validates HTTP-01 challenges by temporarily patching hellfire's own
+explicit vhost (`server_name hellfiresol.com www.hellfiresol.com`) — the
+challenge request's Host header always matches that vhost directly and
+never reaches the new default block, so no `/.well-known/acme-challenge/`
+carve-out is needed. Confirmed cert validity (2026-12-17, renews ~30 days
+prior) and the systemd `certbot.timer` schedule before deploying, not
+guessed.
+
+**nginx -t** surfaced one new warning: `conflicting server name "_" on
+0.0.0.0:80, ignored` — a pre-existing, untracked `teta` vhost already has a
+literal `server_name _;` on `:80` with no `default_server` flag of its own
+(see the file-mapping table above). This is a duplicate-*name* warning, not
+a duplicate-*default_server* error (nginx allows only one `default_server`
+per socket and would hard-fail `-t` on that, not warn) — confirmed `-t`
+still exited clean and the live behavior afterward matches intent (unknown
+`Host` → connection closed, no body), so this is cosmetic like the
+`http2`-per-socket warnings from 5.16, not a routing conflict.
+
+Verified: unknown `Host` on `:80` → `curl: (52) Empty reply from server`
+(nginx's `444`, not our API); every other `:80` host (api/app/mcp/tetapi.dev
+landing, shos, bo-shos, stats, hellfire) unchanged; hellfire's Certbot
+renewal path untouched (explicit vhost match, confirmed above);
+`scripts/security/probe.py` full run — 26 pass / 0 fail.
 
 ## Secrets — server `.env` only (`/opt/tetapi/api/.env`), never in git
 `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `RESEND_API_KEY`, `PII_ENCRYPTION_KEY`
@@ -451,6 +570,15 @@ so an origin-side redirect loops. HTTPS enforcement is Cloudflare's "Always Use
 HTTPS" (owner action, per zone).
 
 ### Second SH.OS vhost: `bo.shos.hellfiresol.com` (staff back-office) — DONE 5.12, 2026-09-26
+> **Renamed 5.17 (2026-10-05) to `bo-shos.hellfiresol.com`** — Cloudflare's
+> free Universal SSL covers only one subdomain level, so the two-label name
+> could never get a valid edge cert. The history below (file name, hostname
+> in commands/tables, the `unknown Host` row) is kept as it was written at
+> the time; current file is `deploy/nginx/bo-shos.hellfiresol.com.conf`
+> everywhere `bo.shos.hellfiresol.com.conf` appears below, and the
+> `unknown Host` finding in the verification table was itself closed by the
+> same rename session — see "Origin TLS" → S-26 above.
+
 Requested by SH.OS (S1 DevOps, 2026-09-26), approved by the manager session. File:
 `deploy/nginx/bo.shos.hellfiresol.com.conf` — same pattern as the first vhost
 (`listen 80`, shared `snippets/security-headers.conf`, `proxy_read_timeout 60s`),
@@ -517,10 +645,11 @@ header):
 | unknown `Host` (`random.invalid`) | still falls through to `api.tetapi.dev` — the new vhost is name-based only and did **not** become the default server |
 | `ss -ltn` / `ufw` | `8202` (and 8200/8201) still `127.0.0.1`-only; externally still only 22/80/443 |
 
-**Owner actions still outstanding** (not TETA+PI infra):
-1. **DNS** — `bo.shos.hellfiresol.com` → `164.90.235.66`, **proxied** (orange cloud) in
-   the hellfire Cloudflare zone. No A record exists yet, so the host is unreachable by
-   name until this is done.
+**Owner actions still outstanding** (not TETA+PI infra, as of 2026-09-26):
+1. ~~**DNS** — `bo.shos.hellfiresol.com` → `164.90.235.66`, proxied~~ — done at
+   some point after this, then **superseded by 5.17**: the owner replaced
+   this record with `bo-shos.hellfiresol.com` (same target, proxied) for the
+   subdomain-depth reason noted above. Current state confirmed live in S-26.
 2. **Cloudflare "Always Use HTTPS"** for the zone/host — HTTPS enforcement lives at CF,
    never at the origin (see the redirect-loop note above).
 3. Hand `~/.tetapi/shos-bo-basicauth` (login + password) to SH.OS over their own

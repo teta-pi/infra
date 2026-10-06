@@ -106,6 +106,30 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   kill itself — what the pi-cam "Unlink" button calls), and the admin kill
   switch below.
 
+### `POST /media/device-upload` — content signature (14.12 / 1.29 contract)
+Proposed by `teta-pi/pi-cam` 14.12, **not yet implemented backend-side** —
+tracked as roadmap 1.29. `pi-cam` now sends two new `multipart/form-data`
+fields alongside the existing `file`, `manifest_json`, `captured_at`:
+
+| Field | Value |
+|---|---|
+| `content_signature` | Base64 of a DER-encoded ECDSA signature, produced by `createSign('SHA256').sign(devicePrivateKey, 'base64')` over the **hex-encoded SHA-256 hash of `file`'s raw bytes** (not the manifest JSON, not the file itself). |
+| `signature_alg` | `ecdsa-with-SHA256` — matches `manifest_json.signature_info.alg`. Currently the only value; send it anyway so the field is forward-compatible if the device key algorithm ever changes. |
+
+The device's public key (SPKI PEM, real — see `teta-pi/pi-cam` 14.12 commit)
+is already stored from `POST /devices/register`'s `device_public_key`.
+1.29 should: recompute `sha256(file_bytes).hex()` server-side, then verify
+`content_signature` against that hash using the stored public key
+(`cryptography`'s `ec.ECDSA(hashes.SHA256())` + `load_pem_public_key`, or
+equivalent) — **not** trust the hash inside `manifest_json`, since that's
+client-asserted. This is a separate, simpler check from the (still
+unverified) C2PA claim signature embedded in the manifest — don't conflate
+the two. A device registered before 2026-10-06 will have no valid key at
+all (14.12 found zero of the then-5 registered devices had one); those
+devices get a fresh key + account re-link on next app launch, so an
+`content_signature` verification failure for an old `device_id` is expected
+during the rollout, not a bug.
+
 ## Search & intent
 - `routes/search.py` — `/search` keyword+level search over published entities.
 - `routes/registry_search.py` — `/registry/search?q=&country=` → official registry
