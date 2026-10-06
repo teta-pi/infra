@@ -6,6 +6,82 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-05 · 5.17 devops · bo.shos→bo-shos DNS rename + origin cert SAN update + :80 default-reject (S-26)
+Done: owner renamed SH.OS's back-office DNS record `bo.shos.hellfiresol.com` →
+`bo-shos.hellfiresol.com` (Cloudflare's free Universal SSL only covers one
+subdomain level, so the two-label name could never get a valid edge cert; old
+record removed, new one resolves). Re-issued the origin cert for that pair —
+same private key, new CSR (`subjectAltName=DNS:shos.hellfiresol.com,
+DNS:bo-shos.hellfiresol.com`, `bo.shos.` dropped), submitted via the same CF
+Origin CA Bearer-token API as 5.16 (run from the owner's machine so the token
+never left local disk), verified SAN + key-match before installing over the
+old `.pem` (backed up first to `/root/shos.hellfiresol.com.origin.pem.bak-5.17`).
+`deploy/nginx/bo.shos.hellfiresol.com.conf` renamed to
+`bo-shos.hellfiresol.com.conf` (`git mv`), both `server_name` lines updated;
+basic-auth gate, `proxy_pass`, security headers untouched. Separately, found
+(manager's own check, folded into this task) that origin `:80` had **no**
+`default_server` either — any unrecognized `Host` header silently got our
+`api.tetapi.dev` content, the `:80` twin of S-25's `:443` gap. Closed it the
+same way: new `deploy/nginx/default-http-reject.conf`
+(`listen 80 default_server; server_name _; return 444;`, additive, mirrors
+`default-tls-reject.conf`). Checked hellfire's Certbot renewal path first —
+`authenticator = nginx` in `/etc/letsencrypt/renewal/hellfiresol.com.conf`
+patches their own explicit vhost for HTTP-01, never reaches the new default
+block; confirmed cert valid to 2026-12-17 (renews ~30 days prior, nothing due
+during this change) before touching nginx. `nginx -t` clean (one new cosmetic
+warning: a pre-existing untracked `teta` vhost's inert `server_name _`
+duplicate-name collision, not a `default_server` conflict — `-t` would
+hard-fail on that) → `systemctl reload nginx`. Deployed vhost swap + new
+default block together, tested, then reloaded once.
+
+Verified from the origin before touching Cloudflare: `bo-shos.hellfiresol.com`
+:443 with SNI → 401 under the new cert; `shos.hellfiresol.com`, all 5 tetapi
+hosts, and `hellfiresol.com` (hellfire's own, untouched) :443 all unchanged;
+unknown SNI on :443 still hard-fails the handshake (unchanged); unknown `Host`
+on :80 → `curl: (52) Empty reply from server` (nginx's 444, not our API, confirmed
+not the old api.tetapi.dev fallback); full `scripts/security/probe.py` — 26
+pass / 0 fail, no regressions. Then verified publicly through Cloudflare:
+`https://bo-shos.hellfiresol.com/` → **401** (was 525 before this change — DNS
+pointed at nothing resolvable-with-a-cert). Old Origin CA cert (SAN still
+carrying the dead `bo.shos.` name) revoked via
+`DELETE /client/v4/certificates/{id}` only *after* the replacement was
+confirmed live — `success: true`, `revoked_at` returned. Re-checked `bo-shos`/
+`shos` once more post-revocation (still 401/200; the origin never referenced
+the old cert file after install, so this was just closing the loop).
+
+Also, while re-reading the Origin TLS section to document this: found
+`docs/security.md` S-25's detailed Status cell and `docs/deployment.md`
+"Step 6" both still read "not done yet / blocked" even though the actual CF
+Full-strict flip landed 2026-10-04 (`docs: S-25 → CLOSED`, #135) — a stale
+snapshot nobody had gone back to update. Annotated both with a dated update
+note rather than rewriting the historical narrative.
+
+Changed: `deploy/nginx/bo-shos.hellfiresol.com.conf` (renamed from
+`bo.shos.hellfiresol.com.conf`), `deploy/nginx/shos.hellfiresol.com.conf`
+(comment only), `deploy/nginx/default-http-reject.conf` (new);
+`docs/{security,deployment,known-issues,roadmap}.md`. Prod:
+`/etc/ssl/certs/shos.hellfiresol.com.origin.pem` (new SAN, same key),
+`/etc/nginx/sites-{available,enabled}/bo-shos.hellfiresol.com` (renamed, old
+removed), `/etc/nginx/sites-{available,enabled}/default-http-reject` (new);
+Cloudflare: new Origin CA cert issued for `hellfiresol.com` zone, old one
+(SAN `bo.shos.hellfiresol.com`+`shos.hellfiresol.com`) revoked. `hellfiresol.com`
+zone settings/rules otherwise untouched, as instructed.
+
+Risk: none identified live — hellfire's own `:80`/`:443`, Certbot renewal path,
+and all tetapi/shos hosts were re-verified unchanged after both the vhost swap
+and the reload; `probe.py` full run stayed green throughout. The one residual
+to watch: the pre-existing untracked `teta` vhost (`listen 80; server_name _;`,
+no `default_server`) now produces a harmless `nginx -t` warning every time
+config is tested — cosmetic, but worth knowing if a future session sees it
+and wonders whether something broke.
+
+Next: manager/SH.OS to independently verify `bo-shos.hellfiresol.com`
+externally (same process as the 5.16 S-25 close-out) and confirm the 401 gate
+holds from outside too. No other owner action needed — DNS and CF zone
+settings were already correct going in.
+
+---
+
 ## 2026-10-03 · 5.16 devops · origin TLS (S-25) — Origin CA certs issued, :443 vhosts + default-reject live, steps 1-5 of 6 done
 Done: picked up where 5.15 stopped (blocked on owner issuing 2 Origin CA certs from the
 CF dashboard). Turned out that assumption was wrong — the CF API token at
