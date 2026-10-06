@@ -2598,3 +2598,34 @@ verifying their two hosts externally and manager/owner sign-off (see
 deployment.md "Step 6"). Until that flips, the CF→origin hop is still
 cleartext (the *first* half of this finding is unresolved); only the
 *second* half (origin `:443` impersonating `hellfire` for our SNI) is fixed.
+
+## ✅ 6.8 — `c2pa_verified=true` proved nothing; QA + manager finding (found via camera-crypto-truth audit, 2026-10-05; fixed 1.28/3.26, 2026-10-06)
+
+`c2pa-python` is not installed or declared as a dependency, so
+`extract_c2pa_manifest()` (`api/app/services/c2pa.py`) always returns `None`
+for a real uploaded file. The only manifest source on
+`POST /media/device-upload` is the **client-supplied** `manifest_json` form
+field, and `verify_pi_camera_signature()` does nothing more than a substring
+match on `claim_generator`/`signature_info.issuer`. Net effect: anyone
+holding a device's `X-Device-Api-Key` (the Pi CAM upload credential) could
+get `c2pa_verified: true` on any file at all — including a plain `.txt` —
+by sending a fabricated manifest. Public payloads (`by-slug/public`,
+`/preview`, `/proof`'s `c2pa_proofs`, `verification_level`) repeated this as
+if it were cryptographic evidence, and the web app's "PI Camera · C2PA"
+badge / QR-pairing copy claimed C2PA signing unconditionally for any device
+upload. **Live-confirmed before the fix**: `GET
+/businesses/by-slug/tetakta/public` served `c2pa_verified: true` on 3 real
+"Pi CAM Captures" media rows with nothing behind it but the substring match.
+
+**Fixed 2026-10-06** — [api PR #34](https://github.com/teta-pi/api/pull/34) +
+[web PR #50](https://github.com/teta-pi/web/pull/50), tracked as
+`security.md` S-26. New config gate `c2pa_verification_enabled` (default
+`False`) skips the forgeable check entirely on both upload paths; every
+public read gates on the flag too, not just the stored column, so the 3
+historical `tetakta` rows stop being served as verified **without migrating
+the data** (left for an explicit owner decision, raised in the PR). Web
+dropped the unconditional "C2PA" claim for an honest "uploaded from a paired
+device" fact. **Real fix (C2PA manifest extraction + cert-chain validation)
+is still unbuilt** — this is the honesty mitigation while that work (days,
+not this session) is pending; see `docs/security.md` S-26 for the full
+writeup and `docs/roadmap.md` 1.28/3.26.

@@ -6,6 +6,41 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-06 · 1.28 backend + 3.26 frontend · honest c2pa_verified (S-26, known-issues §6.8)
+Done: `c2pa_verified=true` on prod proved nothing — `c2pa-python` isn't installed, so
+`extract_c2pa_manifest()` always returns `None`; the only manifest source on
+`POST /media/device-upload` is the client-supplied `manifest_json` form field;
+`verify_pi_camera_signature()` is a bare substring match. Live-reproduced pre-fix:
+`GET /businesses/by-slug/tetakta/public` served `c2pa_verified: true` on 3 real "Pi CAM
+Captures" rows. New config gate `c2pa_verification_enabled` (default `False`,
+`api/app/core/config.py`) skips the forgeable check on both upload paths; every public
+read (`by-slug/public`, `/preview`, `/proof`'s `c2pa_proofs`, `/media/{id}/verify`,
+`GET /blocks`+`/blocks/{id}`, `_compute_verification_level`) gates on the flag too, not
+just the stored column, so the 3 historical rows stop being served as verified without
+touching the data. New honest `device_upload` field (fact, not a trust claim) added
+alongside it. Web dropped the unconditional "PI Camera · C2PA" badge and QR-pairing copy
+for "Uploaded from a paired device"; the c2pa seal/attestation bar on `/e/[slug]`,
+`/profile`, `/search` needed no change — already reads `c2pa_verified` off the API, goes
+honest automatically. 2 new unit tests reproduce the forged-manifest exploit
+(`api/tests/test_c2pa_gating.py`, 79/79 pass); `tsc --noEmit` clean on web.
+Changed: `api` PRs [#34](https://github.com/teta-pi/api/pull/34) — `app/core/config.py`,
+`app/api/routes/{media,businesses,blocks}.py`, `app/schemas/block.py`, `docs/api.md`.
+`web` PR [#50](https://github.com/teta-pi/web/pull/50) — `src/app/profile/page.tsx`,
+`src/components/GridOfRecord.tsx`, `src/lib/types.ts`. `infra`: `docs/security.md` §5
+(new S-26), `docs/known-issues.md` §6.8, `docs/roadmap.md` 1.28/3.26, this entry.
+Risk: both PRs unmerged as of this entry — prod still serves the 3 historical rows as
+`c2pa_verified: true` until api PR #34 deploys. Real C2PA verification (manifest
+extraction + cert-chain validation) is still unbuilt; `c2pa_verification_enabled` must
+stay `False` until that lands, or the same forgeable path reopens.
+Next: manager to merge api #34 then web #50 (api first, web reads its new field), verify
+on prod (`by-slug/tetakta/public` → `c2pa_verified: false` on all 3 rows), and relay the
+owner decision on whether to migrate those 3 rows' stored `c2pa_verified` to `false` or
+leave them flagged — not decided in this session per the task's instruction. `teta-pi/mcp`
+was named in the public-payload list but has no checked-out repo for this session; worth
+a confirming pass from direction 2 that it doesn't duplicate the now-gated field itself.
+
+---
+
 ## 2026-10-03 · 5.16 devops · origin TLS (S-25) — Origin CA certs issued, :443 vhosts + default-reject live, steps 1-5 of 6 done
 Done: picked up where 5.15 stopped (blocked on owner issuing 2 Origin CA certs from the
 CF dashboard). Turned out that assumption was wrong — the CF API token at
