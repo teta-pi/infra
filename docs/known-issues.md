@@ -2629,3 +2629,28 @@ device" fact. **Real fix (C2PA manifest extraction + cert-chain validation)
 is still unbuilt** — this is the honesty mitigation while that work (days,
 not this session) is pending; see `docs/security.md` S-26 for the full
 writeup and `docs/roadmap.md` 1.28/3.26.
+
+**Update (5.17, 2026-10-05): step 6 did happen** (`docs: S-25 → CLOSED`,
+2026-10-04, #135 — `tetapi.dev` → strict, the `shos.*` Flexible
+Configuration Rule deleted, zero 525/526 post-flip) — this section's "still
+open: step 6" line above is a stale snapshot from 5.16 that was never
+updated when the flip landed; `docs/security.md` S-25 is CLOSED. Separately,
+`bo.shos.hellfiresol.com` was renamed `bo-shos.hellfiresol.com` this session
+(Cloudflare's free Universal SSL only covers one subdomain level, so the
+two-label name could never get a valid edge cert) — origin cert SAN
+re-issued to match, same key, old cert revoked.
+
+**New (S-26, 5.17, 2026-10-05): origin `:80` had no per-host vhost either.**
+The `:80` sibling of S-25's second half: any unrecognized `Host` header
+(`curl -H "Host: totally-unknown-name.example" http://164.90.235.66/`)
+silently got **our** `api.tetapi.dev` content (200), because no `:80`
+server block declared itself `default_server` — nginx fell back to the
+first vhost loaded alphabetically. Anyone pointing their own domain at this
+droplet's IP could make it answer under their own hostname.
+**CLOSED same session**: `deploy/nginx/default-http-reject.conf`
+(`listen 80 default_server; server_name _; return 444;`), additive, same
+pattern as S-25's `:443` `ssl_reject_handshake` default. Checked hellfire's
+Certbot renewal path first (authenticator is the `nginx` plugin, validates
+via their own explicit vhost, never reaches this default block) before
+deploying. Full writeup: `docs/security.md` S-26, `docs/deployment.md`
+"Origin TLS".
