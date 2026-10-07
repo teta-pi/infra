@@ -6,6 +6,44 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-06 · 6.8 QA continued · c2pa fix verified live (closed), C/D streams + live /claim UI, new photo-rendering bug found
+Done: continuation of the 2026-10-04 pre-GTM QA pass on the same branch/PR, after
+`api` #34 (1.28), `web` #50 (3.26), and `pi-cam` 14.12 all merged 2026-10-06. Merged
+latest `origin/main` into the QA branch first (additive changelog conflict, resolved
+keeping both). Re-verified the 1.28 c2pa-honesty gate live (forged-manifest exploit
+confirmed closed on a fresh test device, not just re-reading code). Ran streams not
+reached on 2026-10-04: full device lifecycle (C1-C3: register → list → revoke → 401,
+no regression, the known business-selection bug reproduced again as expected, not
+re-filed), D2-D5 in shortened form (confirmed 1.29 — real signature verification —
+is not live via `openapi.json`), a live Browser-pane walkthrough of `/claim` (A1,
+reached step 2/email-code, stopped honestly without mailbox access), and a human
+eyes-on pass of `/search` (B3).
+Changed: `docs/known-issues.md` §6.8 (new "continued" subsection), `docs/roadmap.md`
+6.8 row, this changelog. No app code touched.
+Risk: **Primary GTM blocker changed.** The 2026-10-04 c2pa-forgery 🔴 is now
+**CLOSED** (verified live). `bitcoin_confirmed`/OTS (D3) is **still stuck at 0**,
+unfixed, unchanged — remains the #1 blocker, one-line fix already specified
+2026-10-04, nobody's picked it up. Separately surfaced: 1.29 (real device-signature
+check) is unstarted, so **no block on the platform can be cryptographically verified
+today** — an honest gap, not a regression, but worth the owner knowing explicitly.
+**New 🟠 found doing B3's human-eyes check**: `teta-pi/web`
+`GridOfRecord.tsx::blockKind()` checks `media.type === "photo"`, but the live API
+always sends `"image"` — so no real photo thumbnail renders anywhere in the
+Grid-of-Record UI (search evidence tiles, profile ledger, block detail modal); only
+the separate per-block permalink page (`/e/[slug]/blocks/[blockId]`) shows the real
+image, because it doesn't route through `blockKind()`. Breaks the outreach demo and
+likely the owner's own `/profile` view for every real camera capture. All test
+artifacts (1 entity PATCHed private, 1 device registered+self-revoked, 1 media
+uploaded+deleted) cleaned up before session end; tetakta's real device and media
+confirmed untouched throughout.
+Next: a backend session picks up the bitcoin `ts.merge()` fix (still the top
+priority). A small `3 frontend` session fixes `blockKind()`'s `"photo"`→`"image"`
+check. A session with real mailbox access (or a documented QA bypass code) finishes
+A1/A4's live UI click-through through `/claim` step 3 and `/profile`'s upload button.
+GTM Phase 2 stays blocked on the bitcoin fix at minimum; the photo-rendering bug and
+1.29 should land before outreach messaging goes out even though they're not hard
+gates.
+
 ## 2026-10-06 · 1.29 backend · real device content-signature verification (S-27, known-issues §6.8)
 Done: second half of the owner's "task B" decision — `1.28` made the fake C2PA signal
 honest (`c2pa_verification_enabled=False`), `pi-cam` `14.12` fixed the device to sign a
@@ -184,6 +222,55 @@ holds from outside too. No other owner action needed — DNS and CF zone
 settings were already correct going in.
 
 ---
+
+## 2026-10-04 · 6.8 QA · pre-GTM full QA pass — 2 new 🔴 blockers, gate RED
+Done: full live E2E QA sweep on prod across all 5 owner-requested streams
+(creation, search/indexing, camera↔page sync, verified-blocks-from-camera,
+regressions). QA only, nothing fixed. Method: direct prod code read
+(`/opt/tetapi/api`), read-only `psql`, `journalctl`, live curl with the
+owner's admin test key, and a real MCP JSON-RPC session against
+`mcp.tetapi.dev/mcp` (actual `initialize`→`tools/call`, not REST-pretending).
+Changed: `docs/known-issues.md` §6.8 (full findings), `docs/roadmap.md` 6.8
+row. No app code touched.
+Risk: **2 new 🔴 blockers, escalated live to `TTPI · MANAGER` during the
+session (not held for this write-up):**
+1. `c2pa_verified=true` is 100% self-reported client JSON — `c2pa-python`
+   isn't even installed on prod, and the "signature" check is a substring
+   match on client-supplied strings, no crypto, no use of the device's
+   registered public key. Forgeable by anyone with a device key.
+2. `media.bitcoin_confirmed` / `verification_events.ots_status` can **never**
+   reach confirmed — `app/services/bitcoin.py::verify_proof()` fetches the
+   OTS calendar's upgraded timestamp and discards it instead of merging it
+   into the proof before checking for a Bitcoin attestation. Not a timing
+   issue — structurally permanent regardless of how long you wait.
+Also filed (🟠, non-blocking): entity-level `is_public:false` ignored at
+`POST /businesses` creation; `original_hash`/`content_hash` key-naming split
+across 3 near-duplicate serializers (root cause of the owner's "original_hash
+always null" observation — the hash is computed and stored fine, just
+renamed on 2 of 3 read paths); `GET /proof` doesn't expose enough
+(signature/cert_pem) for independent third-party C2PA verification; device
+QR pairing (`POST /devices/generate-token`) can silently attach to the wrong
+business for any multi-business account — **self-reproduced by accident this
+session** (test pairing landed on tetakta's real entity instead of a new test
+entity), self-revoked within the same minute, tetakta's real device
+(`b8ad9e35`) confirmed untouched before and after via `psql`.
+Confirmed NOT regressed, no action needed: block-level `is_public` (1.22),
+bulk-preverify URLs + claim-409 + opt-out flow (1.23/3.24), private-entity
+404 (S-17), claiming someone else's domain fails safely (1.27/S-22),
+TLS/origin liveness (S-25), new-entity search latency (<1 min), new-block
+embedding + semantic (`resolve-intent`/`teta_resolve_intent`) discovery.
+All test entities/blocks/devices created this session were cleaned up before
+session end (listed in `docs/known-issues.md` §6.8) — nothing of this
+session's own making is left public/active on prod.
+Next: **GTM Phase 2 stays blocked** until both 🔴 items are fixed (c2pa
+signature verification needs a real cryptographic check against
+`device_public_key`; bitcoin confirmation needs the one-line `ts.merge()`
+fix in `verify_proof()`) and re-verified live. The 4 🟠 items don't block the
+gate but should land before outreach starts (claim-flow privacy default,
+hash-field naming, proof completeness, device-pairing business selection).
+C2/C3 (device list display, owner-revoke→401) and a live UI click-through of
+`/claim` and `/profile` were not reached this pass — flagged for whoever
+picks up the 🔴 fixes to re-verify live at the same time.
 
 ## 2026-10-03 · 5.16 devops · origin TLS (S-25) — Origin CA certs issued, :443 vhosts + default-reject live, steps 1-5 of 6 done
 Done: picked up where 5.15 stopped (blocked on owner issuing 2 Origin CA certs from the
