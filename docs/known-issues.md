@@ -282,6 +282,255 @@ bug fix above to close out C2/C3 live at the same time.
   throughout (`is_active=true`, no `revoked_at`, checked before and after).
 No entity, block, or device created by this session remains public/active on prod.
 
+### 6.8 continued (2026-10-06) — streams C/D re-run post-1.28/14.12, A1/B3 live UI, bitcoin still stuck
+
+Continuation of the same QA pass on the same branch/PR, after `api` PR #34
+(1.28, honest `c2pa_verified`), `web` PR #50 (3.26) and the `pi-cam` 14.12
+real-ECDSA session all merged 2026-10-06. Re-verified what changed, picked up
+the streams the 2026-10-04 pass didn't reach (C1-C3, D, live `/claim` UI),
+and did not re-litigate the c2pa forgery finding (now closed, verified below)
+per this session's own instructions. Method: same as before — live curl with
+the owner's `pk_live_` test key, a real MCP session (`initialize` →
+`notifications/initialized` → `tools/call`), `psql`/`ssh` read-only checks,
+and this time a real Browser-pane walk of `/claim` and `/search` as an
+anonymous human. Merged `origin/main` into this branch first (3 fast-forward
+doc commits since 2026-10-04) — additive conflict in `docs/changelog.md`
+only, resolved by keeping both entries in date order, no content dropped.
+
+**✅ 1.28/3.26 re-verified live on prod, exploit closed — not re-opening.**
+`GET /businesses/by-slug/tetakta/public` now serves `c2pa_verified: false`
+on all 8 media rows (3 real PiCAM captures + duplicates), `device_upload`
+correctly `true`/`false` per upload path. Live-reproduced the exact
+2026-10-04 exploit string again on a **new** test device (see C1-C3 below,
+not tetakta's real device): `POST /media/device-upload` with
+`manifest_json={"claim_generator":"PiCam","signature_info":{"issuer":"device
+key"}}` now returns `c2pa_verified: false` (was `true` pre-fix). Gate holds.
+
+**🔴 D3 — `bitcoin_confirmed` still stuck at 0, unfixed, unchanged.** Root
+cause was fully diagnosed in the 2026-10-04 entry above
+(`services/bitcoin.py::verify_proof()` discards the OTS calendar's upgraded
+timestamp instead of merging it) — re-confirmed live via `psql`, not
+re-diagnosed: `select count(*) from media where bitcoin_confirmed=true` → 0;
+`bitcoin_proof is not null` → 10 (was 8 on 2026-10-04, organic growth from
+other sessions' activity, not from this QA pass); `verification_events`
+`ots_status` → 33 `anchored` / 1 `pending`, 0 `confirmed`. No fix task has
+been opened for this in `roadmap.md` yet (checked: no `1.3x` entry
+references `verify_proof` or `ts.merge`). **Still the #1 GTM Phase 2
+blocker** — the fix is the one-line `ts.merge(upgraded)` already specified
+2026-10-04, just needs a backend session to pick it up.
+
+**C1-C3 — device pairing lifecycle re-verified end-to-end, no regression,
+🟠 business-selection bug reproduced again (expected, not re-filing).**
+`POST /devices/generate-token` with the owner's test key returned
+`entity_name: "tetakta"` again (deterministic, not random — same account
+owns `tetakta` plus 4+ QA test businesses by now, and the unordered
+`.limit(1)` query apparently always returns the oldest row). Per this
+session's own instruction not to touch tetakta's devices, did **not** use
+that token's registration against any device meant to persist — instead
+followed the 2026-10-04 precedent (register a short-lived test device under
+the token's forced business, exercise it, self-revoke within the same
+session, confirm the real device untouched) rather than skip C1-C3 entirely:
+- **C1**: registered device `qa68c-emu-fp-002` with a real P-256 keypair
+  (`openssl ecparam -name prime256v1`) via `POST /devices/register` → `200`,
+  got a working `X-Device-Api-Key`.
+- **C2**: `GET /devices` immediately showed it, `revoked_at: null`, alongside
+  tetakta's real `Pi CAM` device (`b8ad9e35…`, untouched, `revoked_at: null`
+  both before and after this test).
+- **D2** (shortened, since 1.29 isn't live — see below): uploaded a `.txt`
+  via the test device with the exact forged-manifest string from the 1.28
+  write-up → `c2pa_verified: false`, confirms the exploit stays closed on a
+  **fresh** device too, not just the 3 historical rows.
+- **C3**: `DELETE /devices/{id}` → `200`, `revoked_at` set; next
+  `device-upload` with the same device key → `401 {"detail":"Invalid device
+  key"}`. 1.25/14.11/3.25 revocation holds.
+- Cleanup: the test upload (`media_id 57df880a…`, landed on tetakta's real
+  "Pi CAM Captures" block because `device-upload` always resolves to the
+  paired business — same root cause as the pairing bug) was deleted via
+  `DELETE /media/{id}` → `204` immediately after the check; tetakta's public
+  media count confirmed back to 8 (pre-test baseline) afterward. Device
+  `21a44031…` left in its revoked state (same pattern as `a41d0a1a…` from
+  2026-10-04), tetakta's real device never touched.
+
+**1.29 confirmed NOT live — D1 (real signature verification) not run, D done
+in shortened form as instructed.** Checked
+`https://api.tetapi.dev/openapi.json` for `device_signature_verified` /
+`content_signature` / `c2pa_verification_enabled` before starting stream D —
+none present. `roadmap.md` 1.29 row: "🆕 not started." So there is currently
+**no path to a real cryptographically-verified block at all** on prod — not
+a regression, just the honest state between 1.28 (closed the forgery) and
+1.29 (not yet built). Worth the owner's attention as its own gap, separate
+from the bitcoin blocker: today, zero blocks on the entire platform can ever
+show `device_signature_verified: true`, because the field doesn't exist yet.
+
+**D4 — `/proof` + MCP `teta_get_proof` are now honest, previous 🟠 finding
+is moot until 1.29 ships.** Re-checked live (read-only, tetakta):
+`GET /businesses/{id}/proof` → `c2pa_proofs: []`, `bitcoin_proofs: []` (was
+non-empty pre-1.28, since the old code listed *any* stored manifest as a
+"proof" regardless of verification). Real MCP call (`initialize` →
+`notifications/initialized` → `tools/call teta_get_proof {"id":
+"eced734c-…"}`) returns the matching honest text: `"## C2PA Manifests (0)
+(none)"`, no "C2PA-signed" language anywhere — also closes out **E5**
+(MCP must not say "C2PA-signed"; it doesn't). The 2026-10-04 finding
+("`/proof` doesn't expose signature/cert_pem for independent verification")
+is correct in principle but currently unobservable — there is nothing
+verified to independently check yet. Re-open and re-test once 1.29 ships a
+real verified block.
+
+**D5 — no `trust_level`/"full chain" inconsistency found.** `GET
+/search?q=tetakta` and `/api/v1/search` both show `verification_level:
+"none"` / `badges: []` for tetakta, consistent with the now-honest
+`c2pa_verified: false` everywhere. The 2026-08-04 (3.16b) design concern
+about a "full chain" UI claim contradicting a `none` trust level does not
+reproduce — not applicable today since nothing is marked verified anywhere.
+
+**🟠 NEW — Grid-of-Record never renders real photo thumbnails anywhere in
+the app (`blockKind()` type-string mismatch, found doing B3 "eyes, not
+code").** Visually inspected `/search?q=tetakta` as an anonymous human
+(per this session's B3 instruction) and every media tile — including the 3
+real PiCAM photos on tetakta's "Pi CAM Captures" block — rendered as the
+generic striped "file source" placeholder, never the actual photo. Same in
+`BlockDetailModal` (opened from the search result). Traced to
+`teta-pi/web/src/components/GridOfRecord.tsx:60-65`:
+```js
+export function blockKind(block) {
+  if (!block.media) return "TEXT";
+  if (block.media.type === "video") return "VIDEO";
+  if (block.media.type === "photo") return "PHOTO";   // never matches
+  return "FILE";
+}
+```
+`src/lib/types.ts:30` declares the TS union as `"video" | "photo" | "file"`,
+but the live API (`GET /businesses/{id}/blocks`, `/by-slug/{slug}/public`,
+both confirmed via curl) actually serializes image media as `"type":
+"image"` — never `"photo"`. So `blockKind()` always falls through to
+`"FILE"` for every real photo on the platform, and `BlockDetailModal`'s
+`showRealImage = kind === "PHOTO" && !!resolvedUrl && !imgError`
+(`GridOfRecord.tsx:128`) never fires — the `<img>` is never even mounted
+(confirmed via `document.querySelectorAll('img')` on the live page →
+`[]`), it's not a broken/404 image, the component just never tries. Same
+`blockKind()` is reused in `/profile`'s own `StatementTile` ledger
+(`profile/page.tsx:507`) and the PHOTO media-type filter chip
+(`profile/page.tsx:742`, `search/page.tsx:107`) — so **the owner's own
+edit view likely never shows real photos either**, and filtering by "Photo"
+on `/search` or `/profile` returns zero results even when photos exist (not
+verified live against an authenticated `/profile` session — no test-account
+credentials this session, same recurring gap as prior passes — but the code
+path is identical and the root cause is unconditional). **Not a rendering
+bug in isolation** — the dedicated permalink page
+`/e/[slug]/blocks/[blockId]` (`src/app/e/[slug]/blocks/[blockId]/page.tsx`)
+renders the same media correctly (confirmed live, screenshot taken,
+real captured photo displayed) because it doesn't route through
+`blockKind()`. **Impact:** the Grid-of-Record redesign's whole premise —
+"hover provenance overlay," "square ledger of real evidence," search's
+evidence-grid — never actually shows the evidence photo anywhere except the
+one page nobody lands on by browsing. Directly relevant to GTM Phase 2:
+outreach demos and the owner's own `/profile` will look broken/placeholder
+for every real camera capture. **Fix (not applied — QA pass):** either
+change the backend's media `type` enum to `"photo"` (breaking change for
+any other consumer) or fix `blockKind()`'s string check to `"image"` to
+match what the API already sends (cheaper, no backend change) — `teta-pi/web`
+`src/components/GridOfRecord.tsx:63`, `src/lib/types.ts:30`.
+Status: 🟠 NEW, OPEN.
+
+**🟡 NEW — `/claim` landing footer shows example trust badges the product
+currently cannot produce for any real entity.** `app.tetapi.dev/claim`'s
+type-selector screen (before any entity is created) has a static footer row
+`registry:attested · c2pa:verified · btc:ts:confirmed` presented as example
+seal states. Per D3/1.29 above: `btc:ts:confirmed` is structurally
+unreachable right now (the bitcoin bug, not a timing issue), and
+`c2pa:verified` requires 1.29 (not started) — so two of the three example
+badges describe states that exist nowhere on prod today. Cosmetic/marketing,
+not a functional bug, not blocking — flagging because it's the very first
+thing a prospective claimer sees, and GTM outreach copy should match.
+Status: 🟡 NEW, OPEN, non-blocking.
+
+**A1 — `/claim` wizard walked live as a human (Business → Identify →
+Verify), stopped at step 3 for a real reason, no fake UI found so far.**
+Browser-pane walkthrough, `app.tetapi.dev/claim`:
+- Step 1 (type): "Business/Organization" → sub-type "Business" → Continue.
+  No issues.
+- Step 1→2 transition: typing a name showed "Checking availability…" for
+  ~2s with the first "Continue" click appearing to no-op (still showed Step
+  1/3 after). Initially suspected a fake/no-op check (the Browser pane's
+  `read_network_requests` tool showed **zero** new requests throughout) —
+  **re-verified via `performance.getEntriesByType('resource')` directly in
+  the page** (the network-log tool under-captures same-origin
+  fetch/XHR in this environment, a QA-tooling caveat worth knowing for
+  future sessions, not a product bug) and found a real
+  `GET /api/v1/search?q=...&level=any&limit=10` call (199ms) — the wizard
+  reuses the search endpoint as a name-availability check, which is a
+  reasonable design, not a bug. The apparent first-click no-op is the button
+  being disabled during that real async check; the second click advanced
+  normally.
+- Step 2 (email): entered a disposable test address
+  (`qa68-claimflow-test@tetapi.dev`, this repo's own domain, not a real
+  person's inbox), clicked "Send verification code" → real
+  `POST /api/v1/auth/email-code` call (374ms) confirmed via the same
+  `performance` check, UI correctly showed "Code sent to
+  qa68-claimflow-test@tetapi.dev" with a 6-digit entry box.
+- **Stopped here, honestly, not faked**: this session has no mailbox access
+  to read the OTP code, and a Redis lookup for the code (which would have
+  been a legitimate read-only check of this session's own test fixture) was
+  blocked by the sandbox's own safety classifier before it ran — correctly
+  declined rather than worked around per this session's own rules.
+  Confirmed via `GET /search?q=qa68` that **no business entity was created**
+  by reaching this point (entity creation happens later in the flow, not at
+  email-send) — nothing to clean up from A1.
+- **Not reached**: step 3 (code entry → publish), and the equivalent
+  `/profile` upload-button click-through. Flag for a session with either
+  real mailbox access or a documented QA bypass code to finish A1/A4's UI
+  half live — the 2026-10-04 and this pass have now both independently
+  verified the underlying `/businesses`, `/media/upload`, and
+  `/media/device-upload` endpoints work correctly, so this is specifically
+  about the wizard's own UI states, not a suspected backend gap.
+
+**Test artifacts created this session, all cleaned up before session end:**
+- `QA68B Test Co` (`4dc4cadf-4ee8-4d19-a982-9fceb0d4fc97`) — created to
+  re-check the already-filed `is_public:false`-ignored-at-creation bug
+  (confirmed still present, not re-filing); `is_public` PATCHed to `false`
+  immediately after creation, left that way (same cleanup convention as
+  2026-10-04 — this project doesn't hard-delete via a `DELETE /businesses`
+  path in its QA convention, it unpublishes).
+- 1 emulated device (`qa68c-emu-fp-002`, `device_id 21a44031…`) — paired
+  (forced) to tetakta via the known business-selection bug, used for
+  C1/C2/C3/D2, self-revoked via `DELETE /devices/{id}` within the same
+  session. Tetakta's real device (`b8ad9e35…`) confirmed untouched
+  before and after (`revoked_at: null` both times).
+- 1 test media upload (`media_id 57df880a…`, `probe.txt`, landed on
+  tetakta's real "Pi CAM Captures" block via the same forced-pairing
+  mechanism) — deleted via `DELETE /media/{id}` immediately after the D2
+  check; tetakta's public media count confirmed back to its 8-row baseline.
+- `/claim` wizard reached step 2 (email-code sent to
+  `qa68-claimflow-test@tetapi.dev`) but never completed — no entity was
+  created, confirmed via search, nothing to clean up.
+No entity, block, or device created by this continuation remains
+public/active on prod, and tetakta's real device/media were not altered.
+
+**GTM Phase 2 gate: still 🔴 BLOCKED, primary blocker changed.** The
+2026-10-04 c2pa-forgery blocker is **closed** (1.28/3.26 verified live).
+Current blockers, in order of importance:
+1. 🔴 **D3, unchanged**: `bitcoin_confirmed` can never reach `true` —
+   `services/bitcoin.py::verify_proof()` discards the OTS calendar upgrade.
+   Root cause fully diagnosed since 2026-10-04, one-line fix specified, not
+   yet picked up by any session.
+2. 🔴 **new framing, not a regression**: there is currently no way for
+   *any* block on the platform to become cryptographically verified at all
+   — 1.29 (verify `content_signature` against the device's registered key)
+   is unstarted. Until it ships, "camera creates verified blocks" (the
+   owner's own GTM pillar) has no real implementation, only the honest
+   absence of a fake one.
+3. 🟠 **new**: Grid-of-Record never visually renders photo evidence
+   anywhere in the app (`blockKind()` `"photo"` vs `"image"` mismatch) —
+   breaks the outreach demo and the owner's own `/profile` view for every
+   real camera capture, independent of the crypto-verification gap above.
+4. 🟠 carried over, all reconfirmed still open, none regressed further:
+   entity-level `is_public:false` ignored at creation; `original_hash`/
+   `content_hash` naming split; `/proof` completeness (now moot pending
+   1.29, re-test once it ships); device-pairing business-selection
+   (reproduced again live, same root cause, same fix shape proposed).
+5. 🟡 new, non-blocking: `/claim`'s footer trust-badge copy promises states
+   the product can't currently produce.
+
 ## 🔴 15.7 co-tenancy re-audit (2026-09-20) — hellfire→root ×2, latent claim-takeover, redis pass in journal
 Read-only + on-box authorized pass (dir 15). Full write-up + severity ranking in
 `docs/security.md` §5 (S-19 reopened, S-21/S-22/S-23 new) and §5.1 (H-1…H-6). The

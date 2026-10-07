@@ -6,6 +6,44 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-06 · 6.8 QA continued · c2pa fix verified live (closed), C/D streams + live /claim UI, new photo-rendering bug found
+Done: continuation of the 2026-10-04 pre-GTM QA pass on the same branch/PR, after
+`api` #34 (1.28), `web` #50 (3.26), and `pi-cam` 14.12 all merged 2026-10-06. Merged
+latest `origin/main` into the QA branch first (additive changelog conflict, resolved
+keeping both). Re-verified the 1.28 c2pa-honesty gate live (forged-manifest exploit
+confirmed closed on a fresh test device, not just re-reading code). Ran streams not
+reached on 2026-10-04: full device lifecycle (C1-C3: register → list → revoke → 401,
+no regression, the known business-selection bug reproduced again as expected, not
+re-filed), D2-D5 in shortened form (confirmed 1.29 — real signature verification —
+is not live via `openapi.json`), a live Browser-pane walkthrough of `/claim` (A1,
+reached step 2/email-code, stopped honestly without mailbox access), and a human
+eyes-on pass of `/search` (B3).
+Changed: `docs/known-issues.md` §6.8 (new "continued" subsection), `docs/roadmap.md`
+6.8 row, this changelog. No app code touched.
+Risk: **Primary GTM blocker changed.** The 2026-10-04 c2pa-forgery 🔴 is now
+**CLOSED** (verified live). `bitcoin_confirmed`/OTS (D3) is **still stuck at 0**,
+unfixed, unchanged — remains the #1 blocker, one-line fix already specified
+2026-10-04, nobody's picked it up. Separately surfaced: 1.29 (real device-signature
+check) is unstarted, so **no block on the platform can be cryptographically verified
+today** — an honest gap, not a regression, but worth the owner knowing explicitly.
+**New 🟠 found doing B3's human-eyes check**: `teta-pi/web`
+`GridOfRecord.tsx::blockKind()` checks `media.type === "photo"`, but the live API
+always sends `"image"` — so no real photo thumbnail renders anywhere in the
+Grid-of-Record UI (search evidence tiles, profile ledger, block detail modal); only
+the separate per-block permalink page (`/e/[slug]/blocks/[blockId]`) shows the real
+image, because it doesn't route through `blockKind()`. Breaks the outreach demo and
+likely the owner's own `/profile` view for every real camera capture. All test
+artifacts (1 entity PATCHed private, 1 device registered+self-revoked, 1 media
+uploaded+deleted) cleaned up before session end; tetakta's real device and media
+confirmed untouched throughout.
+Next: a backend session picks up the bitcoin `ts.merge()` fix (still the top
+priority). A small `3 frontend` session fixes `blockKind()`'s `"photo"`→`"image"`
+check. A session with real mailbox access (or a documented QA bypass code) finishes
+A1/A4's live UI click-through through `/claim` step 3 and `/profile`'s upload button.
+GTM Phase 2 stays blocked on the bitcoin fix at minimum; the photo-rendering bug and
+1.29 should land before outreach messaging goes out even though they're not hard
+gates.
+
 ## 2026-10-06 · 14.12 camera · pi-cam's device crypto was fake — now real ECDSA P-256; new backend task 1.29
 Done: `teta-pi/pi-cam` session fixed its `modules/crypto` — `generateKeypair()`
 used to SHA-256 a random seed and wrap the hash in a fake PEM header (not a
