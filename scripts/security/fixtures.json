@@ -16,7 +16,16 @@
     "(2026-09-20, api PR #29 live check \u2014 the one justified prod write, see README).",
     "The key is stored WITHOUT its pk_live_ prefix; it is worthless by construction",
     "(server erased it, api_key IS NULL). device-upload with it must 401 and the",
-    "owner's GET /devices must still list the device with revoked_at set."
+    "owner's GET /devices must still list the device with revoked_at set.",
+    "s27_device_signature: one LIVE (non-revoked) Pi CAM device of the same test",
+    "account, registered with a real P-256 SPKI key (api PR #35, 1.29). Its",
+    "device_id is recorded here (non-secret); its X-Device-Api-Key is NOT in this",
+    "file \u2014 it's a live write credential, kept only in the owner-provisioned",
+    "SEC_PROBE_DEVICE_API_KEY GitHub secret / ~/.tetapi/test_device_api_key (same",
+    "pattern as SEC_PROBE_API_KEY, see README). The check sends a forged",
+    "content_signature, asserts device_signature_verified comes back false, then",
+    "deletes the one Media row it created \u2014 self-cleaning, not an accumulating",
+    "prod write."
   ],
   "s8_private_blocks": {
     "entity_id": "e5b79aaa-6403-4c11-afee-776203fcc7c5",
@@ -32,5 +41,11 @@
     "entity_id": "eced734c-c3b7-459a-9df2-d772c1ee9211",
     "label": "S-21 probe fixture (revoked)",
     "revoked_key_suffix": "xJhScbP2wJ-w7vQ5s3wsEQhjahIiuLG7vtXdHu8G7JA"
+  },
+  "s27_device_signature": {
+    "device_id": "7bd30c15-afda-43dd-96f5-ad50c265ade2",
+    "entity_id": "eced734c-c3b7-459a-9df2-d772c1ee9211",
+    "label": "S-27 probe fixture (live, non-revoked)",
+    "registered_with_real_p256_key": true
   }
 }
