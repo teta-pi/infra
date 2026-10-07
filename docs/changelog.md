@@ -6,6 +6,46 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-06 · 1.29 backend · real device content-signature verification (S-27, known-issues §6.8)
+Done: second half of the owner's "task B" decision — `1.28` made the fake C2PA signal
+honest (`c2pa_verification_enabled=False`), `pi-cam` `14.12` fixed the device to sign a
+real ECDSA P-256 `content_signature` over the uploaded file's raw bytes (not the
+manifest), and `1.29` verifies that signature server-side: `POST /devices/register` now
+rejects a non-SPKI/P-256 `device_public_key` with `400` (prod had literal `"testpubkey"`
+and 3 bare hex strings on 5 devices before this check existed); `POST
+/media/device-upload` recomputes `sha256(file_bytes).hexdigest()` and verifies
+`content_signature` against the stored public key — never trusts client input, any
+failure (missing fields, wrong key, wrong file, bad alg, malformed sig) resolves to
+`False`, never a 500, never blocks the upload. New `media.device_signature_verified`
+column (migration 016), surfaced on every public read, kept honestly separate from —
+not blended into — the still-gated `c2pa_verified`/`verification_level`. 17 new unit
+tests (96/96 total pass). Infra probe gets `s27_device_signature` (self-cleaning: one
+forged-signature upload, asserted `false`, then deleted) behind a new owner-provisioned
+`SEC_PROBE_DEVICE_API_KEY` secret.
+Changed: `api` PR [#35](https://github.com/teta-pi/api/pull/35) — `app/services/device_signature.py`
+(new), `app/api/routes/{media,businesses,blocks}.py`, `app/models/media.py`,
+`alembic/versions/016_device_signature_verified.py`, `app/schemas/{media,block}.py`,
+`tests/test_device_signature.py`, `docs/api.md`. `infra`: `docs/api.md` (14.12/1.29
+contract section → implemented), `docs/security.md` S-27 update, `docs/known-issues.md`
+§6.8 update, `docs/roadmap.md` 1.29, `scripts/security/{probe.py,fixtures.json,README.md}`,
+`.github/workflows/security-probe.yml`.
+Risk: `c2pa_verification_enabled` stays `False` — the C2PA-manifest half of §6.8 is still
+unbuilt (task C). 5 pre-14.12 devices have no valid key and will show
+`device_signature_verified: false` until the app re-links them (expected, automatic
+client-side, not a regression). The infra probe's new check SKIPs until the owner adds
+`SEC_PROBE_DEVICE_API_KEY` (value already written to `~/.tetapi/test_device_api_key` on
+this machine from the one-time fixture-device registration this session did against prod
+— device id `7bd30c15-afda-43dd-96f5-ad50c265ade2`, paired to entity `tetakta`, same
+pattern S-21's fixture used).
+Next: manager to merge api #35, then live-verify per the task's own instruction (real
+P-256 pair → register → sign+upload → `true`; sign with a different key → `false`;
+clean up), then add the `SEC_PROBE_DEVICE_API_KEY` GitHub secret so `s27_device_signature`
+goes live in the daily net instead of SKIP. `teta-pi/mcp`'s public payload descriptions
+were flagged (not fixed) back in 1.28 — still unconfirmed whether they need a
+`device_signature_verified` mirror too.
+
+---
+
 ## 2026-10-06 · 14.12 camera · pi-cam's device crypto was fake — now real ECDSA P-256; new backend task 1.29
 Done: `teta-pi/pi-cam` session fixed its `modules/crypto` — `generateKeypair()`
 used to SHA-256 a random seed and wrap the hash in a fake PEM header (not a
