@@ -45,6 +45,7 @@ jobs:
         id: probe
         env:
           SEC_PROBE_API_KEY: ${{ secrets.SEC_PROBE_API_KEY }}
+          SEC_PROBE_DEVICE_API_KEY: ${{ secrets.SEC_PROBE_DEVICE_API_KEY }}
         run: |
           set +e
           HEAVY=""

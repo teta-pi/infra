@@ -3147,16 +3147,34 @@ upload. **Live-confirmed before the fix**: `GET
 
 **Fixed 2026-10-06** — [api PR #34](https://github.com/teta-pi/api/pull/34) +
 [web PR #50](https://github.com/teta-pi/web/pull/50), tracked as
-`security.md` S-26. New config gate `c2pa_verification_enabled` (default
-`False`) skips the forgeable check entirely on both upload paths; every
-public read gates on the flag too, not just the stored column, so the 3
+`security.md` S-27 (renumbered from S-26 by an unrelated devops S-26 landing
+the same day — see security.md). New config gate `c2pa_verification_enabled`
+(default `False`) skips the forgeable check entirely on both upload paths;
+every public read gates on the flag too, not just the stored column, so the 3
 historical `tetakta` rows stop being served as verified **without migrating
 the data** (left for an explicit owner decision, raised in the PR). Web
 dropped the unconditional "C2PA" claim for an honest "uploaded from a paired
 device" fact. **Real fix (C2PA manifest extraction + cert-chain validation)
 is still unbuilt** — this is the honesty mitigation while that work (days,
-not this session) is pending; see `docs/security.md` S-26 for the full
+not this session) is pending; see `docs/security.md` S-27 for the full
 writeup and `docs/roadmap.md` 1.28/3.26.
+
+**Update (1.29, 2026-10-06, [api PR #35](https://github.com/teta-pi/api/pull/35)):**
+`pi-cam` 14.12 fixed the device to sign a real ECDSA P-256 `content_signature`
+over the uploaded file's content (not the manifest). `1.29` verifies that
+signature server-side against the device's now-validated SPKI/P-256
+`device_public_key` (`POST /devices/register` rejects anything else with
+`400`) and stores the result as a new, independent field —
+`device_signature_verified` — surfaced honestly next to, never blended with,
+the still-gated `c2pa_verified`. This closes the forged-trust-signal exploit
+for the **device-identity** half of §6.8 (a real crypto check replaces the
+substring match for "did this device send this file"); the **C2PA-manifest**
+half stays open — `c2pa_verification_enabled` stays `False` until task C
+(manifest extraction + cert-chain validation) exists. 5 devices registered
+before this fix (incl. literal `"testpubkey"` and bare hex strings) have no
+valid key — their uploads honestly show `device_signature_verified: false`
+until the pi-cam app re-links them with a fresh key (already automatic,
+14.12).
 
 **Update (5.17, 2026-10-05): step 6 did happen** (`docs: S-25 → CLOSED`,
 2026-10-04, #135 — `tetapi.dev` → strict, the `shos.*` Flexible

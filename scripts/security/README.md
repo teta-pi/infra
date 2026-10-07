@@ -57,7 +57,7 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 |---|---|
 | `probe.py` | the checks |
 | `public_allowlist.json` | **the contract.** Every route the API may answer 2xx to an *unauthenticated* caller. `auth_surface` fails any live 2xx-to-anonymous route not listed here. `must_not_exist` lists deleted security-fix routes that must stay 404. `pending_owner_decision` records live 2xx surface the docs don't sanction yet (informational; the dedicated check that finds it is what fails). |
-| `fixtures.json` | stable prod rows the probe **reads** (never writes) — e.g. the 15.3 entity (public since S-17) with one public + one private block for S-8, a private entity for S-17, one **revoked** Pi CAM device (+ its now-worthless key, stored without the `pk_live_` prefix) for S-21, and one `pre_verified_unclaimed` entity anchored to the reserved `example-anchor.test` for S-22. |
+| `fixtures.json` | stable prod rows the probe **reads** (never writes) — e.g. the 15.3 entity (public since S-17) with one public + one private block for S-8, a private entity for S-17, one **revoked** Pi CAM device (+ its now-worthless key, stored without the `pk_live_` prefix) for S-21, one `pre_verified_unclaimed` entity anchored to the reserved `example-anchor.test` for S-22, and one **live, non-revoked** Pi CAM device (real P-256 key; its device id only, never its key) for S-27's `s27_device_signature`, which is the one check that still writes — see below. |
 
 ## Checks → findings
 
@@ -71,6 +71,7 @@ otherwise. **SKIP never fails the run** — it means "could not assert honestly"
 | `private_entity_exposure` | a private (`is_public=false`) entity 404s anonymously on base/`preview`/`proof`/`blocks` and still 200s for the owner (fixture `s17_private_entity`) | S-17 |
 | `s21_device_revoked` | `POST /media/device-upload` with a **revoked** Pi CAM key → 401, and the owner's `GET /devices` still lists that device with `revoked_at` set (fixture `s21_revoked_device`; SKIP if the row is gone, FAIL if it was re-paired) | S-21 |
 | `s22_claim_anchor` | `POST /businesses/{id}/claim/domain/check` with a **non-anchor** domain → 403 on a `pre_verified_unclaimed` fixture (fixture `s22_claim_anchor`; SKIP if the row is gone or no longer claimable, FAIL on any other status — a regressed gate answers 200 `{"verified": false}`) | S-22 |
+| `s27_device_signature` | `POST /media/device-upload` with a **forged** `content_signature` on a live fixture device key → `device_signature_verified: false`, else FAIL (a regression means forged signatures are being accepted). The one check that still writes: it creates one Media row and deletes it immediately after asserting (self-cleaning — SKIPs without `SEC_PROBE_DEVICE_API_KEY`) | S-27 / 1.29 |
 | `secrets` | `/.env`, `/.git/config`, `/api/certs/` unreachable; no `pk_live_` in openapi; flags `/docs`+`/redoc` as an owner question | secrets §4 |
 | `headers` | HSTS + nosniff + frame-options on all four hosts (fix is devops, §6.3) | headers §4 |
 | `mcp` | `teta_search` works anon (by design); `teta_verify_endpoint` won't fetch loopback | S-11/S-16 |
@@ -174,10 +175,18 @@ update `fixtures.json`. Being a public pre-verified profile, it shows up in
 `/search` and at `/e/{slug}` like any other — named so a human reading the page
 can see it is a security fixture.
 
-## The GitHub secret
+## The GitHub secrets
 
 The auth'd checks (SSRF canary, `verify-endpoint` rate limit) need a test
 `pk_live_` key. In CI it comes from the repo secret **`SEC_PROBE_API_KEY`**
 (owner adds it manually: Settings → Secrets and variables → Actions → New
 repository secret, value = the key in `~/.tetapi/test_api_key`). Without it,
 those checks SKIP (honestly) rather than fail. The key is **never logged**.
+
+**New (1.29): `SEC_PROBE_DEVICE_API_KEY`** — the `s27_device_signature` check's
+live, non-revoked Pi CAM device key (fixture `s27_device_signature` in
+`fixtures.json`, device id only — the key itself is never committed). Same
+owner-provisioning flow: Settings → Secrets and variables → Actions → New
+repository secret, value = the key in `~/.tetapi/test_device_api_key` (written
+there once, by hand, when the fixture device was registered — see the 1.29
+PR). Without it, `s27_device_signature` SKIPs rather than fails.
