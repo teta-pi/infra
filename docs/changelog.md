@@ -6,6 +6,46 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-09 · 3.27 web · Grid of Record renders real photos (6.8 photo finding CLOSED)
+Done: fixed the 6.8 QA finding that no real photo rendered anywhere in the Grid of
+Record — `/search`, `/profile`, `/e/[slug]` and the block modal all drew the striped
+"file source" placeholder; only the block permalink page worked. Root cause is wider
+than the reported type-string typo: `media.type` is a free-form `String(20)` with no
+enum, written by two paths that disagree. `POST /media/upload` stores the client's
+`type` form field **verbatim** (the web app fills it with `file.type.split("/")[0]`)
+and `/media/device-upload` derives `mime_type.split("/")[0]` server-side — so both
+live writers emit the MIME family (`image`/`video`/`application`/`text`), while
+`"photo"` only ever came from the spec and the TS union `"video" | "photo" | "file"`,
+which is what hid the mismatch from `tsc`. Prod: `image` 11, `application` 6, `text`
+4, `file` 2, `photo` 1, `video` 1 (the non-image rows are QA probe uploads). So 11 of
+12 real photos fell through to `FILE`, which mounts no `<img>` at all; the permalink
+page worked precisely because it never consults the type. Two further faults found
+and fixed with it: `/e/[slug]` **could not** have rendered a photo even with the kind
+right (the public payload's `media_url` was never declared in the page's local type),
+and `/search`'s evidence tiles had **no image branch at all**, desktop or mobile.
+Changed: `teta-pi/web` ([PR #51](https://github.com/teta-pi/web/pull/51)) — new
+`mediaKind()` in `src/components/GridOfRecord.tsx` is the single interpreter of a
+media type string (accepts both vocabularies and a full MIME type), used by
+`blockKind()` and `/e/[slug]`'s `blockKindOf()`; `MediaItem.type` and the store's
+media `type` widened to `string`; `media_url` declared and rendered on `/e/[slug]`;
+real-image branch added to both `/search` evidence tiles; `/profile`'s upload falls
+back to `"file"`, not `"image"`, when the browser reports no MIME type;
+`.claude/launch.json` binds the port 3001 it declares. Docs: `known-issues.md` §6.8
+photo finding → CLOSED, `roadmap.md` 3.27, this changelog.
+Risk: low — frontend only, historical rows are not rewritten and both vocabularies
+keep rendering. The new image branches are gated on `onError`, so a dead
+`storage_url` falls back to the old placeholder rather than showing a broken image.
+`/profile` is the one surface not verified visually (no test-account credentials for
+a browser session, the recurring gap) — it shares the `blockKind()` and
+`BlockDetailModal` that were proven working, worth one owner look after deploy.
+Next: backend boot for the real defect — `/media/upload` trusts a client-supplied
+string for a column the UI reasons about. Recommended canonical value is the **MIME
+top-level family**, not `photo`: it is what both live writers already produce, it is
+11 of 13 non-test rows, and it needs no migration, with `photo` kept as a legacy
+alias the frontend keeps accepting. Derive it server-side from the uploaded bytes as
+`/media/device-upload` already does, and fix the stale `# video | photo | file`
+comment on `Media.type`.
+
 ## 2026-10-06 · 6.8 QA continued · c2pa fix verified live (closed), C/D streams + live /claim UI, new photo-rendering bug found
 Done: continuation of the 2026-10-04 pre-GTM QA pass on the same branch/PR, after
 `api` #34 (1.28), `web` #50 (3.26), and `pi-cam` 14.12 all merged 2026-10-06. Merged
