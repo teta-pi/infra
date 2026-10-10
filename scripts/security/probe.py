@@ -37,6 +37,7 @@ PR that closes it.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -90,6 +91,22 @@ def _api_key() -> str | None:
     if k:
         return k.strip()
     f = Path.home() / ".tetapi" / "test_api_key"
+    if f.exists():
+        return f.read_text().strip()
+    return None
+
+
+def _device_api_key() -> str | None:
+    """Fixture device's X-Device-Api-Key, never logged. Env first (CI:
+    SEC_PROBE_DEVICE_API_KEY GitHub secret, owner-provisioned same as
+    SEC_PROBE_API_KEY — see README "The GitHub secret"), then the local
+    ~/.tetapi/test_device_api_key file. This key is a live, non-revoked
+    device credential (unlike S-21's deliberately dead one) — never commit
+    it to fixtures.json or any tracked file."""
+    k = os.environ.get("SEC_PROBE_DEVICE_API_KEY")
+    if k:
+        return k.strip()
+    f = Path.home() / ".tetapi" / "test_device_api_key"
     if f.exists():
         return f.read_text().strip()
     return None
@@ -755,6 +772,132 @@ def check_probe_key_privilege(rep: Report) -> None:
     rep.add("probe_key_privilege", PASS,
             f"CI key is least-privilege (role={role!r}; /admin/audit-log → {adm.status_code})")
 
+# ── S-22 — a claim must prove the entity's own anchor (api 1.27) ──────────────
+def check_s22_claim_anchor(rep: Report) -> None:
+    """Fixture: one permanent `pre_verified_unclaimed` entity of the test
+    account whose anchor is `example-anchor.test` — an RFC 6761 reserved TLD,
+    so the row is **unclaimable by construction** (nobody can ever hold the
+    DNS for it), the same "worthless by design" trick as the S-21 key.
+
+    Assert: `POST /claim/domain/check` with a *foreign* domain → 403. That is
+    the exploit request itself, and it stays read-only in both outcomes:
+      - fixed  → 403 before anything is touched;
+      - broken → 200 `{"verified": false}` (no verification token exists for
+        that domain, so no ownership can transfer) — a FAIL we can see without
+        ever completing a takeover.
+    `/claim/domain/start` is deliberately *not* probed: a regressed `start`
+    would mint a Redis token, i.e. a write (§ Rules of engagement).
+    """
+    fx = _load_fixtures().get("s22_claim_anchor")
+    if not fx:
+        rep.add("s22_claim_anchor", SKIP, "no s22 fixture configured")
+        return
+    key = _api_key()
+    if not key:
+        rep.add("s22_claim_anchor", SKIP, "no test API key (the claim route requires auth)")
+        return
+    ent = fx["entity_id"]
+    with _client(key) as c:
+        try:
+            r = c.post(f"{API}/api/v1/businesses/{ent}/claim/domain/check",
+                       json={"domain": fx["foreign_domain"]})
+        except Exception as e:  # noqa: BLE001
+            rep.add("s22_claim_anchor", SKIP, f"request error: {e}")
+            return
+    if r.status_code == 403:
+        rep.add("s22_claim_anchor", PASS,
+                f"claim/domain/check with a non-anchor domain → 403 "
+                f"(anchor={fx['anchor_domain']}): {r.json().get('detail', '')[:80]!r}")
+        return
+    if r.status_code == 400:
+        # claim_status gate answered first — the fixture stopped being
+        # pre_verified_unclaimed (claimed or opted out), so this run proves
+        # nothing about the anchor check.
+        rep.add("s22_claim_anchor", SKIP,
+                f"fixture {ent} is no longer pre_verified_unclaimed ({r.text[:120]!r}) — "
+                "re-create per README")
+        return
+    if r.status_code == 404:
+        rep.add("s22_claim_anchor", SKIP, f"fixture entity {ent} is gone — re-create per README")
+        return
+    rep.add("s22_claim_anchor", FAIL,
+            f"claim/domain/check with a non-anchor domain returned {r.status_code} "
+            f"(expected 403) — S-22 regressed: the claim flow no longer binds the proven "
+            f"domain to the entity's anchor, so any signed-up user can take over any "
+            f"pre-verified profile. Body: {r.text[:160]!r}")
+
+
+def check_s27_device_signature(rep: Report) -> None:
+    """S-27 (api PR #34, mitigated) / 1.29 (api PR #35, real fix): a forged
+    `content_signature` must never come back `device_signature_verified: true`
+    — that was exactly the c2pa_verified hole this replaces with a real
+    ECDSA check. One exception to the net's "no entity/block/claim created"
+    rule: `POST /media/device-upload` always persists a Media row on success,
+    so this check deliberately creates ONE and immediately deletes it with
+    the owner's test key (`DELETE /media/{id}`) — self-cleaning, same prod
+    trail S-21/S-22 already leave (one-time writes), not an accumulating one.
+    Needs a live, non-revoked fixture device key (`_device_api_key()`,
+    owner-provisioned — see README) **and** the owner's test key (cleanup);
+    missing either → SKIP, never a fake PASS.
+    """
+    dev_key = _device_api_key()
+    if not dev_key:
+        rep.add("s27_device_signature", SKIP,
+                "no fixture device key configured (SEC_PROBE_DEVICE_API_KEY / "
+                "~/.tetapi/test_device_api_key)")
+        return
+    owner_key = _api_key()
+    if not owner_key:
+        rep.add("s27_device_signature", SKIP,
+                "no test API key — can't clean up the probe media row afterwards")
+        return
+
+    with _client() as c:
+        try:
+            r = c.post(
+                f"{API}/api/v1/media/device-upload",
+                headers={"X-Device-Api-Key": dev_key},
+                files={"file": ("probe.txt", b"sec-probe-forged-signature", "text/plain")},
+                data={
+                    "content_signature": base64.b64encode(b"not a real signature").decode(),
+                    "signature_alg": "ecdsa-with-SHA256",
+                },
+            )
+        except Exception as e:  # noqa: BLE001
+            rep.add("s27_device_signature", SKIP, f"request error: {e}")
+            return
+
+    if r.status_code == 401:
+        rep.add("s27_device_signature", SKIP,
+                "fixture device key rejected (401) — revoked or re-provisioned, "
+                "re-register per README")
+        return
+    if r.status_code != 200:
+        rep.add("s27_device_signature", SKIP, f"device-upload → {r.status_code}, not 200: "
+                f"{r.text[:120]!r}")
+        return
+
+    body = r.json()
+    media_id = body.get("media_id")
+
+    # Clean up regardless of the assert's outcome — never leave probe junk.
+    if media_id:
+        with _client(owner_key) as c:
+            try:
+                c.delete(f"{API}/api/v1/media/{media_id}")
+            except Exception:  # noqa: BLE001
+                pass  # best-effort; doesn't change the assert below
+
+    if body.get("device_signature_verified") is False:
+        rep.add("s27_device_signature", PASS,
+                "forged content_signature on device-upload → device_signature_verified: false "
+                "(media row created + deleted)")
+    else:
+        rep.add("s27_device_signature", FAIL,
+                f"forged content_signature returned device_signature_verified="
+                f"{body.get('device_signature_verified')!r} (expected false) — 1.29 regressed, "
+                "a forged signature is being accepted as a real device signature")
+
 
 CHECKS = {
     "auth": check_auth_surface,
@@ -765,6 +908,9 @@ CHECKS = {
     "private-entity": check_private_entity_exposure,
     "s21": check_s21_device_revoked,
     "key-privilege": check_probe_key_privilege,
+
+    "s22": check_s22_claim_anchor,
+    "s27": check_s27_device_signature,
     "secrets": check_secrets,
     "headers": check_headers,
     "mcp": check_mcp,

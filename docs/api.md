@@ -36,6 +36,12 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   - `POST /{id}/verify/domain/start` + `/check` — Domain Ownership: DNS TXT
     (via DNS-over-HTTPS, no resolver dependency) or a `.well-known` file
     token, same mechanism as the WordPress plugin. Writes `domain_verified`.
+    The submitted domain is normalized (`normalize_domain`, see the claim
+    routes below) before the token is keyed, so `https://WWW.Example.com:443/`
+    and `example.com.` are the same domain and the instructions always name
+    the canonical host. Unlike the claim routes this is **not** anchor-bound —
+    the caller already owns the entity; see `security.md` S-22/§5.2 for why
+    that is a deliberate deferral and what the real fix needs.
   - Document upload: **not implemented** — UI-only "Coming soon" is 3.4's job.
   - `POST` / `DELETE /{id}/legal-entity` — link/unlink a brand to a verified
     legal entity (`businesses.legal_entity_id`); requires the caller to own
@@ -46,7 +52,16 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
     see `/admin/entities/bulk-preverify` below): no owner check (the current
     owner is the system import account), gated on `claim_status` instead;
     reuses the same `domain_ownership` service as the normal
-    `/verify/domain/*` flow. On success transfers `owner_id` to the caller,
+    `/verify/domain/*` flow. **The claimed domain must equal the entity's
+    anchor** (`pre_verified_source.domain`, recorded at import) — since 1.27
+    (`security.md` S-22) both routes `403` when it doesn't, naming the anchor,
+    and `403` when the entity has no domain anchor at all (imported from a
+    `github_org`/`npm_package` only — a github-based proof path is a separate
+    task). Comparison is on the normalized host
+    (`domain_ownership.normalize_domain`: scheme, userinfo, port, path, `www.`,
+    trailing root dot and case removed, IDN folded to punycode) and is
+    **exact** — a subdomain of the anchor is not accepted, in either
+    direction. On success transfers `owner_id` to the caller,
     sets `claim_status=claimed`, writes `domain_verified` + `claimed`
     verification_events. `POST /businesses` itself 409s (with the existing
     entity's id/slug) instead of creating a duplicate when the slug already
@@ -90,6 +105,46 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   `POST /devices/self-revoke` (auth = `X-Device-Api-Key`, so a device can only
   kill itself — what the pi-cam "Unlink" button calls), and the admin kill
   switch below.
+
+### `POST /media/device-upload` — content signature (14.12 / 1.29, IMPLEMENTED 2026-10-06)
+Proposed by `teta-pi/pi-cam` 14.12, implemented backend-side by **1.29**
+([api PR #35](https://github.com/teta-pi/api/pull/35)). `pi-cam` sends two
+`multipart/form-data` fields alongside the existing `file`, `manifest_json`,
+`captured_at`:
+
+| Field | Value |
+|---|---|
+| `content_signature` | Base64 of a DER-encoded ECDSA signature, produced by `createSign('SHA256').sign(devicePrivateKey, 'base64')` over the **hex-encoded SHA-256 hash of `file`'s raw bytes** (not the manifest JSON, not the file itself). |
+| `signature_alg` | `ecdsa-with-SHA256` — matches `manifest_json.signature_info.alg`. Currently the only value; sent anyway so the field is forward-compatible if the device key algorithm ever changes. |
+
+`app/services/device_signature.py::verify_content_signature` recomputes
+`sha256(file_bytes).hexdigest()` server-side and verifies `content_signature`
+against it using the device's stored `device_public_key`
+(`cryptography`'s `ec.ECDSA(hashes.SHA256())` + `load_pem_public_key`) — it
+never trusts the hash inside `manifest_json`, which is client-asserted. A
+missing field, unsupported `signature_alg`, malformed signature, or a
+genuine mismatch all resolve to `False`, never a 500, and never block the
+upload — the photo is stored either way, just without the trust signal.
+Result is stored as `media.device_signature_verified` (migration 016) and
+surfaced honestly on every public read (`by-slug/public`, `/preview`,
+`/proof`'s new `device_signature_proofs` array, `/media/{id}/verify`,
+`GET /blocks`+`/blocks/{id}`) — **separate from, and not blended into,**
+`c2pa_verified`/`verification_level`, which stay gated off
+(`c2pa_verification_enabled=False`, known-issues §6.8) until real C2PA
+manifest verification (task C) exists. Don't conflate the two signals: this
+one proves "this device's key signed this exact file", nothing about C2PA
+manifest claims.
+
+`POST /devices/register` now validates `device_public_key` is a real
+SPKI/PEM ECDSA P-256 key (`app/services/device_signature.py::is_valid_device_public_key`
+— `load_pem_public_key` + `isinstance(key, ec.EllipticCurvePublicKey)` +
+`isinstance(key.curve, ec.SECP256R1)`) — invalid → `400`. Prod had literal
+`"testpubkey"` and three bare 64-char hex strings on 5 registered devices
+before this check existed; those are **not** retroactively revalidated —
+their next upload's `content_signature` verification will honestly fail
+(`device_signature_verified: false`), same as any wrong/missing key, and
+the app re-links with a fresh key on next launch (14.12 already migrates it
+client-side).
 
 ## Search & intent
 - `routes/search.py` — `/search` keyword+level search over published entities.
