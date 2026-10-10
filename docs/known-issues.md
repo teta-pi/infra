@@ -3200,3 +3200,69 @@ Certbot renewal path first (authenticator is the `nginx` plugin, validates
 via their own explicit vhost, never reaches this default block) before
 deploying. Full writeup: `docs/security.md` S-26, `docs/deployment.md`
 "Origin TLS".
+
+## ✅ 6.8 — Grid-of-Record never rendered a real photo anywhere (`blockKind()` type-string mismatch; found 2026-10-06, fixed 3.27, 2026-10-09)
+
+Every media tile on `/search`, `/profile`, `/e/[slug]` and in
+`BlockDetailModal` drew the striped "file source" placeholder instead of the
+actual photo; only `/e/[slug]/blocks/[blockId]` worked, because it emits
+`<img>` for every media row without consulting the type at all.
+
+**Root cause (deeper than the original finding).** `media.type` is a
+free-form `String(20)` on the server — no enum, no validation — written by
+two paths that disagree with the design vocabulary:
+
+| writer | stores | status |
+|---|---|---|
+| `POST /media/upload` | the client's `type` **form field verbatim**; the web app sends `file.type.split("/")[0]` | live |
+| `POST /media/device-upload` (Pi CAM) | `mime_type.split("/")[0]`, derived server-side | live |
+| spec / `MediaItem` TS union / `Media.type`'s own `# video \| photo \| file` comment | `"photo"` | design-time only |
+
+So `"photo"` has not been produced by anything live for a long time — it is a
+single historical row. Prod at fix time: `image` 11, `application` 6, `text`
+4, `file` 2, `photo` 1, `video` 1 (the `application`/`text`/`file` rows are
+QA probe uploads — `*.bin`, `probe.txt`). `blockKind()` compared the raw
+string against `"photo"`, so 11 of 12 real photos fell through to `FILE`,
+which mounts no `<img>` at all. The TS union `"video" | "photo" | "file"` is
+what hid the mismatch from `tsc`: it described the spec, not the data.
+
+Two further faults rode on the same bug and are fixed with it:
+- **`/e/[slug]` could not have rendered a photo even with the kind fixed** —
+  the public payload returns `media_url`, but the page's local
+  `PublicProfile` type never declared it, so no tile had a URL.
+- **`/search`'s evidence tiles had no image branch at all**, desktop or
+  mobile — placeholder unconditionally.
+
+**CLOSED (frontend only, `teta-pi/web` PR #51; historical rows not
+rewritten).** `mediaKind()` in `GridOfRecord.tsx` is now the single place a
+media type string is interpreted: it accepts both vocabularies (`image` and
+`photo`), tolerates a full MIME type (`image/jpeg`), and maps everything else
+to `FILE`. `blockKind()` and `/e/[slug]`'s `blockKindOf()` both route through
+it, so the kind chips/filters/counts on `/profile` and `/search` follow for
+free. `TEXT` still means *block with no media at all* — a media row whose own
+type is `"text"` (an uploaded `.txt`) is a file. `MediaItem.type` and the
+store's media `type` widened to `string`. `media_url` declared and rendered
+on `/e/[slug]`; real-image branch added to both `/search` evidence tiles.
+`/profile`'s upload now falls back to `"file"`, not `"image"`, when the
+browser reports no MIME type.
+
+Verified live against prod data (`tetakta`, three real `image` rows incl. a
+Pi CAM capture): `/e/tetakta` and `/search?q=tetakta` both went from
+`FILE·TEXT·FILE·FILE` + stripes to `PHOTO·TEXT·PHOTO·PHOTO` with the real
+photos rendered, and the block modal shows the real capture.
+`document.images` reports three complete images with real intrinsic sizes
+(454×816, 454×816, 3120×4160), so these are genuine renders, not placeholders.
+`/profile` was **not** verified visually — still no test-account credentials
+for a browser session (the same recurring gap the original finding notes) —
+but it shares `blockKind()` and the `BlockDetailModal` that were proven here.
+
+**Still open — backend, deliberately not touched in 3.27 (needs its own
+boot).** The real defect is that `POST /media/upload` trusts a client-supplied
+string for a column the UI reasons about; a caller can store any 20 characters
+there. Recommended: canonicalise on the **MIME top-level family** (`image` /
+`video` / `audio` / `application` / `text`) rather than on `photo` — it is
+what both live write paths already produce, it is 11 of 13 non-test rows, and
+it needs no data migration, with `photo` left as a legacy alias the frontend
+keeps accepting. Derive it server-side from the uploaded bytes in
+`/media/upload` as `/media/device-upload` already does, and fix the stale
+`# video | photo | file` comment on `Media.type`.
