@@ -54,6 +54,481 @@ column) remains open, lower severity, not a GTM blocker.
 
 ---
 
+
+## 2026-10-01 · 15.8 security · security probe runs as a non-admin account (S-26)
+Done: the daily security probe no longer carries admin rights to prod. The
+`SEC_PROBE_API_KEY` secret in `teta-pi/infra` held the `pk_live_` key from the owner's
+`~/.tetapi/test_api_key` — verified against prod that that key's user is
+`tetakta@gmail.com`, `role=admin`, i.e. the owner's **personal** account, not a test
+account. It travelled to a GitHub-hosted runner once a day, so a compromised runner,
+workflow or third-party action got `require_admin` (bulk-preverify — which is also the
+S-22 takeover surface — GDPR export, anonymisation, claims, `admin/devices`, audit-log)
+plus ownership of every entity on the owner's account. Re-confirmed the probe needs none
+of it: only four checks touch the key (`ssrf`, `rate`, `private-entity`, `s21`) and no
+check body calls an admin route. The actual requirement was **owner of the S-17/S-21
+fixtures**, which a plain `user` satisfies — the admin role was incidental, never needed.
+
+Created `security-probe@tetapi.dev` (`role=user`, `is_agent=false`, id
+`4909361d-…`). Not via the signup flow: `POST /auth/email-code` delivers a 6-digit code
+by email and `tetapi.dev` has **no MX record**, so a code to a role mailbox on our own
+domain hard-bounces (reading it back out of prod Redis was blocked by the session
+sandbox). A one-off `psql` INSERT instead, with the exact statement written into
+`scripts/security/README.md` rather than left as folklore. Rotation afterwards needs no
+psql — `get_current_user` accepts a `pk_live_` bearer, so the account rotates its own key
+via `POST /auth/personal-api-key`.
+
+Both owner-scoped fixtures moved onto it, created through the **ordinary product API**
+(no psql): a private entity `70be78d9-…` (`POST /businesses` → `PATCH is_public=false,
+is_published=false`) for S-17, and device `eea13e52-…` paired then revoked
+(`generate-token` → `register` → `DELETE /devices/{id}`) for S-21. Three prod writes,
+all inside the probe's own account; the old fixtures under the owner's account were left
+untouched, not deleted. Improvement on 1.25's fixture run: proving the device key worked
+*before* revocation no longer costs an upload — `device-upload` with the live key and no
+file body returns **422** (dependency resolved, body rejected ⇒ the header authenticated)
+and **401** with the same key after revocation. Nothing stored. Noted in the README that
+`GET /devices` resolves the caller's *first* business, so the probe account must keep
+owning exactly one entity.
+
+Changed: `scripts/security/probe.py` (new `check_probe_key_privilege`, `--only
+key-privilege`), `scripts/security/fixtures.json` (s17 + s21 repointed, ownership comment
+rewritten), `scripts/security/README.md` (probe account, why the key is needed at all,
+creation + rotation, fixtures section rewritten), `docs/security.md` (**S-26** row in §5,
+least-privilege-for-CI principle in §6.2), `docs/deployment.md` (secret rotated + how to
+rotate it), `docs/roadmap.md` (15.8), `docs/known-issues.md`. Prod: 1 user, 1 entity,
+1 device created; `SEC_PROBE_API_KEY` rotated with `gh secret set … < file` (value never
+printed to chat, log or commit).
+
+Verified: full local run under the new non-admin key = **22 pass / 5 fail / 3 skip**,
+with all four auth'd checks green and **no new SKIPs** — identical to the admin baseline
+except for the new `key-privilege` assert. The 5 FAILs are `origin_tls_identity[*]` =
+**S-25**, pre-existing, owned by 5.15, unrelated to this change. Counter-check: the same
+`--only key-privilege` run under the old admin key goes **red**, so the assert actually
+bites. A `workflow_dispatch` run on `main` *before* the fixture change merged showed
+exactly the predicted failure mode — `private_entity_exposure` and `s21_device_revoked`
+SKIP (new key, old owner's fixtures), run 36851631269 — which is the direct evidence that
+ownership, not role, was the dependency. The post-merge dispatch is the final gate.
+
+Also checked (task item 6): `~/.tetapi/test_api_key` stays the owner's manual
+manager-check key and was **deliberately not rotated**. `SEC_PROBE_API_KEY` was the only
+secret in the org holding a `pk_live_` key — every repo's secret list (`infra`, `api`,
+`web`, `mcp`, `pi-cam`, `landing`, `wordpress-plugin`) and the org secret list were
+enumerated; only `DEPLOY_SSH_KEY` otherwise. No script in `infra` reads the key except
+`probe.py`.
+
+Risk: low and bounded. The probe account is a live prod account with a live key — if its
+key leaks, the blast radius is now one private throwaway entity instead of the owner's
+admin surface, which is the point. Two standing traps are documented rather than coded
+around: a second entity created under the probe account would make `GET /devices` read the
+wrong business (S-21 would silently SKIP), and re-pairing the fixture device would turn
+S-21 red. `key-privilege` guards the role but cannot guard against the secret being
+cleared — that still just SKIPs, honestly.
+
+**Found in passing — LIVE 🔴 (S-27, not caused by this PR's code):** while re-checking
+prod after the fixture writes, `api.tetapi.dev` was returning Cloudflare **521** while the
+origin was healthy (`systemctl is-active tetapi-api` → active, `curl -H 'Host:
+api.tetapi.dev' http://127.0.0.1/health` → 200). Cause: nginx does not restore the real
+client IP from Cloudflare, so the access log records the **CF edge IP** as the client; the
+`nginx-scanners` fail2ban jail banned `104.23.199.47` (10:53:22) and `104.23.199.46`
+(10:53:55), cutting Cloudflare off from the origin. The requests that tripped it are the
+probe's own S-1 traversal / `auth_surface` asserts (User-Agent
+`tetapi-security-probe/1.0`) — so the daily cron re-arms this every morning, and more
+seriously the jail can **only ever ban Cloudflare, never an attacker**, which makes it a
+DoS anyone can trigger through CF. Unban needs `sudo fail2ban-client set nginx-scanners
+unbanip …`, which this session's sandbox blocked, and `unban-ip.yml` is hard-coded to the
+`sshd` jail — so it is **handed to the owner/devops, still open at the time of writing**.
+Recorded as S-27 + a 🔴 `known-issues.md` entry.
+
+Next: manager — **first** restore `api.tetapi.dev` (S-27 unban above), then merge, then re-run `gh workflow run security-probe.yml --repo
+teta-pi/infra` and confirm **22 pass / 5 fail / 3 skip** with the 5 fails being S-25 only.
+Open (not 15.8): **S-25** is red daily until 5.15's `:443` vhosts land, so the net is
+currently red for a reason unrelated to its own credential. Two findings for triage: the
+`agent@tetapi.dev` account (`role=admin`, `is_agent=true`, active) still holds a live
+`pk_live_` key with no known consumer — a second standing admin credential worth nulling
+if unused; and `check_secrets`' `except Exception: continue` drops a check **silently**
+(observed once live on `/docs`), which contradicts "SKIP, never a fake PASS" — it should
+`rep.add(..., SKIP, …)` instead. Both left alone to keep this task one task.
+
+---
+
+
+## 2026-10-09 · 3.27 web · Grid of Record renders real photos (6.8 photo finding CLOSED)
+Done: fixed the 6.8 QA finding that no real photo rendered anywhere in the Grid of
+Record — `/search`, `/profile`, `/e/[slug]` and the block modal all drew the striped
+"file source" placeholder; only the block permalink page worked. Root cause is wider
+than the reported type-string typo: `media.type` is a free-form `String(20)` with no
+enum, written by two paths that disagree. `POST /media/upload` stores the client's
+`type` form field **verbatim** (the web app fills it with `file.type.split("/")[0]`)
+and `/media/device-upload` derives `mime_type.split("/")[0]` server-side — so both
+live writers emit the MIME family (`image`/`video`/`application`/`text`), while
+`"photo"` only ever came from the spec and the TS union `"video" | "photo" | "file"`,
+which is what hid the mismatch from `tsc`. Prod: `image` 11, `application` 6, `text`
+4, `file` 2, `photo` 1, `video` 1 (the non-image rows are QA probe uploads). So 11 of
+12 real photos fell through to `FILE`, which mounts no `<img>` at all; the permalink
+page worked precisely because it never consults the type. Two further faults found
+and fixed with it: `/e/[slug]` **could not** have rendered a photo even with the kind
+right (the public payload's `media_url` was never declared in the page's local type),
+and `/search`'s evidence tiles had **no image branch at all**, desktop or mobile.
+Changed: `teta-pi/web` ([PR #51](https://github.com/teta-pi/web/pull/51)) — new
+`mediaKind()` in `src/components/GridOfRecord.tsx` is the single interpreter of a
+media type string (accepts both vocabularies and a full MIME type), used by
+`blockKind()` and `/e/[slug]`'s `blockKindOf()`; `MediaItem.type` and the store's
+media `type` widened to `string`; `media_url` declared and rendered on `/e/[slug]`;
+real-image branch added to both `/search` evidence tiles; `/profile`'s upload falls
+back to `"file"`, not `"image"`, when the browser reports no MIME type;
+`.claude/launch.json` binds the port 3001 it declares. Docs: `known-issues.md` §6.8
+photo finding → CLOSED, `roadmap.md` 3.27, this changelog.
+Risk: low — frontend only, historical rows are not rewritten and both vocabularies
+keep rendering. The new image branches are gated on `onError`, so a dead
+`storage_url` falls back to the old placeholder rather than showing a broken image.
+`/profile` is the one surface not verified visually (no test-account credentials for
+a browser session, the recurring gap) — it shares the `blockKind()` and
+`BlockDetailModal` that were proven working, worth one owner look after deploy.
+Next: backend boot for the real defect — `/media/upload` trusts a client-supplied
+string for a column the UI reasons about. Recommended canonical value is the **MIME
+top-level family**, not `photo`: it is what both live writers already produce, it is
+11 of 13 non-test rows, and it needs no migration, with `photo` kept as a legacy
+alias the frontend keeps accepting. Derive it server-side from the uploaded bytes as
+`/media/device-upload` already does, and fix the stale `# video | photo | file`
+comment on `Media.type`.
+
+## 2026-10-06 · 6.8 QA continued · c2pa fix verified live (closed), C/D streams + live /claim UI, new photo-rendering bug found
+Done: continuation of the 2026-10-04 pre-GTM QA pass on the same branch/PR, after
+`api` #34 (1.28), `web` #50 (3.26), and `pi-cam` 14.12 all merged 2026-10-06. Merged
+latest `origin/main` into the QA branch first (additive changelog conflict, resolved
+keeping both). Re-verified the 1.28 c2pa-honesty gate live (forged-manifest exploit
+confirmed closed on a fresh test device, not just re-reading code). Ran streams not
+reached on 2026-10-04: full device lifecycle (C1-C3: register → list → revoke → 401,
+no regression, the known business-selection bug reproduced again as expected, not
+re-filed), D2-D5 in shortened form (confirmed 1.29 — real signature verification —
+is not live via `openapi.json`), a live Browser-pane walkthrough of `/claim` (A1,
+reached step 2/email-code, stopped honestly without mailbox access), and a human
+eyes-on pass of `/search` (B3).
+Changed: `docs/known-issues.md` §6.8 (new "continued" subsection), `docs/roadmap.md`
+6.8 row, this changelog. No app code touched.
+Risk: **Primary GTM blocker changed.** The 2026-10-04 c2pa-forgery 🔴 is now
+**CLOSED** (verified live). `bitcoin_confirmed`/OTS (D3) is **still stuck at 0**,
+unfixed, unchanged — remains the #1 blocker, one-line fix already specified
+2026-10-04, nobody's picked it up. Separately surfaced: 1.29 (real device-signature
+check) is unstarted, so **no block on the platform can be cryptographically verified
+today** — an honest gap, not a regression, but worth the owner knowing explicitly.
+**New 🟠 found doing B3's human-eyes check**: `teta-pi/web`
+`GridOfRecord.tsx::blockKind()` checks `media.type === "photo"`, but the live API
+always sends `"image"` — so no real photo thumbnail renders anywhere in the
+Grid-of-Record UI (search evidence tiles, profile ledger, block detail modal); only
+the separate per-block permalink page (`/e/[slug]/blocks/[blockId]`) shows the real
+image, because it doesn't route through `blockKind()`. Breaks the outreach demo and
+likely the owner's own `/profile` view for every real camera capture. All test
+artifacts (1 entity PATCHed private, 1 device registered+self-revoked, 1 media
+uploaded+deleted) cleaned up before session end; tetakta's real device and media
+confirmed untouched throughout.
+Next: a backend session picks up the bitcoin `ts.merge()` fix (still the top
+priority). A small `3 frontend` session fixes `blockKind()`'s `"photo"`→`"image"`
+check. A session with real mailbox access (or a documented QA bypass code) finishes
+A1/A4's live UI click-through through `/claim` step 3 and `/profile`'s upload button.
+GTM Phase 2 stays blocked on the bitcoin fix at minimum; the photo-rendering bug and
+1.29 should land before outreach messaging goes out even though they're not hard
+gates.
+
+## 2026-10-06 · 1.29 backend · real device content-signature verification (S-27, known-issues §6.8)
+Done: second half of the owner's "task B" decision — `1.28` made the fake C2PA signal
+honest (`c2pa_verification_enabled=False`), `pi-cam` `14.12` fixed the device to sign a
+real ECDSA P-256 `content_signature` over the uploaded file's raw bytes (not the
+manifest), and `1.29` verifies that signature server-side: `POST /devices/register` now
+rejects a non-SPKI/P-256 `device_public_key` with `400` (prod had literal `"testpubkey"`
+and 3 bare hex strings on 5 devices before this check existed); `POST
+/media/device-upload` recomputes `sha256(file_bytes).hexdigest()` and verifies
+`content_signature` against the stored public key — never trusts client input, any
+failure (missing fields, wrong key, wrong file, bad alg, malformed sig) resolves to
+`False`, never a 500, never blocks the upload. New `media.device_signature_verified`
+column (migration 016), surfaced on every public read, kept honestly separate from —
+not blended into — the still-gated `c2pa_verified`/`verification_level`. 17 new unit
+tests (96/96 total pass). Infra probe gets `s27_device_signature` (self-cleaning: one
+forged-signature upload, asserted `false`, then deleted) behind a new owner-provisioned
+`SEC_PROBE_DEVICE_API_KEY` secret.
+Changed: `api` PR [#35](https://github.com/teta-pi/api/pull/35) — `app/services/device_signature.py`
+(new), `app/api/routes/{media,businesses,blocks}.py`, `app/models/media.py`,
+`alembic/versions/016_device_signature_verified.py`, `app/schemas/{media,block}.py`,
+`tests/test_device_signature.py`, `docs/api.md`. `infra`: `docs/api.md` (14.12/1.29
+contract section → implemented), `docs/security.md` S-27 update, `docs/known-issues.md`
+§6.8 update, `docs/roadmap.md` 1.29, `scripts/security/{probe.py,fixtures.json,README.md}`,
+`.github/workflows/security-probe.yml`.
+Risk: `c2pa_verification_enabled` stays `False` — the C2PA-manifest half of §6.8 is still
+unbuilt (task C). 5 pre-14.12 devices have no valid key and will show
+`device_signature_verified: false` until the app re-links them (expected, automatic
+client-side, not a regression). The infra probe's new check SKIPs until the owner adds
+`SEC_PROBE_DEVICE_API_KEY` (value already written to `~/.tetapi/test_device_api_key` on
+this machine from the one-time fixture-device registration this session did against prod
+— device id `7bd30c15-afda-43dd-96f5-ad50c265ade2`, paired to entity `tetakta`, same
+pattern S-21's fixture used).
+Next: manager to merge api #35, then live-verify per the task's own instruction (real
+P-256 pair → register → sign+upload → `true`; sign with a different key → `false`;
+clean up), then add the `SEC_PROBE_DEVICE_API_KEY` GitHub secret so `s27_device_signature`
+goes live in the daily net instead of SKIP. `teta-pi/mcp`'s public payload descriptions
+were flagged (not fixed) back in 1.28 — still unconfirmed whether they need a
+`device_signature_verified` mirror too.
+
+---
+
+## 2026-10-06 · 14.12 camera · pi-cam's device crypto was fake — now real ECDSA P-256; new backend task 1.29
+Done: `teta-pi/pi-cam` session fixed its `modules/crypto` — `generateKeypair()`
+used to SHA-256 a random seed and wrap the hash in a fake PEM header (not a
+key at all), `sign()` was HMAC-SHA256, despite docs/`algorithm:'ECDSA-P256'`
+claiming real ECDSA/Secure Enclave. Prod confirmed 0 of 5 registered devices
+had a valid key. Now real ECDSA P-256 via `react-native-quick-crypto`
+(origin-checked first against the no-RU/BY-authors rule — `@noble/curves`,
+`elliptic`, and the PKI.js/ASN1.js family were all ruled out as
+Russian-origin-authored before landing on this one), private key in
+SecureStore, **not** hardware-backed. Also fixed a real bug: `signMedia()`
+hashed `sha256(base64(bytes))` instead of the raw bytes, so its content hash
+could never have matched a backend hash of the uploaded file. Device now
+signs the raw-bytes hash and sends it as new `content_signature`/
+`signature_alg` fields on `POST /media/device-upload` — contract specified
+in `docs/api.md`.
+Changed: `docs/api.md` (new device-upload signature subsection), `docs/
+roadmap.md` (14.12 entry + new **1.29** backend task, not started), this
+changelog. App-side changes are all in `teta-pi/pi-cam` (see its own
+`docs/changelog.md`), not this repo.
+Risk: backend does not verify `content_signature` yet (1.29 unstarted) —
+device-upload currently accepts the new fields without checking them, so
+there's no enforcement gap introduced, just an unimplemented check. The
+pi-cam session could not verify any of this on a real device (sandbox can't
+reach `dl.google.com`/EAS); owner verification still needed before this is
+trusted end-to-end.
+Next: a backend session picks up **1.29** — implement `content_signature`
+verification on `/media/device-upload` per the `docs/api.md` contract.
+Separately, owner runs a pi-cam EAS build to confirm the real keygen/sign
+works on-device.
+
+## 2026-10-06 · 1.28 backend + 3.26 frontend · honest c2pa_verified (S-26, known-issues §6.8)
+Done: `c2pa_verified=true` on prod proved nothing — `c2pa-python` isn't installed, so
+`extract_c2pa_manifest()` always returns `None`; the only manifest source on
+`POST /media/device-upload` is the client-supplied `manifest_json` form field;
+`verify_pi_camera_signature()` is a bare substring match. Live-reproduced pre-fix:
+`GET /businesses/by-slug/tetakta/public` served `c2pa_verified: true` on 3 real "Pi CAM
+Captures" rows. New config gate `c2pa_verification_enabled` (default `False`,
+`api/app/core/config.py`) skips the forgeable check on both upload paths; every public
+read (`by-slug/public`, `/preview`, `/proof`'s `c2pa_proofs`, `/media/{id}/verify`,
+`GET /blocks`+`/blocks/{id}`, `_compute_verification_level`) gates on the flag too, not
+just the stored column, so the 3 historical rows stop being served as verified without
+touching the data. New honest `device_upload` field (fact, not a trust claim) added
+alongside it. Web dropped the unconditional "PI Camera · C2PA" badge and QR-pairing copy
+for "Uploaded from a paired device"; the c2pa seal/attestation bar on `/e/[slug]`,
+`/profile`, `/search` needed no change — already reads `c2pa_verified` off the API, goes
+honest automatically. 2 new unit tests reproduce the forged-manifest exploit
+(`api/tests/test_c2pa_gating.py`, 79/79 pass); `tsc --noEmit` clean on web.
+Changed: `api` PRs [#34](https://github.com/teta-pi/api/pull/34) — `app/core/config.py`,
+`app/api/routes/{media,businesses,blocks}.py`, `app/schemas/block.py`, `docs/api.md`.
+`web` PR [#50](https://github.com/teta-pi/web/pull/50) — `src/app/profile/page.tsx`,
+`src/components/GridOfRecord.tsx`, `src/lib/types.ts`. `infra`: `docs/security.md` §5
+(new S-26), `docs/known-issues.md` §6.8, `docs/roadmap.md` 1.28/3.26, this entry.
+Risk: both PRs unmerged as of this entry — prod still serves the 3 historical rows as
+`c2pa_verified: true` until api PR #34 deploys. Real C2PA verification (manifest
+extraction + cert-chain validation) is still unbuilt; `c2pa_verification_enabled` must
+stay `False` until that lands, or the same forgeable path reopens.
+Next: manager to merge api #34 then web #50 (api first, web reads its new field), verify
+on prod (`by-slug/tetakta/public` → `c2pa_verified: false` on all 3 rows), and relay the
+owner decision on whether to migrate those 3 rows' stored `c2pa_verified` to `false` or
+leave them flagged — not decided in this session per the task's instruction. `teta-pi/mcp`
+was named in the public-payload list but has no checked-out repo for this session; worth
+a confirming pass from direction 2 that it doesn't duplicate the now-gated field itself.
+
+## 2026-10-05 · 5.17 devops · bo.shos→bo-shos DNS rename + origin cert SAN update + :80 default-reject (S-26)
+Done: owner renamed SH.OS's back-office DNS record `bo.shos.hellfiresol.com` →
+`bo-shos.hellfiresol.com` (Cloudflare's free Universal SSL only covers one
+subdomain level, so the two-label name could never get a valid edge cert; old
+record removed, new one resolves). Re-issued the origin cert for that pair —
+same private key, new CSR (`subjectAltName=DNS:shos.hellfiresol.com,
+DNS:bo-shos.hellfiresol.com`, `bo.shos.` dropped), submitted via the same CF
+Origin CA Bearer-token API as 5.16 (run from the owner's machine so the token
+never left local disk), verified SAN + key-match before installing over the
+old `.pem` (backed up first to `/root/shos.hellfiresol.com.origin.pem.bak-5.17`).
+`deploy/nginx/bo.shos.hellfiresol.com.conf` renamed to
+`bo-shos.hellfiresol.com.conf` (`git mv`), both `server_name` lines updated;
+basic-auth gate, `proxy_pass`, security headers untouched. Separately, found
+(manager's own check, folded into this task) that origin `:80` had **no**
+`default_server` either — any unrecognized `Host` header silently got our
+`api.tetapi.dev` content, the `:80` twin of S-25's `:443` gap. Closed it the
+same way: new `deploy/nginx/default-http-reject.conf`
+(`listen 80 default_server; server_name _; return 444;`, additive, mirrors
+`default-tls-reject.conf`). Checked hellfire's Certbot renewal path first —
+`authenticator = nginx` in `/etc/letsencrypt/renewal/hellfiresol.com.conf`
+patches their own explicit vhost for HTTP-01, never reaches the new default
+block; confirmed cert valid to 2026-12-17 (renews ~30 days prior, nothing due
+during this change) before touching nginx. `nginx -t` clean (one new cosmetic
+warning: a pre-existing untracked `teta` vhost's inert `server_name _`
+duplicate-name collision, not a `default_server` conflict — `-t` would
+hard-fail on that) → `systemctl reload nginx`. Deployed vhost swap + new
+default block together, tested, then reloaded once.
+
+Verified from the origin before touching Cloudflare: `bo-shos.hellfiresol.com`
+:443 with SNI → 401 under the new cert; `shos.hellfiresol.com`, all 5 tetapi
+hosts, and `hellfiresol.com` (hellfire's own, untouched) :443 all unchanged;
+unknown SNI on :443 still hard-fails the handshake (unchanged); unknown `Host`
+on :80 → `curl: (52) Empty reply from server` (nginx's 444, not our API, confirmed
+not the old api.tetapi.dev fallback); full `scripts/security/probe.py` — 26
+pass / 0 fail, no regressions. Then verified publicly through Cloudflare:
+`https://bo-shos.hellfiresol.com/` → **401** (was 525 before this change — DNS
+pointed at nothing resolvable-with-a-cert). Old Origin CA cert (SAN still
+carrying the dead `bo.shos.` name) revoked via
+`DELETE /client/v4/certificates/{id}` only *after* the replacement was
+confirmed live — `success: true`, `revoked_at` returned. Re-checked `bo-shos`/
+`shos` once more post-revocation (still 401/200; the origin never referenced
+the old cert file after install, so this was just closing the loop).
+
+Also, while re-reading the Origin TLS section to document this: found
+`docs/security.md` S-25's detailed Status cell and `docs/deployment.md`
+"Step 6" both still read "not done yet / blocked" even though the actual CF
+Full-strict flip landed 2026-10-04 (`docs: S-25 → CLOSED`, #135) — a stale
+snapshot nobody had gone back to update. Annotated both with a dated update
+note rather than rewriting the historical narrative.
+
+Changed: `deploy/nginx/bo-shos.hellfiresol.com.conf` (renamed from
+`bo.shos.hellfiresol.com.conf`), `deploy/nginx/shos.hellfiresol.com.conf`
+(comment only), `deploy/nginx/default-http-reject.conf` (new);
+`docs/{security,deployment,known-issues,roadmap}.md`. Prod:
+`/etc/ssl/certs/shos.hellfiresol.com.origin.pem` (new SAN, same key),
+`/etc/nginx/sites-{available,enabled}/bo-shos.hellfiresol.com` (renamed, old
+removed), `/etc/nginx/sites-{available,enabled}/default-http-reject` (new);
+Cloudflare: new Origin CA cert issued for `hellfiresol.com` zone, old one
+(SAN `bo.shos.hellfiresol.com`+`shos.hellfiresol.com`) revoked. `hellfiresol.com`
+zone settings/rules otherwise untouched, as instructed.
+
+Risk: none identified live — hellfire's own `:80`/`:443`, Certbot renewal path,
+and all tetapi/shos hosts were re-verified unchanged after both the vhost swap
+and the reload; `probe.py` full run stayed green throughout. The one residual
+to watch: the pre-existing untracked `teta` vhost (`listen 80; server_name _;`,
+no `default_server`) now produces a harmless `nginx -t` warning every time
+config is tested — cosmetic, but worth knowing if a future session sees it
+and wonders whether something broke.
+
+Next: manager/SH.OS to independently verify `bo-shos.hellfiresol.com`
+externally (same process as the 5.16 S-25 close-out) and confirm the 401 gate
+holds from outside too. No other owner action needed — DNS and CF zone
+settings were already correct going in.
+
+---
+
+## 2026-10-04 · 6.8 QA · pre-GTM full QA pass — 2 new 🔴 blockers, gate RED
+Done: full live E2E QA sweep on prod across all 5 owner-requested streams
+(creation, search/indexing, camera↔page sync, verified-blocks-from-camera,
+regressions). QA only, nothing fixed. Method: direct prod code read
+(`/opt/tetapi/api`), read-only `psql`, `journalctl`, live curl with the
+owner's admin test key, and a real MCP JSON-RPC session against
+`mcp.tetapi.dev/mcp` (actual `initialize`→`tools/call`, not REST-pretending).
+Changed: `docs/known-issues.md` §6.8 (full findings), `docs/roadmap.md` 6.8
+row. No app code touched.
+Risk: **2 new 🔴 blockers, escalated live to `TTPI · MANAGER` during the
+session (not held for this write-up):**
+1. `c2pa_verified=true` is 100% self-reported client JSON — `c2pa-python`
+   isn't even installed on prod, and the "signature" check is a substring
+   match on client-supplied strings, no crypto, no use of the device's
+   registered public key. Forgeable by anyone with a device key.
+2. `media.bitcoin_confirmed` / `verification_events.ots_status` can **never**
+   reach confirmed — `app/services/bitcoin.py::verify_proof()` fetches the
+   OTS calendar's upgraded timestamp and discards it instead of merging it
+   into the proof before checking for a Bitcoin attestation. Not a timing
+   issue — structurally permanent regardless of how long you wait.
+Also filed (🟠, non-blocking): entity-level `is_public:false` ignored at
+`POST /businesses` creation; `original_hash`/`content_hash` key-naming split
+across 3 near-duplicate serializers (root cause of the owner's "original_hash
+always null" observation — the hash is computed and stored fine, just
+renamed on 2 of 3 read paths); `GET /proof` doesn't expose enough
+(signature/cert_pem) for independent third-party C2PA verification; device
+QR pairing (`POST /devices/generate-token`) can silently attach to the wrong
+business for any multi-business account — **self-reproduced by accident this
+session** (test pairing landed on tetakta's real entity instead of a new test
+entity), self-revoked within the same minute, tetakta's real device
+(`b8ad9e35`) confirmed untouched before and after via `psql`.
+Confirmed NOT regressed, no action needed: block-level `is_public` (1.22),
+bulk-preverify URLs + claim-409 + opt-out flow (1.23/3.24), private-entity
+404 (S-17), claiming someone else's domain fails safely (1.27/S-22),
+TLS/origin liveness (S-25), new-entity search latency (<1 min), new-block
+embedding + semantic (`resolve-intent`/`teta_resolve_intent`) discovery.
+All test entities/blocks/devices created this session were cleaned up before
+session end (listed in `docs/known-issues.md` §6.8) — nothing of this
+session's own making is left public/active on prod.
+Next: **GTM Phase 2 stays blocked** until both 🔴 items are fixed (c2pa
+signature verification needs a real cryptographic check against
+`device_public_key`; bitcoin confirmation needs the one-line `ts.merge()`
+fix in `verify_proof()`) and re-verified live. The 4 🟠 items don't block the
+gate but should land before outreach starts (claim-flow privacy default,
+hash-field naming, proof completeness, device-pairing business selection).
+C2/C3 (device list display, owner-revoke→401) and a live UI click-through of
+`/claim` and `/profile` were not reached this pass — flagged for whoever
+picks up the 🔴 fixes to re-verify live at the same time.
+
+## 2026-10-03 · 5.16 devops · origin TLS (S-25) — Origin CA certs issued, :443 vhosts + default-reject live, steps 1-5 of 6 done
+Done: picked up where 5.15 stopped (blocked on owner issuing 2 Origin CA certs from the
+CF dashboard). Turned out that assumption was wrong — the CF API token at
+`~/.tetapi/cf_api_token` (`Zone SSL&Certificates:Edit` scope) authorizes
+`POST /client/v4/certificates` directly with a plain Bearer header, no separate Origin CA
+Service Key and no dashboard step needed. Submitted both zones' CSRs (generated in 5.15,
+still on the server): `tetapi.dev` (`*.tetapi.dev` SAN) and `hellfiresol.com` scoped to
+just `shos.`/`bo.shos.` — both came back `success: true`, 15-year validity
+(`requested_validity=5475`, expires 2041-09-29). Verified each signed PEM before using it:
+`openssl x509 -noout -subject -ext subjectAltName -dates` (SAN matches the CSR) and a
+modulus/MD5 comparison against the private key on the server (confirms a real pair, not
+just a syntactically valid cert). Installed at `/etc/ssl/certs/{tetapi.dev,
+shos.hellfiresol.com}.origin.pem` (644 root:root).
+
+Added `:443` server blocks to every host: `app`/`api`/`mcp`/`stats.tetapi.dev` +
+`tetapi.dev` apex (new `tetapi.dev.origin.pem`), `shos`/`bo.shos.hellfiresol.com` (new
+`shos.hellfiresol.com.origin.pem`, `auth_basic` re-declared — it does not inherit across
+`server{}` blocks). `:80` left exactly as-is, no redirect (CF is still Flexible; an
+origin-side redirect would loop). Discovered nginx 1.24.0 on this box predates the
+standalone `http2` directive (added 1.25.1) — `http2 on;` is an "unknown directive" here;
+used the older `listen 443 ssl http2;` form instead, confirmed by a throwaway test vhost
+before touching real configs. `stats.tetapi.dev` was server-only (never tracked in this
+repo); brought it in as `deploy/nginx/stats.tetapi.dev.conf` since its `:443` block needed
+writing anyway — `:80` content copied verbatim, still no security-headers include
+(preserves its pre-existing exception from the 5.6 rollout).
+
+Added `deploy/nginx/default-tls-reject.conf` (`listen 443 ssl http2 default_server;
+ssl_reject_handshake on;`) as a new site, symlinked into `sites-enabled` — additive only,
+the `hellfire` co-tenant's own Certbot vhost (`hellfiresol.com.conf`, not ours to edit)
+is untouched and still correctly matches its own SNI. Backed up all live server configs
+to a local scratchpad before touching anything. `nginx -t` passed (two harmless "protocol
+options redefined for 0.0.0.0:443" warnings — hellfire's `listen 443 ssl;` has no `http2`,
+confirmed cosmetic: doesn't affect which cert/content gets served per SNI) → `systemctl
+reload nginx`.
+
+Verified from the origin directly, bypassing Cloudflare, before touching anything CF-side:
+all 7 hosts (`curl -k --resolve <host>:443:164.90.235.66 https://<host>/`) return their own
+real content under a cert whose CN/SAN actually names them (not hellfire's ~30970-byte
+apex); `nosuchhost.tetapi.dev` hard-fails the TLS handshake (`tlsv1 unrecognized name`,
+confirmed via `curl -v`); `hellfiresol.com`/`www.hellfiresol.com` under their own SNI still
+get 200 + their real ~30970-byte body under `CN=hellfiresol.com` (their vhost is completely
+unaffected). `scripts/security/probe.py --only origin-tls`: **5/5 PASS** (was honestly RED
+since 5.15). Full `scripts/security/probe.py` run: 26 pass / 0 fail / 3 skip — no
+regressions anywhere else. Public `:80` and every CF-fronted URL unchanged throughout
+(spot-checked `api.tetapi.dev/health` via both the real DNS path and `:80` direct).
+
+**Deliberately stopped before step 6** (flipping the CF zones to Full/Full-strict) — the
+mandatory fix order requires SH.OS to independently verify their two hosts externally
+first, plus owner/manager sign-off, since this is the step that makes Cloudflare start
+trusting the origin's `:443` answer per-SNI. Reported to the manager for that
+coordination; no CF zone settings or Configuration Rules were touched this session — only
+the Origin CA certificate-issuance endpoint was called.
+
+Changed: `deploy/nginx/{app,api,mcp,tetapi.dev,shos.hellfiresol.com,
+bo.shos.hellfiresol.com}.conf` (added `:443` blocks), new
+`deploy/nginx/stats.tetapi.dev.conf` and `deploy/nginx/default-tls-reject.conf`,
+`docs/security.md` (S-25 row → 🟡, steps 1-5 done), `docs/deployment.md` (Origin TLS
+runbook rewritten: issuance-via-API supersedes the CSR-handoff-to-owner assumption, step 2
+implementation notes, step 6 runbook for the next session), `docs/known-issues.md` (S-25
+update), `docs/roadmap.md` (new 5.16 row, closed the stale "waiting on keys" entry).
+Risk: the CF→origin hop is still cleartext until step 6 lands (first half of S-25
+unresolved) — anyone picking this up must not skip the SH.OS external-verification
+pre-check before flipping CF, or a mismatch could serve the wrong content under a domain
+with a now-valid-looking padlock. `default-tls-reject` makes `:443` behavior change for
+any SNI nginx doesn't recognize — low risk (only affects direct-to-origin-IP probing,
+which isn't how real traffic arrives while CF is Flexible) but worth knowing if a future
+host is added and someone forgets to give it its own `:443` block.
+Next: manager coordinates SH.OS external verification of `shos.`/`bo.shos.
+hellfiresol.com`, then owner-approved step 6 (flip `tetapi.dev` CF SSL to strict, remove
+the 2026-09-26 shos Configuration Rule) — see `docs/deployment.md` "Step 6" for the exact
+sequence and rollback plan.
+
 ## 2026-09-27 · 1.27 backend · S-22: a domain claim must prove the entity's anchor
 Done: closed the code half of the 🔴 **S-22** pre-verified-entity takeover (the URGENT
 gate in front of GTM Phase 2) — [api PR #33](https://github.com/teta-pi/api/pull/33),

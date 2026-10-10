@@ -106,6 +106,46 @@ Auth via `Authorization: Bearer <JWT|pk_live_…>`; deps in `api/app/api/deps.py
   kill itself — what the pi-cam "Unlink" button calls), and the admin kill
   switch below.
 
+### `POST /media/device-upload` — content signature (14.12 / 1.29, IMPLEMENTED 2026-10-06)
+Proposed by `teta-pi/pi-cam` 14.12, implemented backend-side by **1.29**
+([api PR #35](https://github.com/teta-pi/api/pull/35)). `pi-cam` sends two
+`multipart/form-data` fields alongside the existing `file`, `manifest_json`,
+`captured_at`:
+
+| Field | Value |
+|---|---|
+| `content_signature` | Base64 of a DER-encoded ECDSA signature, produced by `createSign('SHA256').sign(devicePrivateKey, 'base64')` over the **hex-encoded SHA-256 hash of `file`'s raw bytes** (not the manifest JSON, not the file itself). |
+| `signature_alg` | `ecdsa-with-SHA256` — matches `manifest_json.signature_info.alg`. Currently the only value; sent anyway so the field is forward-compatible if the device key algorithm ever changes. |
+
+`app/services/device_signature.py::verify_content_signature` recomputes
+`sha256(file_bytes).hexdigest()` server-side and verifies `content_signature`
+against it using the device's stored `device_public_key`
+(`cryptography`'s `ec.ECDSA(hashes.SHA256())` + `load_pem_public_key`) — it
+never trusts the hash inside `manifest_json`, which is client-asserted. A
+missing field, unsupported `signature_alg`, malformed signature, or a
+genuine mismatch all resolve to `False`, never a 500, and never block the
+upload — the photo is stored either way, just without the trust signal.
+Result is stored as `media.device_signature_verified` (migration 016) and
+surfaced honestly on every public read (`by-slug/public`, `/preview`,
+`/proof`'s new `device_signature_proofs` array, `/media/{id}/verify`,
+`GET /blocks`+`/blocks/{id}`) — **separate from, and not blended into,**
+`c2pa_verified`/`verification_level`, which stay gated off
+(`c2pa_verification_enabled=False`, known-issues §6.8) until real C2PA
+manifest verification (task C) exists. Don't conflate the two signals: this
+one proves "this device's key signed this exact file", nothing about C2PA
+manifest claims.
+
+`POST /devices/register` now validates `device_public_key` is a real
+SPKI/PEM ECDSA P-256 key (`app/services/device_signature.py::is_valid_device_public_key`
+— `load_pem_public_key` + `isinstance(key, ec.EllipticCurvePublicKey)` +
+`isinstance(key.curve, ec.SECP256R1)`) — invalid → `400`. Prod had literal
+`"testpubkey"` and three bare 64-char hex strings on 5 registered devices
+before this check existed; those are **not** retroactively revalidated —
+their next upload's `content_signature` verification will honestly fail
+(`device_signature_verified: false`), same as any wrong/missing key, and
+the app re-links with a fresh key on next launch (14.12 already migrates it
+client-side).
+
 ## Search & intent
 - `routes/search.py` — `/search` keyword+level search over published entities.
 - `routes/registry_search.py` — `/registry/search?q=&country=` → official registry

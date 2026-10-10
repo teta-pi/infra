@@ -1,13 +1,27 @@
 {
   "_comment": [
-    "Stable prod fixtures the probe reads (never writes). All owned by the test",
-    "account behind ~/.tetapi/test_api_key. If a fixture disappears the dependent",
-    "check reports SKIP with the reason, never a fake PASS.",
+    "Stable prod fixtures the probe reads (never writes). Owned by the probe's own",
+    "non-admin account security-probe@tetapi.dev (role=user, 15.8) \u2014 NOT by the",
+    "owner's admin account any more. If a fixture disappears the dependent check",
+    "reports SKIP with the reason, never a fake PASS.",
     "s8: entity created by session 15.3 (2026-08-05) with one public and one private",
     "block, left in place precisely as the S-8 regression fixture. The private block's",
     "title is 'private-block-s8-SECRET' — the id being public is fine, the API must",
     "never return the row to a non-owner. Since S-17 (2026-09-14) the entity itself",
     "MUST be public (is_public=is_published=true), otherwise /blocks 404s and the",
+    "check can only SKIP. This one is read ANONYMOUSLY, so its owner is irrelevant;",
+    "it still sits under the owner's account and was deliberately left there.",
+    "s17: the probe account's one and only entity, private (is_public=false,",
+    "is_published=false); every by-UUID read (base/preview/proof/blocks) must 404",
+    "anonymously and 200 for the owner (= the probe key).",
+    "s21: one Pi CAM device of that same probe entity, paired then REVOKED on prod",
+    "(2026-10-01, roadmap 15.8 \u2014 the justified prod write, see README). The key is",
+    "stored WITHOUT its pk_live_ prefix; it is worthless by construction (server",
+    "erased it, api_key IS NULL). device-upload with it must 401 and the owner's",
+    "GET /devices must still list the device with revoked_at set.",
+    "GET /devices resolves the caller's FIRST business, so the probe account must",
+    "keep owning exactly one entity \u2014 do not create a second one under it."
+
     "check can only SKIP.",
     "s17: a private (is_public=false, is_published=false) entity of the same test",
     "account; every by-UUID read (base/preview/proof/blocks) must 404 anonymously",
@@ -18,6 +32,16 @@
     "(server erased it, api_key IS NULL). device-upload with it must 401 and the",
     "owner's GET /devices must still list the device with revoked_at set.",
     "s22: a permanent pre_verified_unclaimed entity (TETA Security S-22 Probe Fixture, slug teta-security-s-22-probe-fixture) created 2026-10-03 via bulk-preverify, anchored to example-anchor.test (RFC 6761 reserved TLD, unclaimable by construction). claim/domain/check with a foreign domain must 403."
+
+    "s27_device_signature: one LIVE (non-revoked) Pi CAM device of the same test",
+    "account, registered with a real P-256 SPKI key (api PR #35, 1.29). Its",
+    "device_id is recorded here (non-secret); its X-Device-Api-Key is NOT in this",
+    "file \u2014 it's a live write credential, kept only in the owner-provisioned",
+    "SEC_PROBE_DEVICE_API_KEY GitHub secret / ~/.tetapi/test_device_api_key (same",
+    "pattern as SEC_PROBE_API_KEY, see README). The check sends a forged",
+    "content_signature, asserts device_signature_verified comes back false, then",
+    "deletes the one Media row it created \u2014 self-cleaning, not an accumulating",
+    "prod write."
   ],
   "s8_private_blocks": {
     "entity_id": "e5b79aaa-6403-4c11-afee-776203fcc7c5",
@@ -25,18 +49,26 @@
     "private_block_id": "d0974159-cc75-463d-880a-b3af81b854b6"
   },
   "s17_private_entity": {
-    "entity_id": "ab27ca35-f517-4e03-a353-9ebf8a58f13c",
-    "name": "TETA Security Sync Test B 15.3"
+    "entity_id": "70be78d9-4859-41d1-bdd3-ba272ea69653",
+    "name": "TETA Security Probe Fixture 15.8"
   },
   "s21_revoked_device": {
-    "device_id": "ef2cdffa-127b-4c36-9e8f-aa55769b9c93",
-    "entity_id": "eced734c-c3b7-459a-9df2-d772c1ee9211",
+    "device_id": "eea13e52-03d7-4499-ba89-d012b241c902",
+    "entity_id": "70be78d9-4859-41d1-bdd3-ba272ea69653",
     "label": "S-21 probe fixture (revoked)",
+    "revoked_key_suffix": "4Ivy1UsML-Way6lJ_1Br-7t6y6hjSYb5YMqsy8vOq7Y"
+
     "revoked_key_suffix": "xJhScbP2wJ-w7vQ5s3wsEQhjahIiuLG7vtXdHu8G7JA"
   },
   "s22_claim_anchor": {
     "entity_id": "6a9c6cb8-c88d-40c9-b4bd-f9adee7a4091",
     "anchor_domain": "example-anchor.test",
     "foreign_domain": "sec-probe-not-the-anchor.test"
+
+  "s27_device_signature": {
+    "device_id": "7bd30c15-afda-43dd-96f5-ad50c265ade2",
+    "entity_id": "eced734c-c3b7-459a-9df2-d772c1ee9211",
+    "label": "S-27 probe fixture (live, non-revoked)",
+    "registered_with_real_p256_key": true
   }
 }
