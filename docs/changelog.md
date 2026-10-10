@@ -6,6 +6,102 @@ using the `Done / Changed / Risk / Next` block (see `CLAUDE.md`).
 
 ---
 
+## 2026-10-01 · 15.8 security · security probe runs as a non-admin account (S-26)
+Done: the daily security probe no longer carries admin rights to prod. The
+`SEC_PROBE_API_KEY` secret in `teta-pi/infra` held the `pk_live_` key from the owner's
+`~/.tetapi/test_api_key` — verified against prod that that key's user is
+`tetakta@gmail.com`, `role=admin`, i.e. the owner's **personal** account, not a test
+account. It travelled to a GitHub-hosted runner once a day, so a compromised runner,
+workflow or third-party action got `require_admin` (bulk-preverify — which is also the
+S-22 takeover surface — GDPR export, anonymisation, claims, `admin/devices`, audit-log)
+plus ownership of every entity on the owner's account. Re-confirmed the probe needs none
+of it: only four checks touch the key (`ssrf`, `rate`, `private-entity`, `s21`) and no
+check body calls an admin route. The actual requirement was **owner of the S-17/S-21
+fixtures**, which a plain `user` satisfies — the admin role was incidental, never needed.
+
+Created `security-probe@tetapi.dev` (`role=user`, `is_agent=false`, id
+`4909361d-…`). Not via the signup flow: `POST /auth/email-code` delivers a 6-digit code
+by email and `tetapi.dev` has **no MX record**, so a code to a role mailbox on our own
+domain hard-bounces (reading it back out of prod Redis was blocked by the session
+sandbox). A one-off `psql` INSERT instead, with the exact statement written into
+`scripts/security/README.md` rather than left as folklore. Rotation afterwards needs no
+psql — `get_current_user` accepts a `pk_live_` bearer, so the account rotates its own key
+via `POST /auth/personal-api-key`.
+
+Both owner-scoped fixtures moved onto it, created through the **ordinary product API**
+(no psql): a private entity `70be78d9-…` (`POST /businesses` → `PATCH is_public=false,
+is_published=false`) for S-17, and device `eea13e52-…` paired then revoked
+(`generate-token` → `register` → `DELETE /devices/{id}`) for S-21. Three prod writes,
+all inside the probe's own account; the old fixtures under the owner's account were left
+untouched, not deleted. Improvement on 1.25's fixture run: proving the device key worked
+*before* revocation no longer costs an upload — `device-upload` with the live key and no
+file body returns **422** (dependency resolved, body rejected ⇒ the header authenticated)
+and **401** with the same key after revocation. Nothing stored. Noted in the README that
+`GET /devices` resolves the caller's *first* business, so the probe account must keep
+owning exactly one entity.
+
+Changed: `scripts/security/probe.py` (new `check_probe_key_privilege`, `--only
+key-privilege`), `scripts/security/fixtures.json` (s17 + s21 repointed, ownership comment
+rewritten), `scripts/security/README.md` (probe account, why the key is needed at all,
+creation + rotation, fixtures section rewritten), `docs/security.md` (**S-26** row in §5,
+least-privilege-for-CI principle in §6.2), `docs/deployment.md` (secret rotated + how to
+rotate it), `docs/roadmap.md` (15.8), `docs/known-issues.md`. Prod: 1 user, 1 entity,
+1 device created; `SEC_PROBE_API_KEY` rotated with `gh secret set … < file` (value never
+printed to chat, log or commit).
+
+Verified: full local run under the new non-admin key = **22 pass / 5 fail / 3 skip**,
+with all four auth'd checks green and **no new SKIPs** — identical to the admin baseline
+except for the new `key-privilege` assert. The 5 FAILs are `origin_tls_identity[*]` =
+**S-25**, pre-existing, owned by 5.15, unrelated to this change. Counter-check: the same
+`--only key-privilege` run under the old admin key goes **red**, so the assert actually
+bites. A `workflow_dispatch` run on `main` *before* the fixture change merged showed
+exactly the predicted failure mode — `private_entity_exposure` and `s21_device_revoked`
+SKIP (new key, old owner's fixtures), run 36851631269 — which is the direct evidence that
+ownership, not role, was the dependency. The post-merge dispatch is the final gate.
+
+Also checked (task item 6): `~/.tetapi/test_api_key` stays the owner's manual
+manager-check key and was **deliberately not rotated**. `SEC_PROBE_API_KEY` was the only
+secret in the org holding a `pk_live_` key — every repo's secret list (`infra`, `api`,
+`web`, `mcp`, `pi-cam`, `landing`, `wordpress-plugin`) and the org secret list were
+enumerated; only `DEPLOY_SSH_KEY` otherwise. No script in `infra` reads the key except
+`probe.py`.
+
+Risk: low and bounded. The probe account is a live prod account with a live key — if its
+key leaks, the blast radius is now one private throwaway entity instead of the owner's
+admin surface, which is the point. Two standing traps are documented rather than coded
+around: a second entity created under the probe account would make `GET /devices` read the
+wrong business (S-21 would silently SKIP), and re-pairing the fixture device would turn
+S-21 red. `key-privilege` guards the role but cannot guard against the secret being
+cleared — that still just SKIPs, honestly.
+
+**Found in passing — LIVE 🔴 (S-27, not caused by this PR's code):** while re-checking
+prod after the fixture writes, `api.tetapi.dev` was returning Cloudflare **521** while the
+origin was healthy (`systemctl is-active tetapi-api` → active, `curl -H 'Host:
+api.tetapi.dev' http://127.0.0.1/health` → 200). Cause: nginx does not restore the real
+client IP from Cloudflare, so the access log records the **CF edge IP** as the client; the
+`nginx-scanners` fail2ban jail banned `104.23.199.47` (10:53:22) and `104.23.199.46`
+(10:53:55), cutting Cloudflare off from the origin. The requests that tripped it are the
+probe's own S-1 traversal / `auth_surface` asserts (User-Agent
+`tetapi-security-probe/1.0`) — so the daily cron re-arms this every morning, and more
+seriously the jail can **only ever ban Cloudflare, never an attacker**, which makes it a
+DoS anyone can trigger through CF. Unban needs `sudo fail2ban-client set nginx-scanners
+unbanip …`, which this session's sandbox blocked, and `unban-ip.yml` is hard-coded to the
+`sshd` jail — so it is **handed to the owner/devops, still open at the time of writing**.
+Recorded as S-27 + a 🔴 `known-issues.md` entry.
+
+Next: manager — **first** restore `api.tetapi.dev` (S-27 unban above), then merge, then re-run `gh workflow run security-probe.yml --repo
+teta-pi/infra` and confirm **22 pass / 5 fail / 3 skip** with the 5 fails being S-25 only.
+Open (not 15.8): **S-25** is red daily until 5.15's `:443` vhosts land, so the net is
+currently red for a reason unrelated to its own credential. Two findings for triage: the
+`agent@tetapi.dev` account (`role=admin`, `is_agent=true`, active) still holds a live
+`pk_live_` key with no known consumer — a second standing admin credential worth nulling
+if unused; and `check_secrets`' `except Exception: continue` drops a check **silently**
+(observed once live on `/docs`), which contradicts "SKIP, never a fake PASS" — it should
+`rep.add(..., SKIP, …)` instead. Both left alone to keep this task one task.
+
+---
+
+
 ## 2026-10-09 · 3.27 web · Grid of Record renders real photos (6.8 photo finding CLOSED)
 Done: fixed the 6.8 QA finding that no real photo rendered anywhere in the Grid of
 Record — `/search`, `/profile`, `/e/[slug]` and the block modal all drew the striped

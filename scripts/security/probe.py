@@ -731,6 +731,47 @@ def check_s21_device_revoked(rep: Report) -> None:
                 f"revoked key → 401 on device-upload; GET /devices shows revoked_at={row['revoked_at']}")
 
 
+# ── S-26 — the probe's own CI key is least-privilege ──────────────────────────
+def check_probe_key_privilege(rep: Report) -> None:
+    """S-26 (docs/security.md): until 15.8 the `SEC_PROBE_API_KEY` CI secret was
+    the OWNER'S OWN `role=admin` key — a compromised runner/workflow/action got
+    `require_admin` on prod (bulk-preverify, GDPR export, anonymise, claims,
+    admin/devices, audit-log) for a net that needs none of it. The net now runs
+    as `security-probe@tetapi.dev` (`role=user`). This check keeps it that way:
+    if someone ever pastes an admin key back into the secret, the probe goes red
+    on its own credential instead of quietly running over-privileged.
+
+    Two asserts, both read-only: `GET /auth/me` must report a role that is
+    neither `admin` nor `support`, and a `require_admin` route must 403.
+    """
+    key = _api_key()
+    if not key:
+        rep.add("probe_key_privilege", SKIP, "no test key to inspect")
+        return
+    with _client(auth=key) as c:
+        try:
+            me = c.get(f"{API}/api/v1/auth/me")
+            adm = c.get(f"{API}/api/v1/admin/audit-log")
+        except Exception as e:  # noqa: BLE001
+            rep.add("probe_key_privilege", SKIP, f"request error: {e}")
+            return
+    if me.status_code != 200:
+        rep.add("probe_key_privilege", SKIP, f"GET /auth/me → {me.status_code}")
+        return
+    role = me.json().get("role")
+    if role in ("admin", "support"):
+        rep.add("probe_key_privilege", FAIL,
+                f"the CI key authenticates as role={role!r} — S-26 regressed: the probe "
+                "must run as a plain `user` (see scripts/security/README.md)")
+        return
+    if 200 <= adm.status_code < 300:
+        rep.add("probe_key_privilege", FAIL,
+                f"role={role!r} but GET /admin/audit-log returned {adm.status_code} — "
+                "require_admin is not gating the probe's key")
+        return
+    rep.add("probe_key_privilege", PASS,
+            f"CI key is least-privilege (role={role!r}; /admin/audit-log → {adm.status_code})")
+
 # ── S-22 — a claim must prove the entity's own anchor (api 1.27) ──────────────
 def check_s22_claim_anchor(rep: Report) -> None:
     """Fixture: one permanent `pre_verified_unclaimed` entity of the test
@@ -866,6 +907,8 @@ CHECKS = {
     "s8": check_s8_private_blocks,
     "private-entity": check_private_entity_exposure,
     "s21": check_s21_device_revoked,
+    "key-privilege": check_probe_key_privilege,
+
     "s22": check_s22_claim_anchor,
     "s27": check_s27_device_signature,
     "secrets": check_secrets,

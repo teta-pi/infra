@@ -3,6 +3,45 @@
 From the full project audit on 2026-07-05. Severity: 🔴 blocker · 🟠 important ·
 🟡 minor. Update the status line when you fix one.
 
+## 🔴 15.8 (2026-10-01) — LIVE: api.tetapi.dev 521, fail2ban banned Cloudflare's edge
+Full write-up as **S-27** in `docs/security.md` §5. Short version: nginx has no
+Cloudflare real-ip restore, so access logs show the CF edge IP as the client; the
+`nginx-scanners` jail banned `104.23.199.47` (10:53:22) and `104.23.199.46` (10:53:55),
+and Cloudflare then could not reach the origin — `api.tetapi.dev` served **521** to the
+public for >2h while the origin stayed healthy. The requests that tripped the jail are
+`probe.py`'s own S-1 traversal / `auth_surface` checks (User-Agent
+`tetapi-security-probe/1.0`), so the daily 06:17 UTC cron re-arms this every day.
+
+Needs a privileged unban first (the 15.8 session's sandbox blocked it, and
+`unban-ip.yml` only knows the `sshd` jail):
+
+```
+sudo fail2ban-client set nginx-scanners unbanip 104.23.199.47
+sudo fail2ban-client set nginx-scanners unbanip 104.23.199.46
+```
+
+Then the real fix (devops): CF real-ip restore in nginx, CF ranges in fail2ban
+`ignoreip` meanwhile. Until then every ban this jail issues is a self-inflicted
+outage — and an attacker can trigger it on purpose through CF.
+
+## 🟡 15.8 (2026-10-01) — two leftovers found while de-privileging the probe
+Both out of 15.8's scope (one task = one task), both want a decision:
+
+- **`agent@tetapi.dev` holds a live `pk_live_` key** (`role=admin`, `is_agent=true`,
+  `is_active=true`) — the founder-seeded operations-agent account from migration
+  `007_roles_admin_audit.py`, confirmed legitimate in 15.4 and left untouched then. It is
+  a **second standing admin credential**; no consumer for it is known (it is not in any
+  GitHub secret — every org/repo secret list was enumerated in 15.8 — and no `infra`
+  script reads it). If nothing uses it, `api_key = NULL` on that row removes a credential
+  nobody is watching. Owner/manager call, not a dir-15 unilateral change.
+- **`probe.py::check_secrets` can drop a check silently.** Both its request loops use
+  `except Exception: continue`, so a transient network error produces **no result line at
+  all** instead of a SKIP — observed live on 2026-10-01 (`secrets[/docs]` vanished from one
+  full run; counts went 22/5/2 instead of 22/5/3). That contradicts the net's own rule
+  ("SKIP never a fake PASS — it means could not assert honestly"), and a disappearing check
+  is harder to notice than a SKIP. One-line fix per loop: `rep.add(f"secrets[{p}]", SKIP,
+  f"request error: {e}")`. Same pattern is worth a grep elsewhere in the file.
+
 ## 6.8 — pre-GTM full QA pass (2026-10-04)
 
 Full live E2E sweep on prod per the owner's pre-GTM gate (roadmap 6.2 skeleton,
