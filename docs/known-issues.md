@@ -598,8 +598,8 @@ code/config anchors:
   `opted_out`=6) → latent, but this is the 1.11 flow that gates GTM Phase 2. Fix:
   require `normalize_domain(payload.domain) == normalize_domain(business.pre_verified_source["domain"])`
   before the `owner_id`/`claim_status` transfer (`businesses.py:522-523`).
-  🟠 **FIX READY 2026-09-27 (1.27, [api PR #33](https://github.com/teta-pi/api/pull/33) —
-  green in CI, still open, so prod is unchanged; latent throughout).** `_assert_claim_domain_matches_anchor`
+  ✅ **FIXED 2026-10-03 (1.27, [api PR #33](https://github.com/teta-pi/api/pull/33)),
+  merged + deployed, live-verified — latent throughout, window never opened.** `_assert_claim_domain_matches_anchor`
   gates `/claim/domain/check` **and** `/claim/domain/start`: anchor mismatch → 403
   naming the real anchor; no domain anchor (github/npm-only import, or no
   `pre_verified_source`) → 403. **Exact match, no subdomain either way** — a tenant
